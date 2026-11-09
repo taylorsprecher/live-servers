@@ -21,7 +21,7 @@ jobs:
       - name: Ensure target directory exists on host
         run: |
           ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            'mkdir -p /opt/live-servers || (sudo -n mkdir -p /opt/live-servers && sudo -n chown '"${{ secrets.DEPLOY_USER }}"' /opt/live-servers)'
+            'mkdir -p /home/deploy/live-servers'
 
       - name: Rsync repo to host
         run: |
@@ -34,9 +34,9 @@ jobs:
             --exclude '__pycache__' \
             --exclude 'demo/' \
             -e "ssh -i ~/.ssh/id_deploy" \
-            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/opt/live-servers/"
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
 
       - name: Run deploy.sh on host
         run: |
           ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            'cd /opt/live-servers && bash deploy.sh'
+            'cd /home/deploy/live-servers && bash deploy.sh'

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Host-side deploy for the live-servers demo set.
-# Runs in /opt/live-servers on the AWS host. Invoked by the GitHub
+# Runs in /home/deploy/live-servers on the AWS host. Invoked by the GitHub
 # Actions deploy workflow over SSH after rsync.
 #
 # Safety: a RAM gate runs FIRST. If the host has < 700 MB available,
 # nothing is changed and the script exits 1.
 set -u
-cd /opt/live-servers
+cd /home/deploy/live-servers
 
 echo "=== RAM GATE ==="
 free -m
@@ -19,7 +19,7 @@ fi
 echo "RAM GATE PASSED"
 
 if [ ! -f .env ]; then
-  echo "Creating /opt/live-servers/.env with fresh deploy-time secrets (values are never printed)"
+  echo "Creating /home/deploy/live-servers/.env with fresh deploy-time secrets (values are never printed)"
   umask 077
   {
     echo "XSAVE_XSTS_SIGNING_KEY=$(openssl rand -hex 32)"
