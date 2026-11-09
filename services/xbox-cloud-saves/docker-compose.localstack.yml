@@ -1,0 +1,33 @@
+# Xbox Cloud Save Platform — LocalStack local dev (Plan Phase 11).
+#
+# Brings up LocalStack with S3/Lambda/API Gateway emulation and
+# auto-provisions the xsave-dev bucket (versioning on, CORS set) via
+# localstack/init.sh. NOTHING here touches real AWS.
+#
+# Usage:
+#   docker compose -f docker-compose.localstack.yml up -d
+#   # then run the FastAPI app against it:
+#   XSAVE_STORAGE=s3 XSAVE_PRESIGN=s3 \
+#   XSAVE_S3_ENDPOINT=http://localhost:4566 \
+#   AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test \
+#     ../.venv/bin/uvicorn app:app --port 8000   (from backend/)
+#
+# (Docker is not installed on the build VM, so this file is a
+# deliverable artifact; the same boto3 code path is verified in CI-style
+# runs against moto — see backend/tests/.)
+
+services:
+  localstack:
+    image: localstack/localstack:3
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,lambda,apigateway
+      DEBUG: "1"
+      AWS_DEFAULT_REGION: us-east-1
+    volumes:
+      - "./localstack/init.sh:/etc/localstack/init/ready.d/init.sh"
+      - "localstack_data:/var/lib/localstack"
+
+volumes:
+  localstack_data:

@@ -1,0 +1,8 @@
+Dockerfile
+.dockerignore
+DEPLOY.md
+README.md
+build-demo.js
+demo/
+tests/
+**/node_modules

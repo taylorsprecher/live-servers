@@ -1,0 +1,174 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Xbox Cloud Save Platform — Save API (Increment 2 SAM template).
+  Implements Phases 1, 4, 5, 6, 7 of the production plan: a versioned,
+  encrypted S3 bucket; least-privilege Lambda handlers; an HTTP API
+  with the Phase 5 routes and Phase 7 CORS. NOT deployed — this
+  template is the deployable artifact, exercised locally via the
+  Lambda handlers + moto/LocalStack.
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, stage, prod]
+    Description: Maps to the plan's buckets xsave-dev / xsave-stage / xsave-prod.
+  XstsSigningKey:
+    Type: String
+    NoEcho: true
+    Default: xsave-local-test-key-NOT-FOR-PRODUCTION
+    Description: >
+      LOCAL TEST KEY ONLY. Production XSTS validation resolves
+      Microsoft's public keys (JWKS) and needs no shared secret; this
+      parameter exists so the stack runs end-to-end before the Xbox
+      relying-party registration (a spec launch blocker) is done.
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 15
+    MemorySize: 256
+    Environment:
+      Variables:
+        XSAVE_BUCKET: !Ref XSaveBucket
+        XSAVE_XSTS_SIGNING_KEY: !Ref XstsSigningKey
+    # Phase 4 (IAM & Security): least privilege. Read/write/delete on
+    # the users/* prefix of this bucket only — no ListBucket, no
+    # wildcards, no bucket-admin actions. (list_saves reads the
+    # per-user _index.json object, so no listing permission is needed.)
+    Policies:
+      - Statement:
+          - Sid: XSaveObjectAccess
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource: !Sub 'arn:aws:s3:::${XSaveBucket}/users/*'
+
+Resources:
+  # Phase 1 (Foundation): versioned + encrypted bucket, no public access.
+  XSaveBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'xsave-${Environment}'
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # Phase 7 (API Gateway): HTTP API + CORS for browser clients.
+  XSaveApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: ['*']
+        AllowMethods: [GET, POST, DELETE, OPTIONS]
+        AllowHeaders: [Authorization, Content-Type]
+
+  # Phase 5 (Save API): the two spec endpoints, plus list/delete which
+  # any real client needs and Phase 12's integration checks exercise.
+  # boto3 is provided by the Lambda Python runtime; CodeUri packages
+  # backend/ so handlers import auth_xsts / storage_s3 / presign_s3
+  # from the same modules the local FastAPI app uses.
+  RequestUploadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: functions.handlers.request_upload_url
+      Events:
+        Save:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref XSaveApi
+            Path: /save
+            Method: POST
+
+  RequestDownloadUrlFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: functions.handlers.request_download_url
+      Events:
+        Save:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref XSaveApi
+            Path: /save
+            Method: GET
+
+  ListSavesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: functions.handlers.list_saves
+      Events:
+        Saves:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref XSaveApi
+            Path: /saves
+            Method: GET
+
+  DeleteSaveFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: functions.handlers.delete_save
+      Events:
+        Save:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref XSaveApi
+            Path: /saves/{name}
+            Method: DELETE
+
+  HealthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: functions.handlers.health
+      Events:
+        Health:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref XSaveApi
+            Path: /health
+            Method: GET
+
+  # Metadata indexer: clients PUT bytes directly to S3 via pre-signed
+  # URLs, so the API never sees an upload. ObjectCreated events on the
+  # users/ prefix keep the per-user _index.json (list/delete source of
+  # truth) in sync with what actually landed in the bucket.
+  IndexUploadFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/
+      Handler: functions.handlers.on_object_created
+      Events:
+        SaveCreated:
+          Type: S3
+          Properties:
+            Bucket: !Ref XSaveBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: users/
+
+Outputs:
+  ApiUrl:
+    Description: Base URL of the Save HTTP API
+    Value: !Sub 'https://${XSaveApi}.execute-api.${AWS::Region}.amazonaws.com'
+  BucketName:
+    Description: Saves bucket for this environment
+    Value: !Ref XSaveBucket

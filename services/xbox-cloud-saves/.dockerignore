@@ -1,0 +1,15 @@
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+backend/.pytest_cache/
+backend/storage_data/
+backend/tests/
+demo/
+localstack/
+template.yaml
+docker-compose.localstack.yml
+Dockerfile
+.dockerignore
+DEPLOY.md
+README.md

@@ -1,0 +1,115 @@
+name: live-servers
+
+# Seven demo servers behind one nginx gateway on host port 443.
+# Each service publishes ONLY on 127.0.0.1; the gateway (host networking)
+# is the only public entry point, routing by path prefix with the prefix
+# forwarded intact. The audited production stack in /opt/audited-stack is
+# a separate project and is not touched by this file.
+
+services:
+  maclan:
+    build:
+      context: ./services/maclan
+    container_name: live-maclan
+    restart: unless-stopped
+    mem_limit: 192m
+    environment:
+      BASE_PATH: /maclan
+      MACLAN_DB_PATH: /data/maclan.db
+    volumes:
+      - maclan-data:/data
+    ports:
+      - "127.0.0.1:18101:8000"
+
+  xbox:
+    build:
+      context: ./services/xbox-cloud-saves
+    container_name: live-xbox
+    restart: unless-stopped
+    mem_limit: 192m
+    environment:
+      BASE_PATH: /xbox
+      XSAVE_AUTH: xsts
+      XSAVE_STORAGE: local
+      XSAVE_PRESIGN: local
+      XSAVE_XSTS_SIGNING_KEY: ${XSAVE_XSTS_SIGNING_KEY}
+      XSAVE_DEV_SECRET: ${XSAVE_DEV_SECRET}
+    volumes:
+      - xsave-data:/data/xsave
+    ports:
+      - "127.0.0.1:18102:8000"
+
+  wyze:
+    build:
+      context: ./services/wyze-bridge
+      dockerfile: Dockerfile.demo
+    container_name: live-wyze
+    restart: unless-stopped
+    mem_limit: 128m
+    ports:
+      - "127.0.0.1:18103:8000"
+
+  usb:
+    build:
+      context: ./services/usb-sovereign
+    container_name: live-usb
+    restart: unless-stopped
+    mem_limit: 128m
+    ports:
+      - "127.0.0.1:18104:8765"
+
+  aircore:
+    build:
+      context: ./services/aircore
+    container_name: live-aircore
+    restart: unless-stopped
+    mem_limit: 128m
+    ports:
+      - "127.0.0.1:18105:8765"
+
+  fmp:
+    build:
+      context: ./services/fmp
+    container_name: live-fmp
+    restart: unless-stopped
+    mem_limit: 192m
+    environment:
+      BASE_PATH: /fmp
+    ports:
+      - "127.0.0.1:18106:8787"
+
+  celltower:
+    build:
+      context: ./services/cell-tower-lan
+    container_name: live-celltower
+    restart: unless-stopped
+    mem_limit: 256m
+    environment:
+      BASE_PATH: /celltower
+      CELL_LAN_MASTER_KEY: ${CELL_LAN_MASTER_KEY}
+    volumes:
+      - celltower-data:/data
+    ports:
+      - "127.0.0.1:18107:4173"
+
+  gateway:
+    image: nginx:alpine
+    container_name: live-gateway
+    restart: unless-stopped
+    mem_limit: 64m
+    network_mode: host
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - maclan
+      - xbox
+      - wyze
+      - usb
+      - aircore
+      - fmp
+      - celltower
+
+volumes:
+  maclan-data:
+  xsave-data:
+  celltower-data:

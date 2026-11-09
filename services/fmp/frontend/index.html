@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FMP-1.0 — Forensic Motion Protocol</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">
+    <span class="brand-mark">◉</span>
+    <div>
+      <h1>FMP-1.0 · Forensic Motion Protocol</h1>
+      <p class="subtitle">Telemetry-driven forensic motion replay — RAN → DMZ → APP → DATA → SEC</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <span id="feed-status" class="pill pill-idle">feed: idle</span>
+    <span id="script-version" class="pill pill-muted">motion script: —</span>
+    <button id="sidebar-toggle" type="button">Event Log</button>
+    <button id="theme-toggle" type="button">Theme</button>
+  </div>
+</header>
+
+<main id="layout">
+  <section id="stage">
+    <div id="viewport-wrap">
+      <div id="viewport">
+        <svg id="scene" viewBox="0 0 960 420" preserveAspectRatio="xMidYMid meet" aria-label="Network zone viewport">
+          <g id="camera">
+            <g id="routes"></g>
+            <g id="fx-rings"></g>
+            <g id="zones"></g>
+            <g id="capsules"></g>
+          </g>
+        </svg>
+        <canvas id="particles"></canvas>
+        <div id="hud">
+          <label for="severity-meter">Severity</label>
+          <div id="severity-meter"><div id="severity-fill"></div></div>
+          <span id="severity-value">0.00</span>
+        </div>
+        <div id="feed-banner" hidden>Telemetry feed degraded — buffering events locally. UI state intact.</div>
+      </div>
+    </div>
+
+    <div id="transport">
+      <button id="play-btn" type="button">▶ Play</button>
+      <label>Speed
+        <select id="speed-select">
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="2">2×</option>
+        </select>
+      </label>
+      <label>Session
+        <select id="session-select"></select>
+      </label>
+      <label>Source
+        <select id="source-select">
+          <option value="replay" selected>Replay (S3 session)</option>
+          <option value="live">Live stream (SSE)</option>
+          <option value="live-ws">Live stream (WebSocket)</option>
+        </select>
+      </label>
+      <span id="clock">t = 0.0s / 90.0s</span>
+    </div>
+    <div id="timeline-wrap">
+      <div id="timeline-markers"></div>
+      <input id="timeline" type="range" min="0" max="90000" step="50" value="0">
+      <div id="playhead"></div>
+    </div>
+    <p class="hint">Scrub the timeline, jump with the markers, or press Play. Packet events rematerialize capsules;
+      zone transitions move focus across tiers; tamper / storm / breach / escalation / collapse events run their motion grammar.
+      ICMP sweeps ring their zone; incident echoes bounce ghost capsules back along a packet's route.
+      Pick a different replay session above, or tune cue durations in the Motion Script editor — changes apply live.</p>
+  </section>
+
+  <aside id="sidebar">
+    <div id="packet-info" class="card">
+      <h2>Event detail</h2>
+      <pre id="packet-info-body">No event selected yet. Click a timeline marker or wait for replay.</pre>
+    </div>
+    <div id="script-editor" class="card">
+      <h2>Motion script editor</h2>
+      <p class="editor-note">Cue durations (ms). “Apply live” re-times cues immediately;
+        “Save as new version” stores a new versioned script object.</p>
+      <div id="cue-editor-rows"></div>
+      <div class="editor-actions">
+        <button id="cue-apply" type="button">Apply live</button>
+        <button id="cue-reset" type="button">Reset</button>
+        <button id="cue-save" type="button">Save as new version</button>
+      </div>
+      <p class="editor-note" id="editor-status"></p>
+    </div>
+    <div class="card grow">
+      <h2>Omni event log</h2>
+      <ul id="event-log"></ul>
+    </div>
+  </aside>
+</main>
+
+<script src="js/uiStateEngine.js"></script>
+<script src="js/motionEngine.js"></script>
+<script src="js/omniBus.js"></script>
+<script src="js/viewport.js"></script>
+<script src="js/timelineMotion.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

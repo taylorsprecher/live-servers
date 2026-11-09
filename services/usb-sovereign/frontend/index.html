@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>USB-SOVEREIGN v1 — Bridge Monitor</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>USB-SOVEREIGN <span>v1</span></h1>
+    <p class="sub">Unified Serial Bridge — Data-Plane Monitor (sim / socat-PTY plant · WebSocket push · local serial_events store · stubbed AWS sinks)</p>
+  </div>
+  <div class="meta">
+    <div>Bridge <strong id="bridge-id">—</strong></div>
+    <div>Session <strong id="session-id">—</strong></div>
+    <div>Uptime <strong id="uptime">—</strong></div>
+    <div id="conn" class="conn">connecting…</div>
+  </div>
+</header>
+
+<section class="uplink card" id="uplink-card">
+  <div class="uplink-main">
+    <div class="label">Active uplink path</div>
+    <div id="active-path" class="path-badge">CELL</div>
+    <div id="path-note" class="note">Primary cellular path</div>
+  </div>
+  <div class="uplink-meter">
+    <div class="label">Cellular silence</div>
+    <div class="meter"><div id="silence-fill"></div><div class="threshold"></div></div>
+    <div class="note"><span id="silence-s">0.00</span> s of 5.0 s failover threshold ·
+      failovers this session: <strong id="failovers">0</strong></div>
+  </div>
+  <div class="uplink-stats">
+    <div><span class="label">CELL throughput</span><strong id="cell-rate">0 B/s</strong></div>
+    <div><span class="label">ZILTB throughput</span><strong id="ziltb-rate">0 B/s</strong></div>
+  </div>
+</section>
+
+<h2>Port pairs — local data plane (byte-pure forwarding)</h2>
+<section class="pairs" id="pairs"></section>
+
+<h2>Interfaces</h2>
+<section class="grid" id="sources"></section>
+
+<section class="bottom">
+  <div class="card">
+    <h3>Telemetry sinks (stubbed)</h3>
+    <table class="kv">
+      <tr><td>MQTT topic</td><td id="sink-topic">—</td></tr>
+      <tr><td>Envelopes published</td><td id="sink-mqtt">—</td></tr>
+      <tr><td>DynamoDB records (source#ts)</td><td id="sink-ddb">—</td></tr>
+      <tr><td>S3 buffer entries</td><td id="sink-buf">—</td></tr>
+      <tr><td>S3 flushes</td><td id="sink-flush">—</td></tr>
+      <tr><td>Last batch</td><td id="sink-last">—</td></tr>
+    </table>
+  </div>
+  <div class="card events">
+    <h3>Event log</h3>
+    <ul id="events"></ul>
+  </div>
+</section>
+
+<footer>USB-SOVEREIGN v1 — Increment 2: socat PTY hardware plane · WebSocket push (polling fallback) · local serial_events store + signature registry · AWS sinks gated off · spec: “Cport to Coort.docx”</footer>
+<script src="app.js"></script>
+</body>
+</html>

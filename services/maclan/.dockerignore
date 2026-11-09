@@ -1,0 +1,24 @@
+# Frontend build INPUTS are not needed in the image — only the prebuilt
+# frontend/dist is copied in. (dist itself must NOT be ignored.)
+frontend/node_modules
+frontend/src
+frontend/index.html
+frontend/package.json
+frontend/package-lock.json
+frontend/tsconfig.json
+frontend/vite.config.js
+
+# Backend dev/runtime state — the container creates a fresh DB.
+backend/.venv
+backend/__pycache__
+backend/app/__pycache__
+backend/maclan.db
+
+# Standalone static demo and docs are not part of the container.
+demo
+README.md
+
+.git
+.gitignore
+*.md
+!DEPLOY.md

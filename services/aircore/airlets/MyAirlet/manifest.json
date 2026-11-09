@@ -1,0 +1,14 @@
+{
+  "name": "DemoAirlet",
+  "version": "1.0",
+  "algorithm": "ed25519",
+  "developer_key": "5267daba5b7a477eae8c7e1be169cb84dfcc751bf69490024c6703ef072f1c75",
+  "bundle_hash": "10ebc9a8bd4b8e8f30de8f6a61d5de5c5f9cbcd826aec7e5cef978f02e7f3fd0",
+  "signature": "00a3258f893e235f8a4d207b157e2a45760cddbb3702d3e4928517564dd9d652981eaf640723622ad8c4b0188ce0f606c717bd88ce3fc34cb6abe8409fee3f02",
+  "files": [
+    "AirBridge/bridge.json",
+    "AirCore/core.py",
+    "AirShield/policy.yaml",
+    "AirUI/main.airui"
+  ]
+}

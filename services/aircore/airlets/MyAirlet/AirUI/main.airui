@@ -1,0 +1,28 @@
+; DemoAirlet — AirUI definition (spec layout: AirUI/main.airui)
+; Compiles to AirCore bytecode with airui.py; `text bind state.output`
+; binds to AirBridge.state.output at render time.
+airlet DemoAirlet 1.0
+
+view:
+  column:
+    text "AirCore — Demo Console"
+    text bind state.output
+    button "Run demo" action run_demo
+    button "Diagnostics" action diagnostics
+    button "Network (denied)" action network
+
+handler run_demo:
+  x = 5
+  if x > 3:
+    y = x + 2
+  end
+  diag = diagnostics()
+  diag_allowed = policy("diagnostics")
+  net_allowed = policy("network")
+  return {"y": y, "diag": diag, "diag_allowed": diag_allowed, "net_allowed": net_allowed}
+
+handler diagnostics:
+  return diagnostics()
+
+handler network:
+  return policy("network")

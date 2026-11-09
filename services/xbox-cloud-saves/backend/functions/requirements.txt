@@ -1,0 +1,4 @@
+# Lambda runtime note: boto3 is provided by the AWS Lambda Python 3.12
+# runtime, and the handlers import only the standard library plus the
+# backend modules packaged alongside them (auth_xsts, storage_s3,
+# presign_s3). No third-party dependencies to install for deployment.

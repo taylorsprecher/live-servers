@@ -1,0 +1,27 @@
+# Demo-serving image for the Wyze Bridge STATUS TIER ONLY.
+#
+# This packages the FastAPI status service (backend/) together with the
+# dashboard (frontend/), which the service itself serves as static files.
+# It contains NO Wyze bridge, NO camera connection, and NO credentials —
+# camera state is the built-in mocked demo state, labeled as such.
+#
+# The home-LAN stack is unaffected: docker-compose.yml + backend/Dockerfile
+# remain the deployment path for the real bridge on a home Docker host.
+#
+# Build (context = this directory):
+#   docker build -f Dockerfile.demo -t wyze-bridge-status-demo .
+# Run:
+#   docker run -p 8000:8000 wyze-bridge-status-demo
+# Then: http://localhost:8000/wyze/  (dashboard), /wyze/health, /wyze/api/cameras
+FROM python:3.12-slim
+WORKDIR /app
+COPY backend/requirements.txt ./backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
+COPY backend ./backend
+COPY frontend ./frontend
+# Hosted publicly under /wyze behind a gateway that forwards the prefix;
+# override with -e BASE_PATH= to serve at the root instead.
+ENV BASE_PATH=/wyze \
+    ALERTS_DB_PATH=/tmp/alerts.db
+EXPOSE 8000
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

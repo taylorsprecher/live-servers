@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cell Tower LAN — Telemetry Dashboard</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>Cell Tower LAN <span class="accent">Telemetry</span></h1>
+    <p class="sub">SITE-LAN OAM — simulated RAN telemetry, AES-256-GCM encrypted ingest</p>
+  </div>
+  <div id="backend-status" class="status bad">backend: …</div>
+</header>
+
+<main>
+  <aside id="sites-panel">
+    <h2>Sites</h2>
+    <div id="site-list"></div>
+    <div id="site-detail"></div>
+  </aside>
+
+  <section id="content">
+    <div id="radios-bar"></div>
+    <div id="cards">
+      <div class="card"><label>RSRP</label><div class="val" id="m-rsrp">—</div><span class="unit">dBm</span></div>
+      <div class="card"><label>SINR</label><div class="val" id="m-sinr">—</div><span class="unit">dB</span></div>
+      <div class="card"><label>DL Throughput</label><div class="val" id="m-dl">—</div><span class="unit">Mbps</span></div>
+      <div class="card"><label>UL Throughput</label><div class="val" id="m-ul">—</div><span class="unit">Mbps</span></div>
+      <div class="card"><label>Connected UEs</label><div class="val" id="m-ues">—</div><span class="unit">devices</span></div>
+      <div class="card"><label>Radio Temp</label><div class="val" id="m-temp">—</div><span class="unit">°C</span></div>
+    </div>
+    <div class="charts">
+      <div class="chart-box">
+        <h3>Signal — RSRP (cyan) · SINR (amber)</h3>
+        <canvas id="chart-signal" width="640" height="200"></canvas>
+      </div>
+      <div class="chart-box">
+        <h3>Throughput — DL (green) · UL (violet)</h3>
+        <canvas id="chart-tput" width="640" height="200"></canvas>
+      </div>
+    </div>
+    <div id="empty-state" class="hidden">
+      No telemetry for this site yet. The simulator covers the demo site
+      <strong>SITE-TX-9042</strong>; this site is registered but has no
+      simulated radios feeding it.
+    </div>
+    <div class="panels2">
+      <div class="chart-box">
+        <h3>Site Topology</h3>
+        <div id="topology"></div>
+      </div>
+      <div class="chart-box">
+        <h3>VLAN Matrix</h3>
+        <div id="vlan-matrix"></div>
+      </div>
+    </div>
+    <div class="chart-box" id="pipeline-box">
+      <h3>Telemetry Pipeline — queue “cell-tower-telemetry”</h3>
+      <div id="pipeline"><p class="none">Loading…</p></div>
+    </div>
+  </section>
+
+  <aside id="alarms-panel">
+    <h2>Active Site Alarms <span id="alarm-count" class="badge">0</span></h2>
+    <div id="alarm-list"><p class="none">No alarms.</p></div>
+  </aside>
+</main>
+
+<footer>
+  All radios are simulated — no real RAN hardware. Telemetry is encrypted
+  end-to-end (simulator → ingest) with AES-256-GCM per the platform spec.
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

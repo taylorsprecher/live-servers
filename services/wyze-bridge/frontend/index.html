@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sterner Home — Wyze Bridge</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Sterner Home — Wyze Bridge</h1>
+  <p class="sub">Fallback live-view path for the Family camera, served by
+     Docker Wyze Bridge on the home network.</p>
+</header>
+
+<section id="bridge-card" class="card">
+  <h2>Bridge status</h2>
+  <p id="bridge-detail">Checking…</p>
+  <ul id="bridge-endpoints" class="endpoints"></ul>
+  <p id="bridge-badge" class="badge"></p>
+</section>
+
+<section id="archive-card" class="card">
+  <h2>Archive tier (S3 sync + KMS validation)</h2>
+  <p id="archive-badge" class="badge">Checking…</p>
+  <p id="archive-detail" class="detail"></p>
+  <ul id="archive-facts" class="endpoints"></ul>
+</section>
+
+<section>
+  <h2>Cameras</h2>
+  <div id="cameras" class="grid"></div>
+</section>
+
+<footer>
+  <p id="data-note"></p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+# Build-context exclusions. The compose stack builds ./backend with its own
+# context (see docker-compose.yml), so this file governs the Dockerfile.demo
+# build, whose context is this directory.
+.git
+__pycache__
+*.py[cod]
+alerts.db
+.env
+recordings/
+wyze-config/
+demo/
+deploy/
+scripts/
+secrets/

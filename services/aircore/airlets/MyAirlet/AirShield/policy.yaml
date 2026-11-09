@@ -1,0 +1,26 @@
+# AirShield policy manifest — the spec's expanded policy model
+# (BlackBerry LAN.docx, "Policy Manifest (Expanded)").
+permissions:
+  aircore_exec: true
+  network: false
+  filesystem: false
+  airbridge_send: true
+  airui_render: true
+  diagnostics: true
+  sandbox_tools: false
+
+identity:
+  hardware_binding: true
+  developer_key_required: true
+  airlet_signature_required: true
+
+signature:
+  algorithm: ed25519
+  bundle_hash: sha256
+  nonce_required: true
+
+sandbox:
+  max_memory_mb: 32
+  max_cpu_percent: 10
+  allow_threads: false
+  allow_subprocess: false

@@ -1,0 +1,13 @@
+# Local runtime state — never bake demo data or provisioned keys into the image
+backend/data/
+**/telemetry.db
+**/keys.json
+**/*.log
+
+# Self-contained static demo package — not used by the container
+demo/
+
+# Docs and VCS noise
+.git
+*.md
+!README.md

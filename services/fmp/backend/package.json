@@ -1,0 +1,1 @@
+{"dependencies":{},"description":"FMP-1.0 Forensic Motion Protocol backend — S3-shaped local stub store, OmniEvent normalization, replay + SSE event APIs. Zero dependencies.","main":"server.js","name":"fmp-backend","private":true,"scripts":{"start":"node server.js"},"version":"1.0.0"}

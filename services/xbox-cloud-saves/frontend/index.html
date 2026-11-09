@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Xbox Cloud Saves — Demo</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>🎮 Xbox Cloud Saves</h1>
+    <p class="tagline">DEMO deployment</p>
+    <p class="stub-banner">⚠️ <strong>DEMO:</strong> sign-in issues an XSTS-shaped token signed
+      with a <strong>locally generated test key</strong> (not Microsoft), saves are stored
+      in this container instead of S3, and “pre-signed URLs” are local HMAC
+      tokens. Demo data only — nothing here talks to Microsoft or AWS.</p>
+  </header>
+
+  <section id="signin-panel" class="card">
+    <h2>Sign in</h2>
+    <p>Production sign-in happens in the Xbox client via Microsoft/XSTS.
+      In this demo, enter any gamertag to receive a demo token.</p>
+    <div class="row">
+      <input id="gamertag" type="text" placeholder="Gamertag (try: PlayerOne)" autocomplete="off">
+      <button id="signin-btn">Sign in (demo)</button>
+      <button id="signout-btn" class="hidden">Sign out</button>
+    </div>
+    <p id="identity" class="muted"></p>
+  </section>
+
+  <section id="saves-panel" class="card hidden">
+    <h2>Your saves</h2>
+
+    <div class="row">
+      <button id="refresh-btn">↻ Refresh list</button>
+    </div>
+
+    <table id="saves-table">
+      <thead>
+        <tr><th>Name</th><th>Version</th><th>Size</th><th>Updated</th><th>Actions</th></tr>
+      </thead>
+      <tbody id="saves-body">
+        <tr><td colspan="5" class="muted">No saves loaded.</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Upload a save</h3>
+    <div class="row">
+      <input id="save-name" type="text" placeholder="Save name (e.g. save_slot1.dat)">
+      <input id="save-file" type="file">
+      <button id="upload-btn">Upload</button>
+    </div>
+    <p class="muted">Upload uses the production flow: request an upload URL from the
+      API, then send the file bytes straight to that URL (S3 in production).</p>
+
+    <p id="status" class="status"></p>
+  </section>
+
+  <script src="app.js"></script>
+</body>
+</html>

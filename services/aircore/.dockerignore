@@ -1,0 +1,14 @@
+**/__pycache__/
+*.pyc
+# Local demo identity: the container generates its own at first start.
+backend/keys/*.seed
+backend/keys/*.pub
+# Not needed by the HTTP server (Airlets are packaged/verified locally;
+# demo/ is the standalone static-site variant).
+airlets/
+demo/
+# Build/deploy metadata
+Dockerfile
+.dockerignore
+DEPLOY.md
+README.md
