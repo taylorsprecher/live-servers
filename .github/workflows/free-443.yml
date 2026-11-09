@@ -1,0 +1,35 @@
+name: Free port 443 for the live-servers gateway
+
+# One-off, manually dispatched. Removes the vestigial "443:443" port mapping
+# from the audited stack's nginx container on the host (freeing host :443 for
+# the live-gateway container), with pre-flight gates, an on-host backup, and
+# automatic restore if the audited app's health check fails afterwards.
+# All host work happens in free-443.sh; its full output lands in this run log.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  free-443:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy free-443.sh to host
+        run: |
+          scp -i ~/.ssh/id_deploy free-443.sh \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/free-443.sh"
+
+      - name: Run free-443.sh on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/free-443.sh'
