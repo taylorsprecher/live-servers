@@ -36,18 +36,33 @@ docker compose up -d --build
 COMPOSE_RC=$?
 echo "docker compose up exit code: ${COMPOSE_RC}"
 
+echo "=== LISTENER DIAGNOSTICS (read-only) ==="
+echo "--- who holds :443 / :80 / :181xx on this host ---"
+ss -tlnp 2>/dev/null | grep -E ':(443|80|18101|18102|18103|18104|18105|18106|18107)[[:space:]]' || ss -tln
+echo "--- all containers on this host (all projects, read-only) ---"
+docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+
 check() {
-  # $1 = label, $2 = url. Retries for up to ~2 minutes while containers start.
-  local name="$1" url="$2" code="000" i
-  for i in $(seq 1 30); do
+  # $1 = label, $2 = url, $3 = line prefix (CHECK/DIRECT), $4 = attempts
+  local name="$1" url="$2" kind="${3:-CHECK}" attempts="${4:-8}" code="000" i
+  for i in $(seq 1 "$attempts"); do
     code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$url")" || code="000"
     case "$code" in
       200|301|302) break ;;
     esac
     sleep 4
   done
-  echo "CHECK $name $code"
+  echo "$kind $name $code"
 }
+
+echo "=== DIRECT SERVICE CHECKS (loopback, gateway bypassed) ==="
+check maclan    http://127.0.0.1:18101/maclan/health    DIRECT 15
+check xbox      http://127.0.0.1:18102/xbox/health      DIRECT 15
+check wyze      http://127.0.0.1:18103/wyze/health      DIRECT 15
+check usb       http://127.0.0.1:18104/usb/api/status   DIRECT 15
+check aircore   http://127.0.0.1:18105/aircore/api/state DIRECT 15
+check fmp       http://127.0.0.1:18106/fmp/api/health   DIRECT 15
+check celltower http://127.0.0.1:18107/celltower/api/health DIRECT 15
 
 echo "=== GATEWAY CHECKS (through nginx on :443) ==="
 check maclan    http://127.0.0.1:443/maclan/health
