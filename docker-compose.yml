@@ -1,6 +1,6 @@
 name: live-servers
 
-# Seven demo servers behind one nginx gateway on host port 443.
+# Eight demo servers behind one nginx gateway on host port 443.
 # Each service publishes ONLY on 127.0.0.1; the gateway (host networking)
 # is the only public entry point, routing by path prefix with the prefix
 # forwarded intact. The audited production stack in /opt/audited-stack is
@@ -92,6 +92,15 @@ services:
     ports:
       - "127.0.0.1:18107:4173"
 
+  cport:
+    build:
+      context: ./services/cport-pipeline
+    container_name: live-cport
+    restart: unless-stopped
+    mem_limit: 128m
+    ports:
+      - "127.0.0.1:18108:8000"
+
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -108,6 +117,7 @@ services:
       - aircore
       - fmp
       - celltower
+      - cport
 
 volumes:
   maclan-data:

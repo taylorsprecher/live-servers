@@ -1,0 +1,23 @@
+# C-Port CRC16 pipeline — dependencies
+#
+# Install:  pip install -r requirements.txt
+#
+# Runtime optionality (the pipeline guards every import):
+#   pandas            — strongly recommended; without it records are plain
+#                       dicts and batch output uses the csv module.
+#   pyreadstat        — OPTIONAL: enables SAS XPORT (.xpt) batch files.
+#                       Without it, batches fall back to CSV (same naming).
+#   pyserial          — OPTIONAL: only needed for real-port mode.
+#                       --simulate mode works without it.
+#   prometheus-client — OPTIONAL: enables the :8000/metrics HTTP exporter.
+#                       Without it, metrics are tracked internally only.
+#   paho-mqtt         — OPTIONAL: enables MQTT status publishing.
+#                       Without it (or with no broker), publishing is off.
+pandas
+pyreadstat
+pyserial
+prometheus-client
+paho-mqtt
+
+# Development / testing only:
+pytest
