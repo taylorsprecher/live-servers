@@ -84,3 +84,9 @@ label.inline { flex-direction: row; align-items: center; gap: 8px; font-size: 14
 canvas.bw { width: 100%; height: auto; display: block; background: #1a1a1e; border-radius: 8px; }
 .legend { display: flex; gap: 18px; align-items: center; margin-top: 10px; }
 .legend .dot { margin-right: 5px; }
+
+/* 2026-11-10 — Ping Tester scrollback, Bandwidth Test gauge, RF panel */
+.pingterm { max-height: 280px; overflow-y: auto; }
+.gaugewrap { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+canvas.gauge { background: #1a1a1e; border-radius: 8px; display: block; }
+.legend { flex-wrap: wrap; }
