@@ -120,7 +120,8 @@ def call(method, path, query="", body=b"", extra_headers=None):
 with open(os.environ["USB_SOV_BOOTSTRAP_CSR"], "rb") as fh:
     csr_pem = fh.read()
 status, text = call("POST", "/certificates", query="setAsActive=true",
-                    body=csr_pem)
+                    body=csr_pem,
+                    extra_headers={"content-type": "text/plain"})
 cert = json.loads(text)
 cert_id = cert["certificateId"]
 cert_arn = cert["certificateArn"]
