@@ -36,6 +36,20 @@ docker compose up -d --build
 COMPOSE_RC=$?
 echo "docker compose up exit code: ${COMPOSE_RC}"
 
+# The gateway's nginx.conf is a bind-mounted file: editing it does NOT
+# change the gateway container's compose config hash, so `up` alone never
+# recreates the gateway and it would keep serving the config it started
+# with (this is how the /cport route first deployed as a 404). Force the
+# gateway to be recreated so it always loads the current nginx.conf.
+# The gateway is stateless; the audited app is a separate stack.
+echo "=== GATEWAY FORCE-RECREATE (pick up current nginx.conf) ==="
+docker compose up -d --force-recreate gateway
+GW_RC=$?
+echo "gateway force-recreate exit code: ${GW_RC}"
+if [ "${COMPOSE_RC}" -eq 0 ]; then
+  COMPOSE_RC=${GW_RC}
+fi
+
 echo "=== LISTENER DIAGNOSTICS (read-only) ==="
 echo "--- who holds :443 / :80 / :181xx on this host ---"
 ss -tlnp 2>/dev/null | grep -E ':(443|80|18101|18102|18103|18104|18105|18106|18107|18108)[[:space:]]' || ss -tln
