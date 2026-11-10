@@ -33,7 +33,8 @@ import termios
 import time
 import tty
 
-from simulated_ports import FRAME_HEADERS, CellularPattern, _frame
+from simulated_ports import (BIO_EVENT_EVERY, BIO_EVENT_HEADERS,
+                             FRAME_HEADERS, CellularPattern, _frame)
 
 
 def _open_raw(path: str) -> int:
@@ -222,6 +223,19 @@ async def pty_talker(endpoint: PtyDeviceEndpoint, source: str,
     """Same traffic shape as simulated_ports.talker, over a real PTY."""
     while stop is None or not stop.is_set():
         endpoint.feed(_frame(FRAME_HEADERS[source], random.randint(8, 48)))
+        await asyncio.sleep(random.uniform(*interval))
+
+
+async def pty_bio_talker(endpoint: PtyDeviceEndpoint, source: str,
+                         interval=(0.5, 1.6), stop: asyncio.Event = None):
+    """Same traffic shape as simulated_ports.bio_talker, over a real PTY:
+    baseline LH/FSH frames, every 5th frame a surge/pulse event frame."""
+    count = 0
+    while stop is None or not stop.is_set():
+        count += 1
+        header = (BIO_EVENT_HEADERS[source] if count % BIO_EVENT_EVERY == 0
+                  else FRAME_HEADERS[source])
+        endpoint.feed(_frame(header, random.randint(8, 48)))
         await asyncio.sleep(random.uniform(*interval))
 
 

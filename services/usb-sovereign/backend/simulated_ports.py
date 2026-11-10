@@ -94,6 +94,33 @@ async def talker(port: SimulatedSerialPort, source: str,
         await asyncio.sleep(random.uniform(*interval))
 
 
+# Bio-telemetry event headers (ClickHouse catalog ids 10/11): the surge /
+# pulse frames are keyed by their raw two-byte prefix 0x41A0 / 0x41B0 —
+# the same headers the registry's PREFIX_SIGNATURES and the controller's
+# COM3/COM4 mirror rules match on. The third byte keeps the plant's
+# 3-byte header shape.
+BIO_EVENT_HEADERS = {
+    "LH": b"\x41\xa0\x30",          # lh_surge
+    "FSH": b"\x41\xb0\x30",         # fsh_pulse
+}
+BIO_EVENT_EVERY = 5  # every 5th bio frame is a surge/pulse event frame
+
+
+async def bio_talker(port: SimulatedSerialPort, source: str,
+                     interval=(0.5, 1.6), stop: asyncio.Event = None):
+    """Bio-telemetry device (LH/FSH): baseline frames on the source's
+    regular header, with every 5th frame carrying the surge/pulse event
+    header so the registry classification and the COM3/COM4 mirroring
+    fire regularly."""
+    count = 0
+    while stop is None or not stop.is_set():
+        count += 1
+        header = (BIO_EVENT_HEADERS[source] if count % BIO_EVENT_EVERY == 0
+                  else FRAME_HEADERS[source])
+        port.feed(_frame(header, random.randint(8, 48)))
+        await asyncio.sleep(random.uniform(*interval))
+
+
 class CellularPattern:
     """Repeating cellular availability pattern: UP for up_s, DOWN for down_s.
 

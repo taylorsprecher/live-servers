@@ -46,11 +46,13 @@ from aws_sinks import AwsIoTClient, AwsSinkNotReady, AwsS3BatchLogger  # noqa: E
 from config import load_config                                        # noqa: E402
 from controller import EventLog, UnifiedSerialController              # noqa: E402
 from event_store import SerialEventStore, SignatureRegistry           # noqa: E402
-from pty_ports import (SocatPtyPlant, pty_cellular_talker,            # noqa: E402
-                       pty_drainer, pty_talker, pty_ziltb_talker)
+from pty_ports import (SocatPtyPlant, pty_bio_talker,                 # noqa: E402
+                       pty_cellular_talker, pty_drainer, pty_talker,
+                       pty_ziltb_talker)
 from server import StatusServer                                       # noqa: E402
 from simulated_ports import (CellularPattern, SimulatedSerialPort,    # noqa: E402
-                             cellular_talker, talker, ziltb_talker)
+                             bio_talker, cellular_talker, talker,
+                             ziltb_talker)
 from sinks import DynamoDbStubSink, MqttIoTStubSink, S3BatchLoggerStub  # noqa: E402
 
 HOST = os.environ.get("USB_SOV_HOST", "127.0.0.1")
@@ -59,11 +61,14 @@ BASE_PATH = os.environ.get("BASE_PATH", "")
 FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                             "..", "frontend")
 
-# Baud rates from the spec's controller.
+# Baud rates from the spec's controller. COM3/COM4 are the bio-telemetry
+# mirror targets (LH surge -> COM3, FSH pulse -> COM4): they carry no
+# device talker of their own, only frames the controller mirrors to them.
 BAUD = {
     "COM1": 9600, "COM2": 9600, "Sport": 115200, "Coort": 115200,
     "LH": 9600, "FSH": 9600, "CELL": 115200, "BT": 115200,
     "WIFI": 115200, "LAN": 115200, "ZILTB": 115200,
+    "COM3": 9600, "COM4": 9600,
 }
 
 TALKERS = ("COM1", "COM2", "Sport", "Coort", "LH", "FSH", "BT", "WIFI", "LAN")
@@ -162,8 +167,9 @@ async def amain():
         eps = plant.endpoints
         for name in TALKERS:
             interval = (0.5, 1.6) if name in ("LH", "FSH") else (0.3, 1.2)
+            talk = pty_bio_talker if name in ("LH", "FSH") else pty_talker
             tasks.append(asyncio.create_task(
-                pty_talker(eps[name], name, interval=interval, stop=stop)))
+                talk(eps[name], name, interval=interval, stop=stop)))
         tasks.append(asyncio.create_task(
             pty_cellular_talker(eps["CELL"], pattern, stop)))
         tasks.append(asyncio.create_task(
@@ -172,8 +178,9 @@ async def amain():
     else:
         for name in TALKERS:
             interval = (0.5, 1.6) if name in ("LH", "FSH") else (0.3, 1.2)
+            talk = bio_talker if name in ("LH", "FSH") else talker
             tasks.append(asyncio.create_task(
-                talker(ports[name], name, interval=interval, stop=stop)))
+                talk(ports[name], name, interval=interval, stop=stop)))
         tasks.append(asyncio.create_task(
             cellular_talker(ports["CELL"], pattern, stop)))
         tasks.append(asyncio.create_task(

@@ -36,6 +36,7 @@ DEFAULT_SIGNATURES = {
     "41L1": "com_pair_frame",
     "41H0": "lh_bio_telemetry",
     "41F0": "fsh_bio_telemetry",
+    "41A0": "lh_surge",
     "41B0": "bt_telemetry_frame",
     "41W0": "wifi_telemetry_frame",
     "41T0": "cell_telemetry_frame",
@@ -50,6 +51,20 @@ def signature_code(data: bytes) -> str:
     if len(data) < 3:
         return data.hex().upper()
     return f"{data[0]:02X}" + data[1:3].decode("ascii", errors="replace")
+
+
+# Bio-telemetry signature additions (ClickHouse catalog ids 10 and 11).
+# These two signatures are keyed by their raw two-byte hex prefix, exactly
+# as the catalog and the bio_telemetry_routing RDL state them (header
+# 0x41A0 / 0x41B0), NOT by the ASCII notation above: byte 0xA0 / 0xB0 is
+# not ASCII, so the notation code cannot express them. The prefix check
+# runs before the notation lookup, and it cannot collide with the BT
+# frame (bytes 41 42 30 -> notation code "41B0", bt_telemetry_frame):
+# that frame's second byte is 0x42, not 0xB0.
+PREFIX_SIGNATURES = {
+    b"\x41\xa0": ("41A0", "lh_surge"),
+    b"\x41\xb0": ("41B0", "fsh_pulse"),
+}
 
 
 class SignatureRegistry:
@@ -78,7 +93,19 @@ class SignatureRegistry:
         self.save()
 
     def classify(self, data: bytes):
-        """-> (signature_code, protocol_name); unknown frames are 'unknown'."""
+        """-> (signature_code, protocol_name); unknown frames are 'unknown'.
+
+        The bio-telemetry prefix signatures (lh_surge / fsh_pulse) are
+        matched on the raw two-byte header BEFORE the notation lookup:
+        their second byte (0xA0 / 0xB0) is not ASCII, so the notation
+        cannot express them. This never touches the BT frame — its bytes
+        are 41 42 30, so its two-byte prefix is b"\\x41\\x42", which is
+        not a key of PREFIX_SIGNATURES, and it still resolves through the
+        notation to "41B0" / bt_telemetry_frame.
+        """
+        prefix_hit = PREFIX_SIGNATURES.get(data[:2])
+        if prefix_hit is not None:
+            return prefix_hit
         code = signature_code(data)
         return code, self.signatures.get(code, "unknown")
 

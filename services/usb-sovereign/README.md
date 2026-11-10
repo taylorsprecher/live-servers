@@ -73,6 +73,33 @@ Every frame published is also appended to `data/serial_events.jsonl` with
 its protocol signature (`41S0` sport_handshake, `41C1` coort_response,
 `41L0` lan_ethernet_frame, …) per `data/signature_registry.json`.
 
+## Bio-telemetry expansion (LH / FSH)
+
+The LH and FSH interfaces are bio-telemetry ingest sources alongside
+COM1/COM2: every frame they emit is wrapped in the canonical v2.0
+envelope and published like any other source. The expansion adds:
+
+- **Two protocol signatures** (ClickHouse catalog ids 10/11):
+  `lh_surge` on header `0x41A0` and `fsh_pulse` on header `0x41B0`.
+  They are matched on the **raw two-byte header** (the second byte is
+  not ASCII, so the registry's hex+ASCII notation cannot express them);
+  the prefix check runs before the notation lookup and cannot collide
+  with the BT frame (`41 42 30` → `41B0` bt_telemetry_frame). The LH/FSH
+  device talkers emit a surge/pulse frame every 5th frame so both
+  signatures occur regularly.
+- **Mirroring to COM3/COM4**: an LH frame with header `0x41A0` is also
+  written byte-identical to **COM3**, and an FSH frame with header
+  `0x41B0` to **COM4** (`controller.MIRRORS`). Mirroring is in addition
+  to ingest, never instead of it; counts and per-target transmitted
+  bytes appear under `mirrors` in `GET /api/status`.
+- **Schema + routing definitions**: `backend/clickhouse_schema.sql`
+  holds the analytics-layer DDL (the `serial_events` MergeTree table and
+  the signature catalog with the two additions) that the local JSONL
+  store stands in for, and `backend/bio_telemetry_routing.rdl` holds
+  the `bio_telemetry_routing` RDL block — route/mirror lines map to the
+  controller paths noted in that file; the `rl_optimize` lines are
+  declarative (later-phase) and have no runtime effect.
+
 ## Demo package
 
 `demo/index.html` is a **fully self-contained** static copy of the
@@ -93,6 +120,8 @@ backend/
   sinks.py             TelemetrySink interface + envelope builder + stubs
   aws_sinks.py         spec AwsIoTClient + AwsS3BatchLogger — GATED OFF
   event_store.py       local serial_events JSONL store + signature registry
+  clickhouse_schema.sql  analytics-layer DDL the local store stands in for
+  bio_telemetry_routing.rdl  RDL block for LH/FSH routing + COM3/COM4 mirrors
   server.py            asyncio HTTP + WebSocket server (API + dashboard)
 frontend/
   index.html           dashboard page

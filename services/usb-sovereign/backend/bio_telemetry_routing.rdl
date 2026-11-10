@@ -1,0 +1,28 @@
+-- USB-SOVEREIGN — Routing Definition Language (RDL): bio-telemetry.
+--
+-- Implementation mapping (this build):
+--   route LH/FSH -> Cloud ...... the controller's ingest path: every LH
+--                                and FSH frame is wrapped in the canonical
+--                                v2.0 envelope and published to the
+--                                telemetry sink (topic device/serial/v2/data)
+--                                — controller.UnifiedSerialController._ingest.
+--   mirror LH -> COM3 .......... controller.MIRRORS: an LH frame whose raw
+--   mirror FSH -> COM4 ......... two-byte header equals 0x41A0 (resp.
+--                                0x41B0) is written byte-identical to the
+--                                COM3 (resp. COM4) port in addition to
+--                                ingest — controller._maybe_mirror.
+--   rl_optimize ................ DECLARATIVE ONLY in this build: RL-based
+--                                route optimization is a later-phase spec
+--                                concept; the lines are recorded as intent
+--                                and have no runtime effect here.
+
+block bio_telemetry_routing {
+    route LH -> Cloud when size > 0
+    route FSH -> Cloud when size > 0
+    mirror LH -> COM3 when header == 0x41A0
+    mirror FSH -> COM4 when header == 0x41B0
+    rl_optimize latency throughput on LH -> Cloud
+    rl_optimize latency throughput on FSH -> Cloud
+}
+
+use block bio_telemetry_routing

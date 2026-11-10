@@ -28,6 +28,13 @@ PAIRS = [("COM1", "COM2"), ("Sport", "Coort")]
 INGEST_SOURCES = ["LH", "FSH", "BT", "WIFI", "LAN"]
 ALL_SOURCES = ["COM1", "COM2", "Sport", "Coort", "CELL", "ZILTB"] + INGEST_SOURCES
 
+# Bio-telemetry mirroring (bio_telemetry_routing RDL): an LH frame whose
+# header is 0x41A0 (lh_surge) is mirrored byte-for-byte to COM3, and an
+# FSH frame whose header is 0x41B0 (fsh_pulse) to COM4. The match is on
+# the raw two-byte prefix, exactly as the RDL states the header.
+MIRRORS = {"LH": ("COM3", b"\x41\xa0"), "FSH": ("COM4", b"\x41\xb0")}
+MIRROR_TARGETS = ("COM3", "COM4")
+
 
 class EventLog:
     def __init__(self, capacity: int = 200):
@@ -69,6 +76,9 @@ class UnifiedSerialController:
         # stats[source] = {"bytes": int, "frames": int, "last_activity": ts|None}
         self.stats = {s: {"bytes": 0, "frames": 0, "last_activity": None}
                       for s in ALL_SOURCES}
+        # mirror_stats[target] = {"frames": int, "bytes": int}
+        self.mirror_stats = {t: {"frames": 0, "bytes": 0}
+                             for t in MIRROR_TARGETS}
         # rate history: deque of (ts, {source: cumulative_bytes})
         self._history = deque(maxlen=240)
 
@@ -149,6 +159,34 @@ class UnifiedSerialController:
             if port.in_waiting > 0:
                 data = port.read(port.in_waiting)
                 self._ingest(source, data)
+                self._maybe_mirror(source, data)
+
+    def _maybe_mirror(self, source: str, data: bytes):
+        """Bio-telemetry routing: mirror signature frames to COM3/COM4.
+
+        Only LH/FSH frames whose raw two-byte header matches the RDL
+        rule (0x41A0 / 0x41B0) are mirrored, and the frame is written
+        unchanged (R1 byte purity) — mirroring is in addition to, never
+        instead of, the normal ingest above.
+        """
+        rule = MIRRORS.get(source)
+        if rule is None:
+            return
+        target, prefix = rule
+        if data[:2] != prefix:
+            return
+        target_port = self.ports.get(target)
+        if target_port is None:
+            return
+        target_port.write(data)
+        st = self.mirror_stats[target]
+        st["frames"] += 1
+        st["bytes"] += len(data)
+        self.events.add(
+            "MIRROR",
+            f"{source} frame mirrored -> {target} "
+            f"(header 0x{prefix.hex().upper()}, {len(data)} bytes, "
+            f"byte-identical)")
 
     # ---------------- graceful shutdown (R21-R25) ----------------
 
@@ -211,6 +249,19 @@ class UnifiedSerialController:
                 "a_bytes_per_s": sources[a]["bytes_per_s"],
                 "b_bytes_per_s": sources[b]["bytes_per_s"],
             })
+        mirrors = {}
+        for source, (target, prefix) in MIRRORS.items():
+            target_port = self.ports.get(target)
+            st = self.mirror_stats[target]
+            mirrors[target] = {
+                "source": source,
+                "header": f"0x{prefix.hex().upper()}",
+                "frames_mirrored": st["frames"],
+                "bytes_mirrored": st["bytes"],
+                "bytes_transmitted": (
+                    target_port.bytes_transmitted
+                    if target_port is not None else 0),
+            }
         silence = now - self.last_cell_activity
         snap = {
             "platform": "USB-SOVEREIGN v1",
@@ -225,6 +276,7 @@ class UnifiedSerialController:
                 "failover_engagements": self.failover_engagements,
             },
             "pairs": pairs,
+            "mirrors": mirrors,
             "sources": sources,
             "sinks": {
                 "mqtt_topic": "device/serial/v2/data",
