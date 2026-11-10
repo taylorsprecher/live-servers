@@ -1,0 +1,274 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  USB-SOVEREIGN AWS sink activation (Stage 2 of the approved plan).
+  Creates the S3 batch bucket, the serial_events DynamoDB table, the
+  serial-events-writer Lambda, the IoT Core thing + policy + topic rule
+  that route device/serial/v2/data envelopes into the table, and the
+  EC2 instance role/profile the audited host uses for S3 writes and the
+  one-time certificate bootstrap. The device certificate itself is NOT
+  created here: the host generates its private key locally and obtains
+  the certificate via CreateCertificateFromCsr (see
+  aws-activation/bootstrap-certs.sh), so key material never leaves the
+  host and never passes through CloudFormation, git, or chat.
+
+Resources:
+
+  # ------------------------------------------------------------------
+  # S3 — batch log flushes (logs/serial_batch_<ts>.txt) from the host.
+  # Name per the approved activation plan. (The local stubs' label
+  # "911transedu-telemetry-bucket" in sinks.py was a placeholder only.)
+  # ------------------------------------------------------------------
+  SerialBatchesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: 911transedu-serial-batches
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      # Versioning intentionally OFF; no lifecycle rules (standard).
+      Tags:
+        - Key: project
+          Value: usb-sovereign
+
+  # ------------------------------------------------------------------
+  # DynamoDB — one item per published v2 envelope, written by the
+  # Lambda below (IoT rule path), never by the host directly.
+  # Key schema follows the code: the sinks/DynamoDbStubSink model keys
+  # items by the composite string "source#timestamp"
+  # (f"{source}#{timestamp}"), so the table has a single string
+  # partition key `pk` holding exactly that composite. `source` and
+  # `timestamp` are also stored as plain attributes on every item.
+  # ------------------------------------------------------------------
+  SerialEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: serial_events
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      Tags:
+        - Key: project
+          Value: usb-sovereign
+
+  # ------------------------------------------------------------------
+  # Lambda — IoT topic rule target: envelope JSON in, table item out.
+  # ------------------------------------------------------------------
+  SerialEventsWriterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: serial-events-writer-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: serial-events-putitem
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                Resource: !GetAtt SerialEventsTable.Arn
+
+  SerialEventsWriter:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: serial-events-writer
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt SerialEventsWriterRole.Arn
+      Timeout: 30
+      MemorySize: 128
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref SerialEventsTable
+      Code:
+        ZipFile: |
+          import os
+          import time
+          from decimal import Decimal
+
+          import boto3
+
+          _table = boto3.resource("dynamodb").Table(os.environ["TABLE_NAME"])
+
+
+          def _ddb_safe(value):
+              # DynamoDB rejects floats; the v2 envelope carries
+              # time.time() floats, so convert them to Decimal.
+              if isinstance(value, float):
+                  return Decimal(str(value))
+              if isinstance(value, dict):
+                  return {k: _ddb_safe(v) for k, v in value.items()}
+              if isinstance(value, list):
+                  return [_ddb_safe(v) for v in value]
+              return value
+
+
+          def handler(event, context):
+              # Event = the v2 telemetry envelope, delivered whole by
+              # the IoT topic rule (SELECT * FROM 'device/serial/v2/data').
+              source = str(event.get("source", "unknown"))
+              timestamp = event.get("timestamp", time.time())
+              item = _ddb_safe(dict(event))
+              # Key format per the bridge code (DynamoDbStubSink):
+              # the composite partition key "source#timestamp".
+              item["pk"] = "{}#{}".format(source, timestamp)
+              item["source"] = source
+              item["timestamp"] = Decimal(str(timestamp))
+              _table.put_item(Item=item)
+              return {"statusCode": 200, "pk": item["pk"]}
+
+  # ------------------------------------------------------------------
+  # IoT Core — thing, policy, and the rule routing envelopes to the
+  # Lambda. The device certificate is attached by the host bootstrap;
+  # nothing certificate-shaped exists in this template.
+  # ------------------------------------------------------------------
+  SovereignThing:
+    Type: AWS::IoT::Thing
+    Properties:
+      ThingName: SovereignBridge
+
+  SovereignPolicy:
+    Type: AWS::IoT::Policy
+    Properties:
+      PolicyName: SovereignBridgePolicy
+      PolicyDocument: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "iot:Connect",
+              "Resource": "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:client/911TransEdu_SovereignBridge"
+            },
+            {
+              "Effect": "Allow",
+              "Action": "iot:Publish",
+              "Resource": "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/device/serial/v2/data"
+            },
+            {
+              "Effect": "Allow",
+              "Action": ["iot:Subscribe", "iot:Receive"],
+              "Resource": [
+                "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/device/serial/v2/data",
+                "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/device/serial/v2/data"
+              ]
+            }
+          ]
+        }
+
+  SerialTopicRule:
+    Type: AWS::IoT::TopicRule
+    Properties:
+      RuleName: serial_v2_to_lambda
+      TopicRulePayload:
+        Sql: "SELECT * FROM 'device/serial/v2/data'"
+        AwsIotSqlVersion: "2016-03-23"
+        Description: Route USB-SOVEREIGN v2 telemetry envelopes to the serial-events-writer Lambda.
+        Actions:
+          - Lambda:
+              FunctionArn: !GetAtt SerialEventsWriter.Arn
+
+  SerialTopicRuleLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SerialEventsWriter
+      Action: lambda:InvokeFunction
+      Principal: iot.amazonaws.com
+      SourceArn: !GetAtt SerialTopicRule.Arn
+
+  # ------------------------------------------------------------------
+  # EC2 host identity — attached to the audited host instance in
+  # Stage 2 (modify-instance-attribute). Two jobs:
+  #   1. STEADY STATE: s3:PutObject into the batch bucket, nothing else.
+  #   2. ONE-TIME BOOTSTRAP: create the device certificate from the
+  #      host-generated CSR and attach policy + thing. The iot:*
+  #      statements below exist ONLY for bootstrap-certs.sh; remove
+  #      the BootstrapIoT policy statement after activation completes
+  #      (the runbook calls this out) — steady state needs none of it.
+  # ------------------------------------------------------------------
+  HostRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: usb-sovereign-host
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: SerialBatchesPutOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                Resource: !Sub "arn:aws:s3:::${SerialBatchesBucket}/*"
+        - PolicyName: BootstrapIoT
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # CreateCertificateFromCsr and DescribeEndpoint do not
+              # support resource-level permissions; they must be "*".
+              - Effect: Allow
+                Action:
+                  - iot:CreateCertificateFromCsr
+                  - iot:DescribeEndpoint
+                Resource: "*"
+              # Attach* scoped to exactly this thing, policy and the
+              # certificates under this account.
+              - Effect: Allow
+                Action:
+                  - iot:AttachPolicy
+                  - iot:AttachThingPrincipal
+                Resource:
+                  - !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:policy/SovereignBridgePolicy"
+                  - !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:thing/SovereignBridge"
+                  - !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:cert/*"
+
+  HostInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: usb-sovereign-host
+      Roles:
+        - !Ref HostRole
+
+Outputs:
+  BucketName:
+    Description: S3 bucket receiving the pipeline batch flushes.
+    Value: !Ref SerialBatchesBucket
+  TableName:
+    Description: DynamoDB table receiving routed telemetry envelopes.
+    Value: !Ref SerialEventsTable
+  ThingName:
+    Description: IoT Core thing the bridge certificate attaches to.
+    Value: !Ref SovereignThing
+  IoTPolicyName:
+    Description: IoT policy attached to the bridge certificate.
+    Value: !Ref SovereignPolicy
+  InstanceProfileName:
+    Description: Instance profile to attach to the audited host (i-02d813192f607a4ea).
+    Value: !Ref HostInstanceProfile
+  LambdaArn:
+    Description: ARN of the serial-events-writer Lambda.
+    Value: !GetAtt SerialEventsWriter.Arn

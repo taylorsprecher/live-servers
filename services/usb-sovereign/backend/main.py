@@ -11,10 +11,14 @@ Increment 2 wiring, driven by ``config.py`` (env > JSON file > defaults):
 * Ports: ``USB_SOV_PORTS=sim`` (default, increment-1 simulated plant) or
   ``USB_SOV_PORTS=pty`` — the real hardware plane: socat PTY pairs, the
   controller on the ``.ctl`` ends, the device plant on the ``.dev`` ends.
-* Live AWS sinks stay DISABLED unless ``USB_SOV_AWS_IOT=1`` /
-  ``USB_SOV_AWS_S3=1`` *and* their config/credentials/SDK validate; on any
-  failure the wiring logs it and falls back to the local stubs. No AWS
-  resource is touched by default.
+* Live AWS sinks stay DISABLED unless the master gate
+  ``USB_SOV_AWS_ENABLED=1`` AND the per-sink flags
+  (``USB_SOV_AWS_IOT=1`` / ``USB_SOV_AWS_S3=1``) are set AND their
+  config/credentials validate (IoT: endpoint + cert files + a probe
+  connect; S3: region + instance credentials); on any failure the
+  wiring logs it and falls back to the local stubs. No AWS resource is
+  touched by default. See ``aws-activation/README.md`` for the staged
+  activation runbook.
 * The local serial_events store (ClickHouse stand-in) records every
   published envelope to ``data/serial_events.jsonl``.
 
@@ -75,41 +79,56 @@ TALKERS = ("COM1", "COM2", "Sport", "Coort", "LH", "FSH", "BT", "WIFI", "LAN")
 
 
 def build_sinks(cfg, events, dynamodb):
-    """Telemetry sinks with the Increment-2 AWS gate.
+    """Telemetry sinks behind the AWS activation gate.
 
-    Live classes are used only when explicitly enabled AND fully ready
-    (config + cert files + SDK). Anything else falls back to the local
-    stubs with a logged reason — the bridge never silently talks to AWS.
+    A live class is used only when ALL of these hold: the master gate
+    (``USB_SOV_AWS_ENABLED=1``), its per-sink flag (``USB_SOV_AWS_IOT=1``
+    / ``USB_SOV_AWS_S3=1``), and a successful readiness probe (config +
+    cert files for IoT, incl. a live connect; region + credentials for
+    S3). Anything else falls back to the local stubs with a logged
+    reason — the bridge never crashes and never silently talks to AWS.
     """
     aws_cfg = cfg["aws"]
+    master = bool(aws_cfg.get("enabled"))
 
     iot = MqttIoTStubSink(on_publish=dynamodb.put)
-    if aws_cfg.get("iot_enabled"):
+    if master and aws_cfg.get("iot_enabled"):
         candidate = AwsIoTClient(aws_cfg.get("iot"), enabled=True,
                                  on_publish=dynamodb.put)
         try:
             candidate._check_ready()
-            candidate._load_sdk()
+            candidate.connect()  # probe: TLS + CONNACK, or no arming
             iot = candidate
-            events.add("AWS", "AwsIoTClient enabled and ready — live IoT "
-                              "publishing armed by config.")
-        except AwsSinkNotReady as exc:
+            events.add("AWS", "AwsIoTClient armed — live IoT publishing "
+                              "to AWS IoT Core (master gate + flag + "
+                              "probe connect all passed).")
+        except Exception as exc:
+            candidate.disconnect()
             events.add("AWS", f"AwsIoTClient NOT armed ({exc}) — "
                               "falling back to the local MQTT stub.")
+    elif aws_cfg.get("iot_enabled"):
+        events.add("AWS", "USB_SOV_AWS_IOT=1 set but the master gate "
+                          "USB_SOV_AWS_ENABLED is off — live IoT stays "
+                          "disabled (local MQTT stub in use).")
 
     s3 = S3BatchLoggerStub()
-    if aws_cfg.get("s3_enabled"):
+    if master and aws_cfg.get("s3_enabled"):
         candidate = AwsS3BatchLogger(bucket_name=aws_cfg.get("s3_bucket"),
                                      enabled=True,
                                      region=aws_cfg.get("region"))
         try:
             candidate._check_ready()
             s3 = candidate
-            events.add("AWS", "AwsS3BatchLogger enabled and ready — live "
-                              "S3 archival armed by config.")
+            events.add("AWS", "AwsS3BatchLogger armed — live S3 archival "
+                              f"to s3://{aws_cfg.get('s3_bucket')}/ "
+                              "(master gate + flag + credentials passed).")
         except AwsSinkNotReady as exc:
             events.add("AWS", f"AwsS3BatchLogger NOT armed ({exc}) — "
                               "falling back to the local S3 stub.")
+    elif aws_cfg.get("s3_enabled"):
+        events.add("AWS", "USB_SOV_AWS_S3=1 set but the master gate "
+                          "USB_SOV_AWS_ENABLED is off — live S3 stays "
+                          "disabled (local S3 stub in use).")
     return iot, s3
 
 

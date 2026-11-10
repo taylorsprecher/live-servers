@@ -286,6 +286,14 @@ class UnifiedSerialController:
                 "s3_buffered_entries": len(self.s3.buffer),
                 "s3_flushes": self.s3.flush_count,
                 "s3_last_uri": self.s3.last_s3_uri,
+                # Which sink generation is live (stub vs AWS) — the
+                # activation state at a glance. getattr defaults keep
+                # this safe for any TelemetrySink implementation.
+                "iot_sink": type(self.iot).__name__,
+                "s3_sink": type(self.s3).__name__,
+                "mqtt_publish_errors": getattr(
+                    self.iot, "publish_errors", 0),
+                "s3_flush_errors": getattr(self.s3, "flush_errors", 0),
             },
             "events": self.events.recent(50),
         }

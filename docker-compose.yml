@@ -55,6 +55,24 @@ services:
     container_name: live-usb
     restart: unless-stopped
     mem_limit: 128m
+    environment:
+      # AWS sink activation (Stage 3 — runbook:
+      # services/usb-sovereign/aws-activation/README.md). The master
+      # gate and per-sink flags default OFF here and in the app; the
+      # host .env flips them at activation time. Cert paths point into
+      # the read-only secrets mount below (populated on the host by
+      # bootstrap-certs.sh; the private key never leaves the host).
+      USB_SOV_AWS_ENABLED: ${USB_SOV_AWS_ENABLED:-0}
+      USB_SOV_AWS_IOT: ${USB_SOV_AWS_IOT:-0}
+      USB_SOV_AWS_S3: ${USB_SOV_AWS_S3:-0}
+      USB_SOV_IOT_ENDPOINT: ${USB_SOV_IOT_ENDPOINT:-}
+      USB_SOV_IOT_CERT: /secrets/usb-sovereign/cert.pem
+      USB_SOV_IOT_KEY: /secrets/usb-sovereign/private.key
+      USB_SOV_IOT_CA: /secrets/usb-sovereign/AmazonRootCA1.pem
+      USB_SOV_S3_BUCKET: ${USB_SOV_S3_BUCKET:-911transedu-serial-batches}
+      USB_SOV_AWS_REGION: ${USB_SOV_AWS_REGION:-us-west-2}
+    volumes:
+      - /home/deploy/live-servers/secrets/usb-sovereign:/secrets/usb-sovereign:ro
     ports:
       - "127.0.0.1:18104:8765"
 

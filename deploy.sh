@@ -31,6 +31,23 @@ else
   echo ".env already present — keeping existing secrets"
 fi
 
+# USB-SOVEREIGN AWS activation (Stage 3, opt-in — runbook:
+# services/usb-sovereign/aws-activation/README.md). The secrets dir is
+# created with deploy ownership BEFORE docker compose can create the
+# usb container's bind-mount source as root. The one-time certificate
+# bootstrap runs on the host ONLY when USB_SOV_BOOTSTRAP=1 is set in
+# this shell's environment (default off): the device private key is
+# generated on the host and never leaves it; only the CSR goes to AWS.
+# A bootstrap failure is logged loudly but does not block the deploy —
+# the bridge fails closed to its local stub sinks when unarmed.
+mkdir -p /home/deploy/live-servers/secrets/usb-sovereign
+if [ "${USB_SOV_BOOTSTRAP:-0}" = "1" ]; then
+  echo "=== USB-SOVEREIGN CERT BOOTSTRAP (USB_SOV_BOOTSTRAP=1) ==="
+  USB_SOV_AWS_REGION="${USB_SOV_AWS_REGION:-us-west-2}" \
+    bash services/usb-sovereign/aws-activation/bootstrap-certs.sh
+  echo "bootstrap exit code: $?"
+fi
+
 echo "=== BUILD + UP (project: live-servers) ==="
 docker compose up -d --build
 COMPOSE_RC=$?
