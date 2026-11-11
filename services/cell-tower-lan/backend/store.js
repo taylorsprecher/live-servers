@@ -30,6 +30,13 @@ class SqliteStore {
     const { DatabaseSync } = require('node:sqlite');
     this.backend = 'sqlite';
     this.db = new DatabaseSync(path.join(dataDir, 'telemetry.db'));
+    // Locking hardening (Nov 11, 2026 wedge): with the defaults
+    // (rollback journal, busy_timeout 0) any transient lock contention
+    // throws 'database is locked' immediately. WAL lets the single
+    // writer and readers proceed independently, and busy_timeout makes
+    // a contended statement wait instead of throwing.
+    this.db.exec('PRAGMA busy_timeout = 5000');
+    this.db.exec('PRAGMA journal_mode = WAL');
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS readings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,6 +71,17 @@ class SqliteStore {
       );
       CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
     `);
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_jobs_due ON jobs(status, next_run_at);
+      CREATE INDEX IF NOT EXISTS idx_jobs_status_created ON jobs(status, created_at);
+    `);
+    // Boot-time housekeeping: completed queue jobs are never needed
+    // beyond a small audit tail, and an unbounded jobs table is what
+    // let queue scans grow into whole-database reads (204 MB / 345k
+    // completed rows by Nov 11, 2026). Never block startup on it.
+    try { this.pruneCompletedJobs(); } catch (err) {
+      console.warn(`store: boot prune skipped (${err.message})`);
+    }
   }
 
   _nextSeq(key) {
@@ -214,6 +232,20 @@ class SqliteStore {
       'SELECT * FROM jobs WHERE status = ? ORDER BY created_at DESC LIMIT ?'
     ).all(status, limit).map((r) => this._jobFromRow(r));
   }
+
+  // Keep only the newest `keep` completed jobs; pending and dead-letter
+  // jobs are never pruned here. Returns the number of rows deleted.
+  // (Freed pages return to the SQLite freelist and are reused; run
+  // backend/prune-jobs.js with the service stopped to VACUUM the file
+  // back down.)
+  pruneCompletedJobs(keep = 1000) {
+    const info = this.db.prepare(`
+      DELETE FROM jobs WHERE status = 'completed' AND id NOT IN
+        (SELECT id FROM jobs WHERE status = 'completed'
+         ORDER BY created_at DESC LIMIT ?)
+    `).run(keep);
+    return Number(info.changes);
+  }
 }
 
 // -------------------------------------------------------- JSON file store
@@ -322,6 +354,17 @@ class JsonStore {
       .filter((j) => j.status === status)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, limit);
+  }
+
+  pruneCompletedJobs(keep = 1000) {
+    const completed = this.state.jobs
+      .filter((j) => j.status === 'completed')
+      .sort((a, b) => b.createdAt - a.createdAt);
+    if (completed.length <= keep) return 0;
+    const drop = new Set(completed.slice(keep).map((j) => j.id));
+    this.state.jobs = this.state.jobs.filter((j) => !drop.has(j.id));
+    this._save();
+    return drop.size;
   }
 }
 

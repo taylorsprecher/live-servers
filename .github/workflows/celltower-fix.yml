@@ -1,0 +1,44 @@
+name: Cell Tower fix (repair wedged service)
+
+# Manually dispatched repair for live-celltower (Nov 11, 2026 wedge:
+# backend health endpoint dead on loopback while the container stayed
+# "Up"). Syncs the current cell-tower-lan code to the host tree, then
+# runs services/cell-tower-lan/fix-celltower.sh --force on the host,
+# which stops ONLY the celltower service, prunes completed queue jobs +
+# VACUUMs the telemetry DB, rebuilds/restarts the service, and verifies
+# backend + gateway health. Nothing else on the host is touched.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  celltower-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync cell-tower-lan code to host
+        run: |
+          H="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
+          scp -i ~/.ssh/id_deploy \
+            services/cell-tower-lan/backend/store.js \
+            services/cell-tower-lan/backend/queue.js \
+            services/cell-tower-lan/backend/prune-jobs.js \
+            "$H:/home/deploy/live-servers/services/cell-tower-lan/backend/"
+          scp -i ~/.ssh/id_deploy \
+            services/cell-tower-lan/fix-celltower.sh \
+            "$H:/home/deploy/live-servers/services/cell-tower-lan/fix-celltower.sh"
+
+      - name: Run fix-celltower.sh on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/services/cell-tower-lan/fix-celltower.sh --force'

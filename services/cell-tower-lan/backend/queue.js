@@ -40,6 +40,7 @@ class TelemetryQueue {
     this.queueName = 'cell-tower-telemetry';
     this._timer = null;
     this._running = false;
+    this._completedSincePrune = 0;
   }
 
   enqueue(data) {
@@ -82,6 +83,7 @@ class TelemetryQueue {
   async _pump() {
     if (this._running) return;
     this._running = true;
+    let pumpError = null;
     try {
       for (;;) {
         const due = this.store.dueJobs(Date.now());
@@ -90,6 +92,16 @@ class TelemetryQueue {
           await this._execute(job);
         }
       }
+    } catch (err) {
+      // A store-level failure (e.g. SQLITE_BUSY) aborts the pump. It is
+      // logged here and — critically — the finally below reschedules
+      // with a floor delay instead of 0 ms, so a persistent store error
+      // can never turn the pump into a hot spin that starves the event
+      // loop (the Nov 11, 2026 wedge: 'database is locked' thrown before
+      // _execute's try block, retried at 0 ms forever over a 345k-row
+      // jobs table, health endpoint dead while the process lived).
+      pumpError = err;
+      console.error('queue pump error:', err);
     } finally {
       this._running = false;
       // Wake again when the nearest delayed job comes due.
@@ -99,7 +111,9 @@ class TelemetryQueue {
       ];
       if (pending.length) {
         const nextAt = Math.min(...pending.map((j) => j.nextRunAt));
-        this._schedule(Math.max(0, nextAt - Date.now()));
+        let delay = Math.max(0, nextAt - Date.now());
+        if (pumpError) delay = Math.max(delay, 5000);
+        this._schedule(delay);
       }
     }
   }
@@ -107,13 +121,25 @@ class TelemetryQueue {
   async _execute(job) {
     job.status = 'active';
     job.attemptsMade += 1;
-    this.store.saveJob(job);
     try {
+      // This save used to sit BEFORE the try: if it threw (e.g.
+      // 'database is locked'), the job stayed 'waiting' with its
+      // attempt unrecorded, the exception aborted the pump, and the
+      // job was retried at 0 ms forever. Inside the try, a save
+      // failure is just a failed attempt — backoff, then DLQ.
+      this.store.saveJob(job);
       await this.processor(job.data);
       job.status = 'completed';
       job.processedAt = Date.now();
       job.lastError = null;
       this.store.saveJob(job);
+      // Housekeeping: bound the jobs table so queue scans stay small
+      // (see store.pruneCompletedJobs). Never fail a job over it.
+      if (this.store.pruneCompletedJobs &&
+          ++this._completedSincePrune >= 200) {
+        this._completedSincePrune = 0;
+        try { this.store.pruneCompletedJobs(1000); } catch { /* ignore */ }
+      }
     } catch (err) {
       job.lastError = err.message;
       job.processedAt = Date.now();
