@@ -14,9 +14,9 @@ mkdir -p tls-state/lego tls-state/certs
 
 echo "--- renew run $(date -u '+%Y-%m-%dT%H:%M:%SZ') ---"
 docker run --rm --network host \
-  -v /home/deploy/live-servers/tls-state/lego:/lego \
+  -v /home/deploy/live-servers/tls-state/lego:/lego-data \
   goacme/lego:latest \
-  --path /lego \
+  --path /lego-data \
   --email taylorsprecher@gmail.com \
   --accept-tos \
   --tls --tls.address 127.0.0.1:18444 \
