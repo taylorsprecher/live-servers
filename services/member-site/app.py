@@ -42,6 +42,15 @@ served from CONTENT_DIR/<product>/ (with a fallback to the legacy
 CONTENT_DIR/<bundle file> location) only to signed-in members who hold
 access for that product.
 
+Collections: the upload endpoint also accepts collection targets
+(currently "teachback"). Collection files are individual documents
+(.zip/.pdf/.md/.txt/.docx) staged under CONTENT_DIR/teachback/ and
+served file-by-file at /members/content/teachback[/<filename>].
+DESIGN DECISION (2026-11-11): the Teach-Back collection unlocks with
+CCCE course access — no separate purchase/access row — so the owner's
+roster grant/revoke of CCCE controls it. Teach-backs are never folded
+into CCCE_Course_Files.zip; the bundle stays byte-identical.
+
 Owner = member registered with OWNER_EMAIL; the roster (grant/revoke,
 BTC confirm, payment log) is fail-closed to everyone else.
 Sessions: random token, stored hashed, HttpOnly cookie, 30-day lifetime.
@@ -101,6 +110,34 @@ COURSES = [
 ]
 COURSE_KEYS = {c["key"] for c in COURSES}
 COURSE_BY_KEY = {c["key"]: c for c in COURSES}
+
+# Content collections beyond the purchasable products.
+# DESIGN DECISION (2026-11-11, Taylor: "And similar topic Teach-Back"):
+# the Teach-Back collection unlocks with CCCE course access — there is
+# no separate purchase and no separate access row for it. The owner's
+# existing roster grant/revoke of CCCE access therefore controls the
+# collection too. Teach-back files are staged individually under
+# CONTENT_DIR/teachback/ and are NEVER folded into CCCE_Course_Files.zip
+# (the bundle stays byte-identical to its master).
+COLLECTIONS = [
+    {
+        "key": "teachback",
+        "name": "Teach-Back Collection — similar-topic teach-back documents",
+        "short": "Teach-Back",
+        "unlock_course": "ccce",
+    },
+]
+COLLECTION_BY_KEY = {c["key"]: c for c in COLLECTIONS}
+UPLOAD_TARGETS = COURSE_KEYS | set(COLLECTION_BY_KEY)
+# Document types accepted into a collection (products stay zip-only).
+COLLECTION_EXTS = (".zip", ".pdf", ".md", ".txt", ".docx")
+COLLECTION_CONTENT_TYPES = {
+    ".zip": "application/zip",
+    ".pdf": "application/pdf",
+    ".md": "text/plain; charset=utf-8",
+    ".txt": "text/plain; charset=utf-8",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
 
 _lock = threading.Lock()
 _db = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -259,15 +296,39 @@ def content_available(course):
     return resolve_content_path(course) is not None
 
 
-def sanitize_filename(name):
-    """Reduce an uploaded filename to a safe .zip basename, or None."""
+def sanitize_filename(name, allowed_exts=(".zip",)):
+    """Reduce an uploaded filename to a safe basename with an allowed
+    extension, or None."""
     name = os.path.basename((name or "").strip().replace("\\", "/"))
     name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
-    if not name or name.startswith(".") or not name.lower().endswith(".zip"):
+    if not name or name.startswith("."):
+        return None
+    if os.path.splitext(name)[1].lower() not in allowed_exts:
         return None
     if len(name) > 120:
         return None
     return name
+
+
+def collection_files(collection_key):
+    """All files staged in a collection: [(filename, size, mtime), ...]."""
+    out = []
+    d = product_dir(collection_key)
+    if os.path.isdir(d):
+        for name in sorted(os.listdir(d)):
+            path = os.path.join(d, name)
+            if os.path.isfile(path) and not name.startswith("."):
+                out.append((name, os.path.getsize(path), int(os.path.getmtime(path))))
+    return out
+
+
+def has_content_access(member_id, key):
+    """Access check for products AND collections. Collections unlock via
+    their linked course (teachback -> ccce; see COLLECTIONS note above)."""
+    granted = member_access(member_id)
+    if key in COLLECTION_BY_KEY:
+        return COLLECTION_BY_KEY[key]["unlock_course"] in granted
+    return key in granted
 
 
 def parse_multipart(body, content_type):
@@ -504,6 +565,9 @@ def upload_page(member, message="", ok=False):
     options = "".join(
         f'<option value="{c["key"]}">{esc(c["short"])} — {esc(c["name"])}</option>'
         for c in COURSES
+    ) + "".join(
+        f'<option value="{c["key"]}">{esc(c["short"])} — {esc(c["name"])}</option>'
+        for c in COLLECTIONS
     )
     sections = ""
     for c in COURSES:
@@ -528,6 +592,22 @@ def upload_page(member, message="", ok=False):
             f'<div class="card"><h2>Staged files — {esc(c["short"])}</h2>'
             f"<table><tr><th>File</th><th>Size</th></tr>{trs}{legacy_note}</table></div>"
         )
+    for c in COLLECTIONS:
+        files = collection_files(c["key"])
+        if files:
+            trs = "".join(
+                f"<tr><td>{esc(name)}</td><td>{size:,} bytes</td></tr>"
+                for name, size, _mtime in files
+            )
+        else:
+            trs = '<tr><td colspan="2" class="small">No files staged yet.</td></tr>'
+        sections += (
+            f'<div class="card"><h2>Staged files — {esc(c["short"])} collection</h2>'
+            f"<table><tr><th>File</th><th>Size</th></tr>{trs}</table>"
+            '<p class="small">Teach-Back documents unlock with CCCE course '
+            "access and are served individually — they are not added to "
+            "the course bundle zip.</p></div>"
+        )
     with _lock:
         log_rows = _db.execute(
             "SELECT * FROM uploads ORDER BY created_at DESC LIMIT 10"
@@ -550,16 +630,18 @@ def upload_page(member, message="", ok=False):
 <p class="small">Owner only. Files go to the protected content area on the
 server volume — they are never public and never part of the site code.</p>
 {msg}
-<div class="card"><h2>Upload a course bundle (.zip)</h2>
+<div class="card"><h2>Upload course content</h2>
 <form method="post" action="{BASE}/admin/upload" enctype="multipart/form-data">
-<label>Product</label>
+<label>Target</label>
 <select name="product">{options}</select>
-<label>Zip file (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)</label>
-<input type="file" name="file" accept=".zip" required>
+<label>File (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)</label>
+<input type="file" name="file" required>
 <button type="submit">Upload</button></form>
 <p class="small">Uploading a file with the same name replaces the staged
-copy. The bundle for both products is CCCE_Course_Files.zip — upload it
-once under CCCE and once under EMSPR.</p></div>
+copy. Products take a .zip bundle: the bundle for both products is
+CCCE_Course_Files.zip — upload it once under CCCE and once under EMSPR.
+The Teach-Back collection takes individual documents
+(.zip, .pdf, .md, .txt, .docx).</p></div>
 {sections}
 {log}
 <p><a class="btn secondary" href="{BASE}/desk">Back to Member Desk</a></p>
@@ -718,6 +800,21 @@ def desk_page(member, message="", ok=False):
 <div class="card"><h2>Recent card payments (Stripe)</h2>
 <table><tr><th>Member</th><th>Product</th><th>Amount</th><th>Session</th></tr>{pay_rows}</table></div>"""
 
+    # Teach-Back collection card: unlocks with CCCE access (see the
+    # COLLECTIONS design decision near the top of this file).
+    if has_content_access(member["id"], "teachback"):
+        teachback = (
+            '<div class="card"><strong>Teach-Back Collection</strong><br>'
+            '<span class="small">Included with your CCCE course access.</span><br>'
+            f'<a class="btn" href="{BASE}/content/teachback">'
+            "Browse teach-back documents</a></div>"
+        )
+    else:
+        teachback = (
+            '<div class="card"><strong>Teach-Back Collection</strong><br>'
+            '<span class="small">Unlocks with the CCCE course.</span></div>'
+        )
+
     body = f"""
 <h1>Member Desk</h1>
 {msg}
@@ -727,6 +824,7 @@ def desk_page(member, message="", ok=False):
 <button class="secondary" type="submit">Sign out</button></form></div>
 <h2>Your courses</h2>
 {rows}
+{teachback}
 {roster}
 <div class="card"><h2>Delete account</h2>
 <form method="post" action="{BASE}/delete-account">
@@ -833,33 +931,15 @@ class Handler(BaseHTTPRequestHandler):
             message = qs.get("msg", [""])[0]
             return self.send_html(upload_page(member, message, ok=bool(message)))
         if path.startswith(BASE + "/content/"):
-            key = path[len(BASE + "/content/"):]
-            return self.serve_content(key)
+            rest = path[len(BASE + "/content/"):]
+            key, _, sub = rest.partition("/")
+            return self.serve_content(key, sub)
         return self.send_html("<h1>Not found</h1>", status=404)
 
-    def serve_content(self, key):
-        member, _ = self.current_member()
-        if not member:
-            return self.redirect(BASE + "/")
-        course = COURSE_BY_KEY.get(key)
-        if course is None:
-            return self.send_html("<h1>Not found</h1>", status=404)
-        if key not in member_access(member["id"]):
-            return self.send_html(
-                "<h1>Locked</h1><p>This content needs course access.</p>",
-                status=403,
-            )
-        fpath = resolve_content_path(course)
-        if fpath is None:
-            return self.send_html(
-                "<h1>Files being added</h1><p>Your access is saved. The "
-                "course files are being added to the site — check back "
-                "shortly.</p>",
-                status=404,
-            )
+    def stream_file(self, fpath, content_type):
         size = os.path.getsize(fpath)
         self.send_response(200)
-        self.send_header("Content-Type", "application/zip")
+        self.send_header("Content-Type", content_type)
         self.send_header(
             "Content-Disposition",
             f'attachment; filename="{os.path.basename(fpath)}"',
@@ -874,12 +954,85 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
 
+    def serve_content(self, key, sub=""):
+        member, _ = self.current_member()
+        if not member:
+            return self.redirect(BASE + "/")
+        if key in COLLECTION_BY_KEY:
+            return self.serve_collection(member, key, sub)
+        course = COURSE_BY_KEY.get(key)
+        if course is None or sub:
+            return self.send_html("<h1>Not found</h1>", status=404)
+        if key not in member_access(member["id"]):
+            return self.send_html(
+                "<h1>Locked</h1><p>This content needs course access.</p>",
+                status=403,
+            )
+        fpath = resolve_content_path(course)
+        if fpath is None:
+            return self.send_html(
+                "<h1>Files being added</h1><p>Your access is saved. The "
+                "course files are being added to the site — check back "
+                "shortly.</p>",
+                status=404,
+            )
+        return self.stream_file(fpath, "application/zip")
+
+    def serve_collection(self, member, key, sub=""):
+        """Serve a content collection (teachback). Gating decision: the
+        collection unlocks with its linked course's access (teachback ->
+        CCCE) — see the COLLECTIONS design note. No access -> 403."""
+        collection = COLLECTION_BY_KEY[key]
+        if not has_content_access(member["id"], key):
+            return self.send_html(
+                "<h1>Locked</h1><p>This collection unlocks with the "
+                f"{esc(COURSE_BY_KEY[collection['unlock_course']]['short'])} "
+                "course.</p>",
+                status=403,
+            )
+        files = collection_files(key)
+        if sub:
+            # Only ever serve a name that is actually staged (no path
+            # traversal: the staged list is the allowlist).
+            name = sanitize_filename(sub, COLLECTION_EXTS)
+            staged = {n for n, _s, _m in files}
+            if name is None or name not in staged:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            ext = os.path.splitext(name)[1].lower()
+            return self.stream_file(
+                os.path.join(product_dir(key), name),
+                COLLECTION_CONTENT_TYPES.get(ext, "application/octet-stream"),
+            )
+        if not files:
+            return self.send_html(
+                "<h1>Files being added</h1><p>The teach-back documents "
+                "are being added to the site — check back shortly.</p>",
+                status=404,
+            )
+        items = "".join(
+            f'<div class="card"><strong>{esc(name)}</strong><br>'
+            f'<span class="small">{size:,} bytes</span><br>'
+            f'<a class="btn" href="{BASE}/content/{key}/{esc(name)}">Download</a></div>'
+            for name, size, _mtime in files
+        )
+        body = f"""
+<h1>{esc(collection["short"])} Collection</h1>
+<p class="small">Similar-topic teach-back documents from Taylor's
+Transgender Patient Awareness, LLC — included with CCCE course access.</p>
+{items}
+<p><a class="btn secondary" href="{BASE}/desk">Back to Member Desk</a></p>
+"""
+        return self.send_html(PAGE.format(title="Teach-Back Collection", body=body))
+
     def admin_upload(self):
-        """Owner-only course-bundle upload. Fail-closed: 403 for anyone
-        who is not the signed-in owner. Accepts a browser multipart form
-        (fields product + file) or a raw zip body with ?product=ccce|emspr
-        (or X-Product header) and X-Filename. Writes ONLY to
-        CONTENT_DIR/<product>/ on the volume — never the repo tree."""
+        """Owner-only content upload. Fail-closed: 403 for anyone who is
+        not the signed-in owner. Accepts a browser multipart form
+        (fields product + file) or a raw body with
+        ?product=ccce|emspr|teachback (or X-Product header) and
+        X-Filename. Products take zip bundles only; the teachback
+        collection takes individual documents (COLLECTION_EXTS).
+        Writes ONLY to CONTENT_DIR/<target>/ on the volume — never the
+        repo tree."""
         member, _ = self.current_member()
         if not member or member["email"].lower() != OWNER_EMAIL:
             return self.send_html("<h1>Forbidden</h1>", status=403)
@@ -913,12 +1066,8 @@ class Handler(BaseHTTPRequestHandler):
             ).strip().lower()
             filename = self.headers.get("X-Filename", "")
             data = body
-        if product not in COURSE_KEYS:
-            return reject("Choose a product: ccce or emspr.")
-        course = COURSE_BY_KEY[product]
-        filename = sanitize_filename(filename) or sanitize_filename(course["file"])
-        if filename is None:
-            return reject("The uploaded file must be a .zip file.")
+        if product not in UPLOAD_TARGETS:
+            return reject("Choose a target: ccce, emspr, or teachback.")
         if not data:
             return reject("No file data received.")
         if len(data) > MAX_UPLOAD_BYTES:
@@ -926,8 +1075,32 @@ class Handler(BaseHTTPRequestHandler):
                 f"That file is over the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB cap.",
                 status=413,
             )
-        if not any(data.startswith(magic) for magic in ZIP_MAGICS):
-            return reject("That file is not a zip archive.")
+        is_collection = product in COLLECTION_BY_KEY
+        if is_collection:
+            target_label = COLLECTION_BY_KEY[product]["short"]
+            filename = sanitize_filename(filename, COLLECTION_EXTS)
+            if filename is None:
+                return reject(
+                    "Collection files must be one of: "
+                    + ", ".join(COLLECTION_EXTS)
+                    + "."
+                )
+            ext = os.path.splitext(filename)[1].lower()
+            if ext in (".zip", ".docx") and not any(
+                data.startswith(magic) for magic in ZIP_MAGICS
+            ):
+                return reject("That file is not a valid zip-based document.")
+            if ext == ".pdf" and not data.startswith(b"%PDF-"):
+                return reject("That file is not a PDF document.")
+        else:
+            target_label = COURSE_BY_KEY[product]["short"]
+            filename = sanitize_filename(filename) or sanitize_filename(
+                COURSE_BY_KEY[product]["file"]
+            )
+            if filename is None:
+                return reject("The uploaded file must be a .zip file.")
+            if not any(data.startswith(magic) for magic in ZIP_MAGICS):
+                return reject("That file is not a zip archive.")
         dest_dir = product_dir(product)
         os.makedirs(dest_dir, exist_ok=True)
         tmp_path = os.path.join(dest_dir, f".upload-{secrets.token_hex(6)}.tmp")
@@ -935,7 +1108,9 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with open(tmp_path, "wb") as fh:
                 fh.write(data)
-            if not zipfile.is_zipfile(tmp_path):
+            if os.path.splitext(filename)[1].lower() in (".zip", ".docx") and (
+                not zipfile.is_zipfile(tmp_path)
+            ):
                 os.unlink(tmp_path)
                 return reject("That file is not a valid zip archive.")
             os.replace(tmp_path, final_path)  # duplicate upload replaces cleanly
@@ -955,7 +1130,7 @@ class Handler(BaseHTTPRequestHandler):
             upload_page(
                 member,
                 f"Uploaded {filename} ({len(data):,} bytes) for "
-                f"{course['short']}. Members with access can download it now.",
+                f"{target_label}. Members with access can download it now.",
                 ok=True,
             )
         )

@@ -49,6 +49,14 @@ loopback only; the gateway is the public entry point).
   The real bundle is staged by the owner after go-live from the master
   on file (`~/workspace/your_files/CCCE_Course_Files.zip`, MD5
   d456b0c6bf3a20718b02a64313d6a224) — no Drive download needed.
+- **Teach-Back collection** (`teachback` upload target): individual
+  teach-back documents (.zip/.pdf/.md/.txt/.docx) staged under
+  `/data/content/teachback/` and served file-by-file at
+  `/members/content/teachback[/<filename>]`. Design decision
+  (2026-11-11): the collection unlocks with **CCCE course access** —
+  no separate purchase or access row — so the owner's roster
+  grant/revoke of CCCE controls it. Teach-backs are never folded into
+  `CCCE_Course_Files.zip`; the bundle stays byte-identical.
 - **Owner** = the member account registered with
   `taylorsprecher@gmail.com`. The roster (grant/revoke, BTC confirmation,
   Stripe payment log) is fail-closed to everyone else. Until the owner
