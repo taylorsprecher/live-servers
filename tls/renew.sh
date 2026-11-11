@@ -13,15 +13,18 @@ cd /home/deploy/live-servers
 mkdir -p tls-state/lego tls-state/certs
 
 echo "--- renew run $(date -u '+%Y-%m-%dT%H:%M:%SZ') ---"
+# Lego v5 folded renewal into 'run' (get or renew): --renew-days 30
+# makes it renew only when <=30 days remain and no-op otherwise.
 docker run --rm --network host \
   -v /home/deploy/live-servers/tls-state/lego:/lego-data \
   goacme/lego:latest \
+  run \
   --path /lego-data \
   --email taylorsprecher@gmail.com \
   --accept-tos \
   --tls --tls.address 127.0.0.1:18444 \
   --domains members.911transedu.net \
-  renew --days 30
+  --renew-days 30
 RC=$?
 if [ $RC -ne 0 ]; then echo "RENEW FAILED rc=$RC"; exit $RC; fi
 

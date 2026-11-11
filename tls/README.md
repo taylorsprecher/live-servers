@@ -39,9 +39,10 @@ taylorsprecher@gmail.com. State lives host-only in `tls-state/`
 
 `tls/renew.sh` runs weekly from the deploy user's crontab
 (Mon 04:17 UTC, installed by `tls/setup.sh`, log at
-`tls-state/renew.log`); lego renews when <30 days remain and the script
-reloads the gateway after installing a fresh cert. It can also be run
-any time via the **TLS** workflow (`action=renew`).
+`tls-state/renew.log`); it calls `lego run --renew-days 30` (lego v5
+folds renewal into `run`), which renews only when <30 days remain, and
+the script reloads the gateway after installing a fresh cert. It can
+also be run any time via the **TLS** workflow (`action=renew`).
 
 ## Operations (GitHub Actions → "TLS for members.911transedu.net")
 

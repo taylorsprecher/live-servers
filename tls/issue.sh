@@ -18,15 +18,17 @@ echo "=== LEGO ISSUE (TLS-ALPN-01 via :443 stream -> 127.0.0.1:18444) ==="
 ls -ld tls-state/lego tls-state/certs
 # NOTE: the mount target is /lego-data, not /lego — in the goacme/lego
 # image /lego is the binary itself, so a directory cannot mount there.
+# Lego v5: all account/challenge flags belong to the 'run' subcommand
+# ("get or renew"); there is no separate global flag set or renew cmd.
 docker run --rm --network host \
   -v /home/deploy/live-servers/tls-state/lego:/lego-data \
   goacme/lego:latest \
+  run \
   --path /lego-data \
   --email taylorsprecher@gmail.com \
   --accept-tos \
   --tls --tls.address 127.0.0.1:18444 \
-  --domains members.911transedu.net \
-  run
+  --domains members.911transedu.net
 RC=$?
 if [ $RC -ne 0 ]; then echo "LEGO ISSUE FAILED rc=$RC — placeholder/previous cert still in place"; exit $RC; fi
 
