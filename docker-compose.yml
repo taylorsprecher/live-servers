@@ -119,6 +119,28 @@ services:
     ports:
       - "127.0.0.1:18108:8000"
 
+  members:
+    build:
+      context: ./services/member-site
+    container_name: live-members
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      BASE_PATH: /members
+      MEMBERS_DB_PATH: /data/members.db
+      CONTENT_DIR: /data/content
+      PUBLIC_BASE_URL: http://52.41.84.116:443
+      # Payment keys live ONLY in the host .env (never in git). Empty =
+      # checkout disabled in the UI; the site runs normally.
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      BTC_RECEIVE_ADDRESS: ${BTC_RECEIVE_ADDRESS:-}
+      CASHAPP_CASHTAG: ${CASHAPP_CASHTAG:-}
+    volumes:
+      - members-data:/data
+    ports:
+      - "127.0.0.1:18109:8000"
+
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -136,8 +158,10 @@ services:
       - fmp
       - celltower
       - cport
+      - members
 
 volumes:
   maclan-data:
   xsave-data:
   celltower-data:
+  members-data:

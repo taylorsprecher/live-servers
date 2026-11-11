@@ -1,0 +1,930 @@
+#!/usr/bin/env python3
+"""Member-login training site — Taylor's Transgender Patient Awareness, LLC.
+
+Python 3 stdlib ONLY (http.server, sqlite3, hashlib.pbkdf2_hmac, urllib for
+the Stripe REST API). Real member accounts persist in SQLite on a volume.
+
+Payments (on-site; no GoDaddy in this app):
+  * Stripe Checkout (hosted page at checkout.stripe.com). Keys come from the
+    host environment (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) — never
+    hardcoded, never committed. Checkout uses the account's default payment
+    methods (payment_method_types is NOT restricted), so card, Google Pay
+    and Apple Pay surface when enabled in the Stripe Dashboard and the
+    buyer's device supports them. Apple Card pays as an ordinary card /
+    via Apple Pay. Payment unlocks automatically: the signature-verified
+    webhook (POST /stripe/webhook, checkout.session.completed) grants the
+    product to the paying member.
+  * Bitcoin (separate path — Stripe does not process BTC): the app quotes
+    BTC from the USD price (CoinGecko rate), creates a PENDING order, and
+    shows Taylor's receive address (BTC_RECEIVE_ADDRESS, host env). The
+    owner confirms receipt in the roster; confirmation unlocks the product.
+    While the address is unset, Bitcoin shows as "not yet available".
+  * Cash App (same manual pattern as Bitcoin): the app creates a PENDING
+    order showing the USD amount and Taylor's cashtag (CASHAPP_CASHTAG,
+    default $taylorsprecher2026 — a public receive handle). The owner
+    confirms receipt in the roster; confirmation unlocks the product.
+    Manual orders (Bitcoin + Cash App) share one log: order, member,
+    product, amount, timestamp, confirmation.
+
+Content: full course files are served ONLY to signed-in members with
+access, from CONTENT_DIR on the volume — never a public URL.
+
+Owner = member registered with OWNER_EMAIL; the roster (grant/revoke,
+BTC confirm, payment log) is fail-closed to everyone else.
+Sessions: random token, stored hashed, HttpOnly cookie, 30-day lifetime.
+Passwords: salted PBKDF2-HMAC-SHA256, never plaintext.
+"""
+import hashlib
+import hmac
+import html
+import json
+import os
+import re
+import secrets
+import sqlite3
+import threading
+import time
+import urllib.request
+import urllib.error
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import parse_qs, urlparse, urlencode
+
+BASE = os.environ.get("BASE_PATH", "/members").rstrip("/")
+DB_PATH = os.environ.get("MEMBERS_DB_PATH", "/data/members.db")
+CONTENT_DIR = os.environ.get("CONTENT_DIR", "/data/content")
+PORT = int(os.environ.get("PORT", "8000"))
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://52.41.84.116:443").rstrip("/")
+OWNER_EMAIL = "taylorsprecher@gmail.com"
+SESSION_DAYS = 30
+PBKDF2_ROUNDS = 200_000
+
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+BTC_RECEIVE_ADDRESS = os.environ.get("BTC_RECEIVE_ADDRESS", "")
+CASHAPP_CASHTAG = os.environ.get("CASHAPP_CASHTAG") or "$taylorsprecher2026"
+BTC_RATE_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
+BTC_RATE_SOURCE = "CoinGecko (api.coingecko.com simple/price, USD)"
+
+COURSES = [
+    {
+        "key": "ccce",
+        "name": "Cultural Competence Continuing Education: Transgender Emergency Medicine",
+        "short": "CCCE Course",
+        "price": "$15",
+        "cents": 1500,
+        "file": "CCCE_Course_Files.zip",
+    },
+    {
+        "key": "emspr",
+        "name": "EMSPR Protocols",
+        "short": "EMSPR",
+        "price": "$6,000",
+        "cents": 600000,
+        "file": "CCCE_Course_Files.zip",
+    },
+]
+COURSE_KEYS = {c["key"] for c in COURSES}
+COURSE_BY_KEY = {c["key"]: c for c in COURSES}
+
+_lock = threading.Lock()
+_db = sqlite3.connect(DB_PATH, check_same_thread=False)
+_db.row_factory = sqlite3.Row
+
+
+def init_db():
+    os.makedirs(CONTENT_DIR, exist_ok=True)
+    with _lock, _db:
+        _db.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS members (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                pw_salt TEXT NOT NULL,
+                pw_hash TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS sessions (
+                token_hash TEXT PRIMARY KEY,
+                member_id INTEGER NOT NULL REFERENCES members(id),
+                expires_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS access (
+                member_id INTEGER NOT NULL REFERENCES members(id),
+                course_key TEXT NOT NULL,
+                PRIMARY KEY (member_id, course_key)
+            );
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                member_id INTEGER NOT NULL,
+                course_key TEXT NOT NULL,
+                stripe_session_id TEXT UNIQUE,
+                stripe_event_id TEXT,
+                amount_cents INTEGER,
+                currency TEXT,
+                created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS manual_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                member_id INTEGER NOT NULL,
+                course_key TEXT NOT NULL,
+                method TEXT NOT NULL,
+                usd_cents INTEGER NOT NULL,
+                amount_text TEXT NOT NULL,
+                detail TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at INTEGER NOT NULL,
+                confirmed_at INTEGER,
+                confirmed_by TEXT
+            );
+            """
+        )
+
+
+def hash_password(password, salt=None):
+    if salt is None:
+        salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PBKDF2_ROUNDS)
+    return salt.hex(), dk.hex()
+
+
+def verify_password(password, salt_hex, hash_hex):
+    _, candidate = hash_password(password, bytes.fromhex(salt_hex))
+    return secrets.compare_digest(candidate, hash_hex)
+
+
+def token_hash(token):
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def create_session(member_id):
+    token = secrets.token_urlsafe(32)
+    with _lock, _db:
+        _db.execute(
+            "INSERT INTO sessions (token_hash, member_id, expires_at) VALUES (?, ?, ?)",
+            (token_hash(token), member_id, int(time.time()) + SESSION_DAYS * 86400),
+        )
+    return token
+
+
+def member_for_token(token):
+    if not token:
+        return None
+    with _lock:
+        row = _db.execute(
+            "SELECT m.* FROM sessions s JOIN members m ON m.id = s.member_id "
+            "WHERE s.token_hash = ? AND s.expires_at > ?",
+            (token_hash(token), int(time.time())),
+        ).fetchone()
+    return row
+
+
+def member_access(member_id):
+    with _lock:
+        rows = _db.execute(
+            "SELECT course_key FROM access WHERE member_id = ?", (member_id,)
+        ).fetchall()
+    return {r["course_key"] for r in rows}
+
+
+def grant_access(member_id, course_key):
+    with _lock, _db:
+        _db.execute(
+            "INSERT OR IGNORE INTO access (member_id, course_key) VALUES (?, ?)",
+            (member_id, course_key),
+        )
+
+
+def content_available(course):
+    return os.path.isfile(os.path.join(CONTENT_DIR, course["file"]))
+
+
+# ---------------------------------------------------------------- Stripe --
+def stripe_create_checkout(member, course):
+    """Create a Stripe Checkout Session. Returns (url, None) or (None, err)."""
+    if not STRIPE_SECRET_KEY:
+        return None, "not_configured"
+    params = {
+        "mode": "payment",
+        "success_url": f"{PUBLIC_BASE_URL}{BASE}/desk?paid={course['key']}",
+        "cancel_url": f"{PUBLIC_BASE_URL}{BASE}/desk?cancelled={course['key']}",
+        "line_items[0][quantity]": "1",
+        "line_items[0][price_data][currency]": "usd",
+        "line_items[0][price_data][unit_amount]": str(course["cents"]),
+        "line_items[0][price_data][product_data][name]": course["name"],
+        "metadata[member_id]": str(member["id"]),
+        "metadata[course_key]": course["key"],
+        "customer_email": member["email"],
+        # payment_method_types deliberately omitted: Checkout uses the
+        # account's enabled payment methods (card + wallets such as
+        # Google Pay / Apple Pay when enabled in the Stripe Dashboard).
+    }
+    req = urllib.request.Request(
+        "https://api.stripe.com/v1/checkout/sessions",
+        data=urlencode(params).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {STRIPE_SECRET_KEY}",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Idempotency-Key": secrets.token_hex(16),
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        return data.get("url"), None
+    except urllib.error.HTTPError as e:
+        try:
+            err = json.loads(e.read().decode("utf-8"))["error"]["message"]
+        except Exception:
+            err = f"Stripe HTTP {e.code}"
+        return None, err
+    except Exception as e:  # network etc.
+        return None, str(e)
+
+
+def stripe_verify_signature(payload_bytes, sig_header, secret, tolerance=300):
+    """Verify a Stripe webhook signature (stdlib HMAC-SHA256)."""
+    if not sig_header or not secret:
+        return False
+    parts = {}
+    for item in sig_header.split(","):
+        if "=" in item:
+            k, v = item.split("=", 1)
+            parts.setdefault(k.strip(), []).append(v.strip())
+    try:
+        timestamp = parts["t"][0]
+        signatures = parts["v1"]
+    except (KeyError, IndexError):
+        return False
+    if abs(int(time.time()) - int(timestamp)) > tolerance:
+        return False
+    signed = f"{timestamp}.".encode("utf-8") + payload_bytes
+    expected = hmac.new(
+        secret.encode("utf-8"), signed, hashlib.sha256
+    ).hexdigest()
+    return any(hmac.compare_digest(expected, s) for s in signatures)
+
+
+def btc_quote(usd_cents):
+    """Return (btc_amount_str, rate) quoted from CoinGecko, or (None, None)."""
+    try:
+        req = urllib.request.Request(
+            BTC_RATE_URL, headers={"User-Agent": "member-site/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            rate = float(json.loads(resp.read().decode("utf-8"))["bitcoin"]["usd"])
+        btc = (usd_cents / 100.0) / rate
+        return f"{btc:.8f}", rate
+    except Exception:
+        return None, None
+
+
+# ----------------------------------------------------------------- pages --
+PAGE = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<style>
+ body {{ font-family: system-ui, sans-serif; margin: 0; background: #101418; color: #e8ecef; }}
+ main {{ max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }}
+ h1 {{ font-size: 1.5rem; }} h2 {{ font-size: 1.15rem; margin-top: 28px; }}
+ .card {{ background: #1a2129; border: 1px solid #2b3644; border-radius: 10px; padding: 16px; margin: 14px 0; }}
+ label {{ display: block; margin: 10px 0 4px; font-size: .9rem; color: #b9c4cf; }}
+ input {{ width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid #39485a; background: #0d1117; color: #e8ecef; }}
+ button, .btn {{ display: inline-block; margin-top: 14px; padding: 10px 18px; border: 0; border-radius: 6px; background: #2f81f7; color: #fff; font-size: 1rem; cursor: pointer; text-decoration: none; }}
+ button.secondary, .btn.secondary {{ background: #39485a; }}
+ button:disabled {{ background: #39485a; cursor: not-allowed; }}
+ .msg {{ background: #3a2b12; border: 1px solid #8a6d1f; color: #ffd97a; padding: 10px 14px; border-radius: 8px; }}
+ .ok {{ background: #12331c; border-color: #1f7a3a; color: #8fe3a8; }}
+ table {{ width: 100%; border-collapse: collapse; font-size: .92rem; }}
+ td, th {{ padding: 8px 6px; border-bottom: 1px solid #2b3644; text-align: left; vertical-align: top; }}
+ .small {{ font-size: .85rem; color: #93a3b3; }}
+ code {{ word-break: break-all; }}
+ form.inline {{ display: inline; }}
+ form.inline button {{ margin-top: 0; padding: 5px 10px; font-size: .85rem; }}
+</style></head><body><main>
+{body}
+</main></body></html>"""
+
+
+def esc(s):
+    return html.escape(str(s), quote=True)
+
+
+def catalog_cards():
+    out = ""
+    for c in COURSES:
+        out += (
+            f'<div class="card"><strong>{esc(c["name"])}</strong><br>'
+            f'<span class="small">{esc(c["price"])} USD — one-time payment</span><br>'
+            f'<a class="btn secondary" href="{BASE}/preview">Preview the course</a></div>'
+        )
+    return out
+
+
+def home_page(message="", ok=False):
+    msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
+    body = f"""
+<h1>Training Site — Member Sign-In</h1>
+<p class="small">Taylor's Transgender Patient Awareness, LLC · 911transedu.net</p>
+{msg}
+<div class="card"><h2>Sign in</h2>
+<form method="post" action="{BASE}/signin">
+<label>Email</label><input type="email" name="email" required>
+<label>Password</label><input type="password" name="password" required>
+<button type="submit">Sign in</button></form></div>
+<div class="card"><h2>Create an account</h2>
+<form method="post" action="{BASE}/signup">
+<label>Full name</label><input type="text" name="name" required>
+<label>Email</label><input type="email" name="email" required>
+<label>Password (8+ characters)</label><input type="password" name="password" minlength="8" required>
+<button type="submit">Create account</button></form>
+<p class="small">For course use on a phone or tablet, please allow Cellular,
+Wi-Fi (Local Network), and Bluetooth access when your device prompts you.</p></div>
+<h2>Courses</h2>
+{catalog_cards()}
+<p class="small">Payment is taken on this site (card, Google Pay, Apple Pay,
+Bitcoin, or Cash App). Card and wallet payments unlock automatically;
+Bitcoin and Cash App unlock when the owner confirms receipt.</p>
+"""
+    return PAGE.format(title="Training Site — Members", body=body)
+
+
+def preview_page():
+    body = f"""
+<h1>Course Preview</h1>
+<p class="small">Taylor's Transgender Patient Awareness, LLC</p>
+<div class="card"><h2>Cultural Competence Continuing Education:
+Transgender Emergency Medicine</h2>
+<p><strong>Price: $15 USD</strong></p>
+<p>OHA Cultural Competence Continuing Education (CCCE) approved course —
+"Transgender Emergency Medicine", approved August 5, 2026 through
+August 5, 2029.</p>
+<p>The course covers all Oregon EMT renewal categories (OAR 333-265-0110
+Appendix 1):</p>
+<table>
+<tr><th>Category</th><th>Hours</th></tr>
+<tr><td>Trauma</td><td>3</td></tr>
+<tr><td>Medical</td><td>3</td></tr>
+<tr><td>Pediatric &amp; Obstetric</td><td>3</td></tr>
+<tr><td>Airway / Breathing / Cardiology</td><td>4</td></tr>
+<tr><td>Culture / Race / Gender / Ethnicity</td><td>2</td></tr>
+<tr><td>Miscellaneous</td><td>9</td></tr>
+<tr><td><strong>Total</strong></td><td><strong>24</strong></td></tr>
+</table>
+<p class="small">This preview shows the outline only. The full course
+contents are released to member accounts after payment.</p></div>
+<div class="card"><h2>EMSPR Protocols</h2>
+<p><strong>Price: $6,000 USD</strong></p>
+<p>The EMSPR protocol set for EMS agencies and training programs.
+Full contents are released to member accounts after payment.</p></div>
+<p><a class="btn" href="{BASE}/">Sign in / Create account</a></p>
+"""
+    return PAGE.format(title="Course Preview", body=body)
+
+
+def desk_page(member, message="", ok=False):
+    is_owner = member["email"].lower() == OWNER_EMAIL
+    granted = member_access(member["id"])
+    msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
+    with _lock:
+        my_pending = _db.execute(
+            "SELECT * FROM manual_orders WHERE member_id = ? AND status = 'pending' "
+            "ORDER BY created_at",
+            (member["id"],),
+        ).fetchall()
+    pending_by_course = {}
+    for o in my_pending:
+        pending_by_course.setdefault(o["course_key"], []).append(o)
+
+    rows = ""
+    for c in COURSES:
+        if c["key"] in granted:
+            if content_available(c):
+                status = (
+                    f'<strong>Access granted.</strong><br>'
+                    f'<a class="btn" href="{BASE}/content/{c["key"]}">'
+                    f'Download full course contents</a>'
+                )
+            else:
+                status = (
+                    "<strong>Access granted</strong> — your access is saved. "
+                    "The course files are being added to the site; check back "
+                    "shortly to download them here."
+                )
+        else:
+            parts = []
+            for o in pending_by_course.get(c["key"], []):
+                if o["method"] == "bitcoin":
+                    parts.append(
+                        f'<p class="small">Bitcoin order #{o["id"]} pending: send '
+                        f'<strong>{esc(o["amount_text"])}</strong> to '
+                        f'<code>{esc(BTC_RECEIVE_ADDRESS)}</code><br>'
+                        "Access unlocks when the owner confirms receipt.</p>"
+                    )
+                else:
+                    parts.append(
+                        f'<p class="small">Cash App order #{o["id"]} pending: send '
+                        f'<strong>{esc(o["amount_text"])}</strong> to '
+                        f'<code>{esc(CASHAPP_CASHTAG)}</code> in Cash App — put '
+                        "your account email in the payment note so it can be "
+                        "matched.<br>Access unlocks when the owner confirms "
+                        "receipt.</p>"
+                    )
+            if BTC_RECEIVE_ADDRESS:
+                parts.append(
+                    f'<form class="inline" method="post" action="{BASE}/bitcoin/order">'
+                    f'<input type="hidden" name="course_key" value="{c["key"]}">'
+                    f'<button class="secondary" type="submit">Pay with Bitcoin</button></form> '
+                )
+            else:
+                parts.append('<p class="small">Bitcoin: not yet available.</p>')
+            parts.append(
+                f'<form class="inline" method="post" action="{BASE}/cashapp/order">'
+                f'<input type="hidden" name="course_key" value="{c["key"]}">'
+                f'<button class="secondary" type="submit">Pay with Cash App</button></form>'
+            )
+            btc_part = "".join(parts)
+            if STRIPE_SECRET_KEY:
+                buy = (
+                    f'<form class="inline" method="post" action="{BASE}/checkout">'
+                    f'<input type="hidden" name="course_key" value="{c["key"]}">'
+                    f'<button type="submit">Buy — {esc(c["price"])}</button></form> '
+                )
+            else:
+                buy = (
+                    '<p class="small">Online card checkout is being switched '
+                    "on — check back shortly.</p>"
+                )
+            status = (
+                buy + btc_part
+                + '<p class="small">Card, Google Pay and Apple Pay are '
+                "accepted at checkout (Apple Card works as a card and via "
+                "Apple Pay). Access unlocks automatically when payment "
+                "completes.</p>"
+            )
+        rows += (
+            f'<div class="card"><strong>{esc(c["name"])}</strong><br>'
+            f'<span class="small">{esc(c["price"])} USD</span><br>{status}</div>'
+        )
+
+    roster = ""
+    if is_owner:
+        with _lock:
+            all_members = _db.execute(
+                "SELECT * FROM members ORDER BY created_at"
+            ).fetchall()
+            pend = _db.execute(
+                "SELECT o.*, m.name, m.email FROM manual_orders o "
+                "JOIN members m ON m.id = o.member_id "
+                "WHERE o.status = 'pending' ORDER BY o.created_at"
+            ).fetchall()
+            pays = _db.execute(
+                "SELECT p.*, m.email FROM payments p "
+                "JOIN members m ON m.id = p.member_id "
+                "ORDER BY p.created_at DESC LIMIT 20"
+            ).fetchall()
+        trs = ""
+        for m in all_members:
+            m_access = member_access(m["id"])
+            cells = ""
+            for c in COURSES:
+                if c["key"] in m_access:
+                    action, label = "revoke", "Revoke"
+                else:
+                    action, label = "grant", "Grant"
+                cells += (
+                    f'<td><form class="inline" method="post" action="{BASE}/access">'
+                    f'<input type="hidden" name="member_id" value="{m["id"]}">'
+                    f'<input type="hidden" name="course_key" value="{c["key"]}">'
+                    f'<input type="hidden" name="action" value="{action}">'
+                    f'<button type="submit">{label} {esc(c["short"])}</button></form></td>'
+                )
+            trs += f'<tr><td>{esc(m["name"])}</td><td>{esc(m["email"])}</td>{cells}</tr>'
+        btc_rows = ""
+        for o in pend:
+            btc_rows += (
+                f'<tr><td>#{o["id"]}</td><td>{esc(o["name"])} ({esc(o["email"])})</td>'
+                f'<td>{esc(o["course_key"])}</td><td>{esc(o["method"])}</td>'
+                f'<td>{esc(o["amount_text"])}</td>'
+                f'<td><form class="inline" method="post" action="{BASE}/manual/confirm">'
+                f'<input type="hidden" name="order_id" value="{o["id"]}">'
+                f'<button type="submit">Confirm receipt — unlock</button></form></td></tr>'
+            )
+        if not btc_rows:
+            btc_rows = '<tr><td colspan="6" class="small">No pending manual-payment orders.</td></tr>'
+        pay_rows = ""
+        for p in pays:
+            pay_rows += (
+                f'<tr><td>{esc(p["email"])}</td><td>{esc(p["course_key"])}</td>'
+                f'<td>${(p["amount_cents"] or 0) / 100:.2f} {esc(p["currency"] or "")}</td>'
+                f'<td class="small">{esc(p["stripe_session_id"] or "")}</td></tr>'
+            )
+        if not pay_rows:
+            pay_rows = '<tr><td colspan="4" class="small">No card payments yet.</td></tr>'
+        roster = f"""
+<div class="card"><h2>Owner roster — grant / revoke course access</h2>
+<table><tr><th>Member</th><th>Email</th><th>CCCE</th><th>EMSPR</th></tr>{trs}</table>
+<p class="small">Only the owner account sees this roster.</p></div>
+<div class="card"><h2>Pending manual-payment orders (Bitcoin / Cash App)</h2>
+<table><tr><th>#</th><th>Member</th><th>Product</th><th>Method</th><th>Amount</th><th></th></tr>{btc_rows}</table></div>
+<div class="card"><h2>Recent card payments (Stripe)</h2>
+<table><tr><th>Member</th><th>Product</th><th>Amount</th><th>Session</th></tr>{pay_rows}</table></div>"""
+
+    body = f"""
+<h1>Member Desk</h1>
+{msg}
+<div class="card"><strong>{esc(member["name"])}</strong><br>
+<span class="small">{esc(member["email"])}</span>
+<form class="inline" method="post" action="{BASE}/signout" style="float:right">
+<button class="secondary" type="submit">Sign out</button></form></div>
+<h2>Your courses</h2>
+{rows}
+{roster}
+<div class="card"><h2>Delete account</h2>
+<form method="post" action="{BASE}/delete-account">
+<label>Password (required to delete your own account)</label>
+<input type="password" name="password" required>
+<button class="secondary" type="submit">Delete my account</button></form></div>
+"""
+    return PAGE.format(title="Member Desk", body=body)
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, fmt, *args):
+        pass
+
+    # -- helpers ---------------------------------------------------------
+    def send_html(self, body_html, status=200, extra_headers=None):
+        data = body_html.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        for k, v in (extra_headers or []):
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(data)
+
+    def redirect(self, path, extra_headers=None):
+        headers = [("Location", path)] + (extra_headers or [])
+        self.send_html("", status=303, extra_headers=headers)
+
+    def session_cookie(self, token):
+        return (
+            "Set-Cookie",
+            f"members_session={token}; Path={BASE}/; HttpOnly; SameSite=Lax; "
+            f"Max-Age={SESSION_DAYS * 86400}",
+        )
+
+    def clear_cookie(self):
+        return (
+            "Set-Cookie",
+            f"members_session=; Path={BASE}/; HttpOnly; SameSite=Lax; Max-Age=0",
+        )
+
+    def current_member(self):
+        cookie = self.headers.get("Cookie", "")
+        token = None
+        for part in cookie.split(";"):
+            part = part.strip()
+            if part.startswith("members_session="):
+                token = part.split("=", 1)[1]
+        return member_for_token(token), token
+
+    def raw_body(self):
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        return self.rfile.read(length) if length else b""
+
+    def form(self):
+        qs = parse_qs(self.raw_body().decode("utf-8"))
+        return {k: v[0] for k, v in qs.items()}
+
+    # -- routes ----------------------------------------------------------
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == BASE:
+            return self.redirect(BASE + "/")
+        if path == BASE + "/health":
+            data = b'{"status":"ok"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            return self.wfile.write(data)
+        if path == BASE + "/preview":
+            return self.send_html(preview_page())
+        if path == BASE + "/":
+            member, _ = self.current_member()
+            if member:
+                return self.redirect(BASE + "/desk")
+            return self.send_html(home_page())
+        if path == BASE + "/desk":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            qs = parse_qs(parsed.query)
+            message, ok = "", False
+            if "paid" in qs:
+                message = (
+                    "Thank you! If your payment completed, access unlocks "
+                    "automatically as soon as Stripe confirms it — refresh "
+                    "this page in a few seconds."
+                )
+                ok = True
+            elif "cancelled" in qs:
+                message = "Checkout was cancelled — no charge was made."
+            return self.send_html(desk_page(member, message, ok))
+        if path.startswith(BASE + "/content/"):
+            key = path[len(BASE + "/content/"):]
+            return self.serve_content(key)
+        return self.send_html("<h1>Not found</h1>", status=404)
+
+    def serve_content(self, key):
+        member, _ = self.current_member()
+        if not member:
+            return self.redirect(BASE + "/")
+        course = COURSE_BY_KEY.get(key)
+        if course is None:
+            return self.send_html("<h1>Not found</h1>", status=404)
+        if key not in member_access(member["id"]):
+            return self.send_html(
+                "<h1>Locked</h1><p>This content needs course access.</p>",
+                status=403,
+            )
+        fpath = os.path.join(CONTENT_DIR, course["file"])
+        if not os.path.isfile(fpath):
+            return self.send_html(
+                "<h1>Files being added</h1><p>Your access is saved. The "
+                "course files are being added to the site — check back "
+                "shortly.</p>",
+                status=404,
+            )
+        size = os.path.getsize(fpath)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/zip")
+        self.send_header(
+            "Content-Disposition", f'attachment; filename="{course["file"]}"'
+        )
+        self.send_header("Content-Length", str(size))
+        self.end_headers()
+        with open(fpath, "rb") as fh:
+            while True:
+                chunk = fh.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if path == BASE + "/stripe/webhook":
+            return self.stripe_webhook()
+        form = self.form()
+        if path == BASE + "/signup":
+            name = form.get("name", "").strip()
+            email = form.get("email", "").strip()
+            password = form.get("password", "")
+            if not name or "@" not in email or len(password) < 8:
+                return self.send_html(
+                    home_page("Please give a name, a valid email, and a password of 8+ characters.")
+                )
+            salt_hex, hash_hex = hash_password(password)
+            try:
+                with _lock, _db:
+                    cur = _db.execute(
+                        "INSERT INTO members (name, email, pw_salt, pw_hash, created_at) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (name, email, salt_hex, hash_hex, int(time.time())),
+                    )
+                    member_id = cur.lastrowid
+            except sqlite3.IntegrityError:
+                return self.send_html(
+                    home_page("That email is already registered — please sign in instead.")
+                )
+            token = create_session(member_id)
+            return self.redirect(BASE + "/desk", extra_headers=[self.session_cookie(token)])
+        if path == BASE + "/signin":
+            email = form.get("email", "").strip()
+            password = form.get("password", "")
+            with _lock:
+                row = _db.execute(
+                    "SELECT * FROM members WHERE email = ?", (email,)
+                ).fetchone()
+            if row is None or not verify_password(password, row["pw_salt"], row["pw_hash"]):
+                return self.send_html(home_page("Sign-in failed: wrong email or password."))
+            token = create_session(row["id"])
+            return self.redirect(BASE + "/desk", extra_headers=[self.session_cookie(token)])
+        if path == BASE + "/signout":
+            _, token = self.current_member()
+            if token:
+                with _lock, _db:
+                    _db.execute(
+                        "DELETE FROM sessions WHERE token_hash = ?", (token_hash(token),)
+                    )
+            return self.redirect(BASE + "/", extra_headers=[self.clear_cookie()])
+        if path == BASE + "/checkout":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            course = COURSE_BY_KEY.get(form.get("course_key", ""))
+            if course is None:
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            url, err = stripe_create_checkout(member, course)
+            if url:
+                return self.redirect(url)
+            if err == "not_configured":
+                return self.send_html(
+                    desk_page(member, "Online card checkout is being switched on — check back shortly.")
+                )
+            return self.send_html(
+                desk_page(member, f"Checkout could not be started: {err}")
+            )
+        if path == BASE + "/bitcoin/order":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            course = COURSE_BY_KEY.get(form.get("course_key", ""))
+            if course is None:
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            if not BTC_RECEIVE_ADDRESS:
+                return self.send_html(desk_page(member, "Bitcoin is not yet available."))
+            if course["key"] in member_access(member["id"]):
+                return self.send_html(desk_page(member, "You already have access to this.", ok=True))
+            btc_amount, _rate = btc_quote(course["cents"])
+            if btc_amount is None:
+                return self.send_html(
+                    desk_page(member, "The Bitcoin rate is unavailable right now — please try again shortly.")
+                )
+            with _lock, _db:
+                _db.execute(
+                    "INSERT INTO manual_orders (member_id, course_key, method, "
+                    "usd_cents, amount_text, detail, created_at) "
+                    "VALUES (?, ?, 'bitcoin', ?, ?, ?, ?)",
+                    (member["id"], course["key"], course["cents"],
+                     f"{btc_amount} BTC", BTC_RATE_SOURCE, int(time.time())),
+                )
+            return self.send_html(
+                desk_page(
+                    member,
+                    f"Bitcoin order created: send {btc_amount} BTC to "
+                    f"{BTC_RECEIVE_ADDRESS}. Access unlocks when the owner "
+                    "confirms receipt.",
+                    ok=True,
+                )
+            )
+        if path == BASE + "/cashapp/order":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            course = COURSE_BY_KEY.get(form.get("course_key", ""))
+            if course is None:
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            if course["key"] in member_access(member["id"]):
+                return self.send_html(desk_page(member, "You already have access to this.", ok=True))
+            amount_text = f"${course['cents'] / 100:.2f}"
+            with _lock, _db:
+                _db.execute(
+                    "INSERT INTO manual_orders (member_id, course_key, method, "
+                    "usd_cents, amount_text, detail, created_at) "
+                    "VALUES (?, ?, 'cashapp', ?, ?, ?, ?)",
+                    (member["id"], course["key"], course["cents"], amount_text,
+                     CASHAPP_CASHTAG, int(time.time())),
+                )
+            return self.send_html(
+                desk_page(
+                    member,
+                    f"Cash App order created: send {amount_text} to "
+                    f"{CASHAPP_CASHTAG} in Cash App — put your account email "
+                    "in the payment note. Access unlocks when the owner "
+                    "confirms receipt.",
+                    ok=True,
+                )
+            )
+        if path == BASE + "/manual/confirm":
+            member, _ = self.current_member()
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            try:
+                order_id = int(form.get("order_id", ""))
+            except ValueError:
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            with _lock, _db:
+                row = _db.execute(
+                    "SELECT * FROM manual_orders WHERE id = ? AND status = 'pending'",
+                    (order_id,),
+                ).fetchone()
+                if row:
+                    _db.execute(
+                        "UPDATE manual_orders SET status = 'confirmed', "
+                        "confirmed_at = ?, confirmed_by = ? WHERE id = ?",
+                        (int(time.time()), member["email"], order_id),
+                    )
+                    _db.execute(
+                        "INSERT OR IGNORE INTO access (member_id, course_key) VALUES (?, ?)",
+                        (row["member_id"], row["course_key"]),
+                    )
+            return self.redirect(BASE + "/desk")
+        if path == BASE + "/access":
+            member, _ = self.current_member()
+            # Fail closed: only the owner can grant/revoke.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            try:
+                target_id = int(form.get("member_id", ""))
+            except ValueError:
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            course_key = form.get("course_key", "")
+            action = form.get("action", "")
+            if course_key not in COURSE_KEYS or action not in ("grant", "revoke"):
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            with _lock, _db:
+                if action == "grant":
+                    _db.execute(
+                        "INSERT OR IGNORE INTO access (member_id, course_key) VALUES (?, ?)",
+                        (target_id, course_key),
+                    )
+                else:
+                    _db.execute(
+                        "DELETE FROM access WHERE member_id = ? AND course_key = ?",
+                        (target_id, course_key),
+                    )
+            return self.redirect(BASE + "/desk")
+        if path == BASE + "/delete-account":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            if not verify_password(form.get("password", ""), member["pw_salt"], member["pw_hash"]):
+                return self.send_html(desk_page(member, "Delete failed: wrong password."))
+            with _lock, _db:
+                _db.execute("DELETE FROM access WHERE member_id = ?", (member["id"],))
+                _db.execute("DELETE FROM sessions WHERE member_id = ?", (member["id"],))
+                _db.execute("DELETE FROM manual_orders WHERE member_id = ?", (member["id"],))
+                _db.execute("DELETE FROM payments WHERE member_id = ?", (member["id"],))
+                _db.execute("DELETE FROM members WHERE id = ?", (member["id"],))
+            return self.redirect(BASE + "/", extra_headers=[self.clear_cookie()])
+        return self.send_html("<h1>Not found</h1>", status=404)
+
+    def stripe_webhook(self):
+        payload = self.raw_body()
+        sig = self.headers.get("Stripe-Signature", "")
+        if not STRIPE_WEBHOOK_SECRET or not stripe_verify_signature(
+            payload, sig, STRIPE_WEBHOOK_SECRET
+        ):
+            return self.send_html("<h1>Bad signature</h1>", status=400)
+        try:
+            event = json.loads(payload.decode("utf-8"))
+        except Exception:
+            return self.send_html("<h1>Bad payload</h1>", status=400)
+        if event.get("type") == "checkout.session.completed":
+            obj = event.get("data", {}).get("object", {})
+            meta = obj.get("metadata", {}) or {}
+            try:
+                member_id = int(meta.get("member_id", ""))
+            except ValueError:
+                member_id = None
+            course_key = meta.get("course_key", "")
+            if (
+                member_id
+                and course_key in COURSE_KEYS
+                and obj.get("payment_status") == "paid"
+            ):
+                try:
+                    with _lock, _db:
+                        _db.execute(
+                            "INSERT OR IGNORE INTO payments (member_id, "
+                            "course_key, stripe_session_id, stripe_event_id, "
+                            "amount_cents, currency, created_at) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (
+                                member_id,
+                                course_key,
+                                obj.get("id"),
+                                event.get("id"),
+                                obj.get("amount_total"),
+                                obj.get("currency"),
+                                int(time.time()),
+                            ),
+                        )
+                        _db.execute(
+                            "INSERT OR IGNORE INTO access (member_id, course_key) "
+                            "VALUES (?, ?)",
+                            (member_id, course_key),
+                        )
+                except sqlite3.Error:
+                    pass
+        data = b'{"received":true}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+
+if __name__ == "__main__":
+    init_db()
+    server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
+    print(f"member-site listening on :{PORT} base={BASE} db={DB_PATH}", flush=True)
+    server.serve_forever()
