@@ -69,7 +69,7 @@ fi
 
 echo "=== LISTENER DIAGNOSTICS (read-only) ==="
 echo "--- who holds :443 / :80 / :181xx on this host ---"
-ss -tlnp 2>/dev/null | grep -E ':(443|80|18101|18102|18103|18104|18105|18106|18107|18108|18109)[[:space:]]' || ss -tln
+ss -tlnp 2>/dev/null | grep -E ':(443|80|18101|18102|18103|18104|18105|18106|18107|18108|18109|18110)[[:space:]]' || ss -tln
 echo "--- all containers on this host (all projects, read-only) ---"
 docker ps -a --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 
@@ -96,6 +96,7 @@ check fmp       http://127.0.0.1:18106/fmp/api/health   DIRECT 15
 check celltower http://127.0.0.1:18107/celltower/api/health DIRECT 15
 check cport     http://127.0.0.1:18108/metrics          DIRECT 15
 check members   http://127.0.0.1:18109/members/health   DIRECT 15
+check specmatrix http://127.0.0.1:18110/specmatrix/health DIRECT 15
 
 echo "=== GATEWAY CHECKS (through nginx on :443) ==="
 check maclan    http://127.0.0.1:443/maclan/health
@@ -107,6 +108,7 @@ check fmp       http://127.0.0.1:443/fmp/api/health
 check celltower http://127.0.0.1:443/celltower/api/health
 check cport     http://127.0.0.1:443/cport/metrics
 check members   http://127.0.0.1:443/members/health
+check specmatrix http://127.0.0.1:443/specmatrix/health
 
 echo "=== AUDITED APP (separate production stack — must be untouched) ==="
 APPCODE="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:80/health)" || APPCODE="000"

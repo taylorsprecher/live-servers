@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spec Matrix — Cross-Brand Device &amp; Camera Analyzer</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #020617; color: #f1f5f9;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  ::selection { background: #06b6d4; color: #020617; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .wrap { max-width: 80rem; margin: 0 auto; padding-left: 1rem; padding-right: 1rem; width: 100%; }
+  @media (min-width: 640px) { .wrap { padding-left: 1.5rem; padding-right: 1.5rem; } }
+  @media (min-width: 1024px) { .wrap { padding-left: 2rem; padding-right: 2rem; } }
+  svg.ic { width: 1rem; height: 1rem; flex: none; vertical-align: -0.15em; }
+  svg.ic.sm { width: 0.875rem; height: 0.875rem; }
+  svg.ic.lg { width: 1.25rem; height: 1.25rem; }
+  button { font: inherit; cursor: pointer; background: none; border: none; color: inherit; }
+  input[type="text"] { font: inherit; }
+  .glows { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+  .glow { position: absolute; border-radius: 9999px; filter: blur(64px); }
+  .glow.a { top: -10rem; left: -10rem; width: 24rem; height: 24rem; background: rgba(8,145,178,.10); }
+  .glow.b { top: 33%; right: -10rem; width: 24rem; height: 24rem; background: rgba(124,58,237,.10); }
+  .glow.c { bottom: -10rem; left: 33%; width: 24rem; height: 24rem; background: rgba(5,150,105,.10); }
+
+  /* header */
+  header.top {
+    position: sticky; top: 0; z-index: 40;
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    background: rgba(2,6,23,.8); border-bottom: 1px solid rgba(30,41,59,.8);
+  }
+  .hbar { height: 4rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  .logo { display: flex; align-items: center; gap: 0.75rem; min-width: 0; }
+  .logo-badge {
+    height: 2.5rem; width: 2.5rem; border-radius: 0.75rem; color: #fff;
+    background: linear-gradient(to top right, #06b6d4, #2563eb, #7c3aed);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 15px -3px rgba(6,182,212,.20);
+  }
+  .logo-badge svg.ic { width: 1.25rem; height: 1.25rem; }
+  .logo-name { font-weight: 700; font-size: 1.125rem; letter-spacing: -0.025em; color: #f1f5f9; }
+  .pro-badge { font-size: 0.75rem; padding: 0.125rem 0.5rem; border-radius: 9999px; background: #082f49; color: #22d3ee; border: 1px solid #155e75; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .logo-sub { font-size: 0.75rem; color: #94a3b8; margin: 0; }
+  @media (max-width: 639px) { .logo-sub { display: none; } }
+  .tabs { display: flex; align-items: center; background: rgba(15,23,42,.9); padding: 0.25rem; border-radius: 0.75rem; border: 1px solid #1e293b; overflow-x: auto; }
+  .tab { display: flex; align-items: center; gap: 0.5rem; padding: 0.375rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 600; color: #94a3b8; white-space: nowrap; transition: all .15s; }
+  .tab:hover { color: #e2e8f0; }
+  .tab.on { background: #06b6d4; color: #020617; box-shadow: 0 4px 6px -1px rgba(6,182,212,.20); }
+  .hactions { display: flex; align-items: center; gap: 0.75rem; }
+  .btn-export { display: flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.5rem; background: #0f172a; border: 1px solid #334155; font-size: 0.75rem; font-weight: 500; color: #e2e8f0; transition: all .15s; }
+  .btn-export:hover { border-color: #06b6d4; }
+  .btn-export:disabled { opacity: .4; cursor: default; }
+  .btn-export svg.ic { color: #22d3ee; }
+  .btn-export .lbl { } @media (max-width: 767px) { .btn-export .lbl { display: none; } }
+  .pinned-box { display: flex; align-items: center; gap: 0.5rem; background: #0f172a; padding: 0.375rem 0.75rem; border-radius: 0.5rem; border: 1px solid #1e293b; font-size: 0.75rem; }
+  .pinned-box svg.ic { color: #22d3ee; }
+  .pinned-box .n { font-weight: 700; color: #22d3ee; font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  /* filter panel */
+  section.filters { position: relative; z-index: 10; border-bottom: 1px solid rgba(30,41,59,.6); background: rgba(15,23,42,.4); backdrop-filter: blur(12px); }
+  .filters .wrap { padding-top: 1rem; padding-bottom: 1rem; }
+  .frow { display: flex; flex-direction: column; gap: 1rem; }
+  @media (min-width: 768px) { .frow { flex-direction: row; align-items: center; justify-content: space-between; } }
+  .searchbox { position: relative; flex: 1; }
+  .searchbox svg.ic { position: absolute; left: 0.875rem; top: 50%; transform: translateY(-50%); color: #94a3b8; }
+  .searchbox input {
+    width: 100%; padding: 0.5rem 2.5rem 0.5rem 2.5rem; background: rgba(2,6,23,.8);
+    border: 1px solid #1e293b; border-radius: 0.75rem; font-size: 0.875rem; color: #e2e8f0; outline: none; transition: all .15s;
+  }
+  .searchbox input::placeholder { color: #64748b; }
+  .searchbox input:focus { border-color: #06b6d4; box-shadow: 0 0 0 1px #06b6d4; }
+  .searchbox .clear { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); color: #64748b; display: flex; }
+  .searchbox .clear:hover { color: #cbd5e1; }
+  .catpills { display: flex; align-items: center; gap: 0.375rem; overflow-x: auto; padding-bottom: 0.25rem; }
+  @media (min-width: 768px) { .catpills { padding-bottom: 0; } }
+  .pill { display: flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 500; white-space: nowrap; transition: all .15s; background: rgba(2,6,23,.6); color: #94a3b8; border: 1px solid #1e293b; }
+  .pill:hover { background: #0f172a; color: #e2e8f0; }
+  .pill.on { background: linear-gradient(to right, #0891b2, #2563eb); color: #fff; border-color: transparent; box-shadow: 0 4px 6px -1px rgba(8,145,178,.20); }
+  .frow2 { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; padding-top: 0.5rem; border-top: 1px solid rgba(30,41,59,.4); margin-top: 1rem; }
+  .brands { display: flex; align-items: center; gap: 0.375rem; overflow-x: auto; padding: 0.25rem 0; }
+  .brands .blabel { font-size: 0.75rem; color: #64748b; font-weight: 500; margin-right: 0.25rem; display: flex; align-items: center; gap: 0.25rem; }
+  .bbtn { padding: 0.25rem 0.625rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 500; transition: all .15s; background: rgba(2,6,23,.4); color: #94a3b8; border: 1px solid transparent; white-space: nowrap; }
+  .bbtn:hover { color: #e2e8f0; background: #0f172a; }
+  .bbtn.on { background: #1e293b; color: #22d3ee; border-color: rgba(6,182,212,.5); }
+  .rightctl { display: flex; align-items: center; gap: 1.5rem; }
+  .diff-toggle { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: #cbd5e1; cursor: pointer; user-select: none; }
+  .diff-toggle input { width: 1rem; height: 1rem; accent-color: #06b6d4; }
+  .diff-toggle .t { font-weight: 500; color: #22d3ee; display: flex; align-items: center; gap: 0.25rem; }
+  .price { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; }
+  .price .pl { color: #64748b; }
+  .price input[type="range"] { width: 6rem; accent-color: #06b6d4; height: 0.375rem; cursor: pointer; }
+  .price .pv { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 600; color: #22d3ee; min-width: 65px; }
+
+  /* main */
+  main { flex: 1; position: relative; z-index: 10; width: 100%; }
+  main .wrap { padding-top: 1.5rem; padding-bottom: 1.5rem; }
+  .viewhead { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+  h2.vt { font-size: 1.125rem; font-weight: 700; color: #f1f5f9; display: flex; align-items: center; gap: 0.5rem; margin: 0; }
+  h2.vt svg.ic { width: 1.25rem; height: 1.25rem; color: #22d3ee; }
+  .vsub { font-size: 0.75rem; color: #94a3b8; margin: 0.25rem 0 0; }
+  .btn-clear { font-size: 0.75rem; color: #fb7185; display: flex; align-items: center; gap: 0.25rem; background: rgba(76,5,25,.4); border: 1px solid rgba(136,19,55,.6); padding: 0.375rem 0.75rem; border-radius: 0.5rem; }
+  .btn-clear:hover { color: #fda4af; }
+  .empty { text-align: center; padding: 5rem 1rem; background: rgba(15,23,42,.3); border: 1px dashed #1e293b; border-radius: 1rem; }
+  .empty svg.big { width: 3rem; height: 3rem; color: #475569; }
+  .empty h3 { font-size: 1rem; font-weight: 600; color: #cbd5e1; margin: 0.75rem 0 0; }
+  .empty p { font-size: 0.75rem; color: #64748b; max-width: 28rem; margin: 0.25rem auto 1rem; }
+  .btn-primary { padding: 0.5rem 1rem; border-radius: 0.75rem; background: #06b6d4; color: #020617; font-weight: 600; font-size: 0.75rem; box-shadow: 0 10px 15px -3px rgba(6,182,212,.20); }
+  .btn-primary:hover { background: #22d3ee; }
+  .linkish { margin-top: 0.75rem; font-size: 0.75rem; color: #22d3ee; text-decoration: underline; font-weight: 500; }
+
+  /* matrix table */
+  .tblwrap { overflow-x: auto; border-radius: 1rem; border: 1px solid #1e293b; background: rgba(15,23,42,.4); backdrop-filter: blur(24px); box-shadow: 0 25px 50px -12px rgba(0,0,0,.5); }
+  table.matrix { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.875rem; }
+  table.matrix th, table.matrix td { padding: 1rem; }
+  table.matrix thead tr { border-bottom: 1px solid #1e293b; background: rgba(2,6,23,.8); }
+  table.matrix tbody tr { border-top: 1px solid rgba(30,41,59,.6); }
+  table.matrix tbody tr:hover { background: rgba(15,23,42,.5); }
+  table.matrix tr.diffrow { background: rgba(8,47,73,.20); }
+  .rowlabel { font-weight: 600; font-size: 0.75rem; color: #94a3b8; position: sticky; left: 0; background: rgba(2,6,23,.9); z-index: 10; border-right: 1px solid #1e293b; width: 12rem; min-width: 180px; vertical-align: top; }
+  th.rowlabel { text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; background: rgba(2,6,23,.95); z-index: 20; font-size: 0.75rem; }
+  .diff-dot { display: block; font-size: 9px; color: #22d3ee; font-family: ui-monospace, Menlo, Consolas, monospace; margin-top: 0.125rem; }
+  td.cell { font-size: 0.75rem; color: #e2e8f0; border-right: 1px solid rgba(30,41,59,.4); line-height: 1.625; vertical-align: top; }
+  td.cell:last-child { border-right: none; }
+  th.devhead { min-width: 240px; max-width: 320px; vertical-align: top; position: relative; border-right: 1px solid rgba(30,41,59,.6); }
+  th.devhead:last-child { border-right: none; }
+  .dev-x { position: absolute; top: 0.75rem; right: 0.75rem; color: #64748b; padding: 0.25rem; border-radius: 0.5rem; display: flex; }
+  .dev-x:hover { color: #fb7185; background: #1e293b; }
+  .dev-emoji { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .brand-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 0.125rem 0.5rem; border-radius: 0.25rem; background: #082f49; color: #22d3ee; border: 1px solid #155e75; font-family: ui-monospace, Menlo, Consolas, monospace; display: inline-block; }
+  .dev-name { font-weight: 700; color: #f1f5f9; font-size: 1rem; margin-top: 0.25rem; }
+  .dev-pricerow { display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem; }
+  .dev-price { font-size: 1rem; font-weight: 800; color: #22d3ee; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .rate-badge { font-size: 0.75rem; font-weight: 600; padding: 0.125rem 0.5rem; border-radius: 0.25rem; background: #022c22; color: #34d399; border: 1px solid #065f46; }
+  .btn-quick { margin-top: 0.75rem; width: 100%; padding: 0.375rem 0; font-size: 0.75rem; border-radius: 0.5rem; background: #1e293b; color: #e2e8f0; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 0.25rem; }
+  .btn-quick:hover { background: #334155; }
+  tr.scorerow { background: rgba(2,6,23,.8); }
+  .score-flex { display: flex; justify-content: space-between; font-size: 0.75rem; font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; }
+  .score-flex .sl { color: #94a3b8; } .score-flex .sv { color: #22d3ee; }
+  .bar { width: 100%; background: #1e293b; border-radius: 9999px; height: 0.5rem; overflow: hidden; margin-top: 0.25rem; }
+  .bar > div { height: 100%; border-radius: 9999px; transition: width .5s; }
+
+  /* catalog grid */
+  .grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+  @media (min-width: 768px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1024px) { .grid { grid-template-columns: repeat(3, 1fr); } }
+  .card { background: rgba(15,23,42,.6); border: 1px solid #1e293b; border-radius: 1rem; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; backdrop-filter: blur(24px); transition: all .2s; }
+  .card:hover { border-color: #334155; box-shadow: 0 20px 25px -5px rgba(6,182,212,.05); }
+  .card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+  .card-brand { font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 0.125rem 0.5rem; border-radius: 0.25rem; background: #1e293b; color: #22d3ee; border: 1px solid #334155; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .card-price { font-size: 0.75rem; font-weight: 800; color: #22d3ee; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .card-title { display: flex; align-items: flex-start; gap: 0.75rem; margin-bottom: 1rem; }
+  .card-emoji { font-size: 1.875rem; padding: 0.5rem; border-radius: 0.75rem; background: #020617; border: 1px solid #1e293b; line-height: 1; }
+  .card-name { font-weight: 700; color: #f1f5f9; margin: 0; }
+  .card:hover .card-name { color: #22d3ee; }
+  .card-meta { font-size: 0.75rem; color: #94a3b8; margin-top: 0.125rem; }
+  .spec-preview { font-size: 0.75rem; background: rgba(2,6,23,.6); padding: 0.75rem; border-radius: 0.75rem; border: 1px solid rgba(30,41,59,.8); margin-bottom: 1rem; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .spec-preview .spr { display: flex; justify-content: space-between; color: #cbd5e1; margin-top: 0.5rem; }
+  .spec-preview .spr:first-child { margin-top: 0; }
+  .spec-preview .k { color: #64748b; }
+  .spec-preview .v { font-weight: 600; color: #e2e8f0; text-align: right; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .spec-preview .v.cy { color: #67e8f9; }
+  .card-actions { display: flex; align-items: center; gap: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(30,41,59,.6); }
+  .btn-full { flex: 1; padding: 0.5rem 0.75rem; border-radius: 0.75rem; background: #1e293b; font-size: 0.75rem; font-weight: 600; color: #e2e8f0; display: flex; align-items: center; justify-content: center; gap: 0.375rem; }
+  .btn-full:hover { background: #334155; }
+  .btn-full svg.ic { color: #94a3b8; }
+  .btn-cmp { padding: 0.5rem 0.75rem; border-radius: 0.75rem; font-size: 0.75rem; font-weight: 600; display: flex; align-items: center; gap: 0.375rem; background: #020617; border: 1px solid #334155; color: #cbd5e1; }
+  .btn-cmp:hover { border-color: #06b6d4; }
+  .btn-cmp.on { background: #06b6d4; color: #020617; border-color: transparent; box-shadow: 0 4px 6px -1px rgba(6,182,212,.20); }
+
+  /* analytics */
+  .agrid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+  @media (min-width: 768px) { .agrid { grid-template-columns: repeat(2, 1fr); } }
+  .acard { background: rgba(15,23,42,.7); border: 1px solid #1e293b; border-radius: 1rem; padding: 1.5rem; backdrop-filter: blur(24px); }
+  .acard-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+  .acard-id { display: flex; align-items: center; gap: 0.75rem; }
+  .acard-emoji { font-size: 1.875rem; }
+  .acard-name { font-weight: 700; color: #f1f5f9; margin: 0; }
+  .acard-sub { font-size: 0.75rem; font-family: ui-monospace, Menlo, Consolas, monospace; color: #22d3ee; }
+  .acard-rate { font-size: 0.875rem; font-weight: 800; padding: 0.25rem 0.75rem; border-radius: 0.5rem; background: #082f49; color: #22d3ee; border: 1px solid #155e75; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .metric { margin-top: 0.875rem; }
+  .metric:first-of-type { margin-top: 0.5rem; }
+  .metric .mr { display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 500; }
+  .metric .ml { color: #cbd5e1; } .metric .mv { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: #e2e8f0; }
+  .abar { width: 100%; background: #020617; border-radius: 9999px; height: 0.625rem; overflow: hidden; padding: 2px; border: 1px solid #1e293b; margin-top: 0.25rem; }
+  .abar > div { height: 100%; border-radius: 9999px; transition: width .7s; }
+
+  /* scanner */
+  table.scan { width: 100%; border-collapse: collapse; text-align: left; font-size: 0.75rem; }
+  table.scan thead tr { border-bottom: 1px solid #1e293b; background: rgba(2,6,23,.9); color: #94a3b8; text-transform: uppercase; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  table.scan th, table.scan td { padding: 0.875rem; }
+  table.scan tbody tr { border-top: 1px solid rgba(30,41,59,.5); }
+  table.scan tbody tr:hover { background: rgba(30,41,59,.4); }
+  td.sname { font-weight: 700; color: #f1f5f9; }
+  td.sname .inl { display: flex; align-items: center; gap: 0.5rem; }
+  td.sbrand { font-family: ui-monospace, Menlo, Consolas, monospace; color: #22d3ee; }
+  td.scat { text-transform: uppercase; font-family: ui-monospace, Menlo, Consolas, monospace; color: #94a3b8; }
+  td.sprice { font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 700; color: #e2e8f0; }
+  td.sspec { color: #cbd5e1; max-width: 20rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.sres { color: #cbd5e1; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  td.sw { color: #94a3b8; }
+  .btn-inspect { padding: 0.25rem 0.625rem; border-radius: 0.25rem; background: #1e293b; font-weight: 500; color: #e2e8f0; }
+  .btn-inspect:hover { background: #06b6d4; color: #020617; }
+  td.right, th.right { text-align: right; }
+
+  /* modal */
+  .modal-bg { position: fixed; inset: 0; z-index: 50; background: rgba(2,6,23,.8); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+  .modal { background: #0f172a; border: 1px solid #1e293b; border-radius: 1.5rem; max-width: 42rem; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 50px -12px rgba(0,0,0,.5); padding: 1.5rem; position: relative; }
+  .modal-x { position: absolute; top: 1.25rem; right: 1.25rem; color: #94a3b8; background: #1e293b; padding: 0.375rem; border-radius: 9999px; display: flex; }
+  .modal-x:hover { color: #f1f5f9; }
+  .modal-head { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; }
+  .modal-emoji { font-size: 2.25rem; padding: 0.75rem; background: #020617; border: 1px solid #1e293b; border-radius: 1rem; line-height: 1; }
+  .modal h2 { font-size: 1.25rem; font-weight: 700; color: #f1f5f9; margin: 0.25rem 0 0; }
+  .modal-meta { font-size: 0.75rem; color: #94a3b8; margin: 0.25rem 0 0; }
+  .modal h3 { font-size: 0.875rem; font-weight: 700; color: #22d3ee; text-transform: uppercase; letter-spacing: 0.05em; font-family: ui-monospace, Menlo, Consolas, monospace; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; margin: 0 0 1rem; }
+  .specgrid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+  @media (min-width: 640px) { .specgrid { grid-template-columns: repeat(2, 1fr); } }
+  .specitem { background: rgba(2,6,23,.8); padding: 0.75rem; border-radius: 0.75rem; border: 1px solid rgba(30,41,59,.8); font-size: 0.75rem; }
+  .specitem .sk { color: #64748b; text-transform: capitalize; display: block; margin-bottom: 0.125rem; font-weight: 500; }
+  .specitem .sv2 { color: #e2e8f0; font-weight: 600; line-height: 1.625; display: block; }
+  .modal-actions { margin-top: 1.5rem; display: flex; justify-content: flex-end; gap: 0.75rem; padding-top: 1rem; border-top: 1px solid #1e293b; }
+  .btn-pin { padding: 0.5rem 1rem; border-radius: 0.75rem; background: #06b6d4; font-weight: 600; font-size: 0.75rem; color: #020617; }
+  .btn-pin:hover { background: #22d3ee; }
+
+  /* toast */
+  .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 50; background: #022c22; color: #a7f3d0; border: 1px solid #10b981; padding: 0.75rem 1rem; border-radius: 0.75rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,.5); display: flex; align-items: center; gap: 0.5rem; font-size: 0.875rem; font-weight: 500; }
+  .toast svg.ic { width: 1.25rem; height: 1.25rem; color: #34d399; }
+
+  /* footer */
+  footer { margin-top: auto; border-top: 1px solid rgba(30,41,59,.6); background: rgba(2,6,23,.8); backdrop-filter: blur(12px); padding: 1.5rem 0; text-align: center; font-size: 0.75rem; color: #64748b; position: relative; z-index: 10; }
+  footer .wrap { display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 1rem; }
+  @media (min-width: 640px) { footer .wrap { flex-direction: row; } }
+  footer p { margin: 0; }
+  .fbrands { display: flex; align-items: center; gap: 1rem; color: #94a3b8; }
+  .space-y > * + * { margin-top: 1.5rem; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <!-- BACKGROUND DECORATIVE GLOWS -->
+  <div class="glows">
+    <div class="glow a"></div><div class="glow b"></div><div class="glow c"></div>
+  </div>
+
+  <!-- HEADER BAR -->
+  <header class="top">
+    <div class="wrap hbar">
+      <div class="logo">
+        <div class="logo-badge" id="logoIcon"></div>
+        <div>
+          <div style="display:flex;align-items:center;gap:0.5rem;">
+            <span class="logo-name">SPEC MATRIX</span>
+            <span class="pro-badge">ULTRA PRO</span>
+          </div>
+          <p class="logo-sub">Cross-Brand Device &amp; Camera Analyzer</p>
+        </div>
+      </div>
+
+      <div class="tabs" id="viewTabs"></div>
+
+      <div class="hactions">
+        <button class="btn-export" id="exportBtn" title="Copy Comparison Report">
+          <span id="exportIcon"></span><span class="lbl">Export Report</span>
+        </button>
+        <div class="pinned-box">
+          <span id="pinnedIcon"></span>
+          <span style="color:#cbd5e1;font-weight:500;">Pinned:</span>
+          <span class="n" id="pinnedCount">0/4</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- SEARCH AND FILTER CONTROL PANEL -->
+  <section class="filters">
+    <div class="wrap">
+      <div class="frow">
+        <div class="searchbox">
+          <span id="searchIcon"></span>
+          <input type="text" id="searchInput" placeholder="Search specs across brands (e.g., Full-Frame, M4 Max, 8K, 120Hz, ProRes)...">
+          <button class="clear" id="searchClear" hidden></button>
+        </div>
+        <div class="catpills" id="categoryPills"></div>
+      </div>
+      <div class="frow2">
+        <div class="brands" id="brandBtns"></div>
+        <div class="rightctl">
+          <label class="diff-toggle" id="diffToggleWrap" hidden>
+            <input type="checkbox" id="diffToggle">
+            <span class="t"><span id="diffIcon"></span> Highlight Specs Diff</span>
+          </label>
+          <div class="price">
+            <span class="pl">Max Price:</span>
+            <input type="range" id="priceRange" min="500" max="25000" step="500" value="25000">
+            <span class="pv" id="priceVal">$Any</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TOAST -->
+  <div id="toastRoot"></div>
+
+  <!-- MAIN CONTENT AREA -->
+  <main><div class="wrap"><div id="viewRoot"></div></div></main>
+
+  <!-- MODAL ROOT -->
+  <div id="modalRoot"></div>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="wrap">
+      <p>© 2026 Cross-Brand Spec Analyzer. All specification benchmarks updated for current hardware models.</p>
+      <div class="fbrands"><span>Sony</span> • <span>Canon</span> • <span>Nikon</span> • <span>Apple</span> • <span>RED</span> • <span>ASUS</span></div>
+    </div>
+  </footer>
+
+<script id="dataset" type="application/json">[
+ {
+  "id": "cam-sony-a1ii",
+  "name": "Sony Alpha A1 II",
+  "brand": "Sony",
+  "category": "cameras",
+  "price": 6499,
+  "releaseYear": 2024,
+  "rating": 9.8,
+  "image": "📷",
+  "scores": {
+   "imaging": 99,
+   "build": 95,
+   "video": 98,
+   "portability": 82,
+   "value": 80
+  },
+  "specs": {
+   "sensor": "50.1 MP Full-Frame Exmor RS Stacked CMOS",
+   "chipset": "Dual BIONZ XR + AI Processing Unit",
+   "mount": "Sony E-Mount",
+   "maxResolution": "8640 x 5760 (8K 30p / 4K 120p)",
+   "dynamicRange": "15+ Stops",
+   "isoRange": "100 - 32,000 (Exp 50-102,400)",
+   "display": "3.2\" 4-Axis Multi-Angle Touchscreen (2.1M dots)",
+   "batteryLife": "approx. 530 shots (NP-FZ100)",
+   "weight": "743g (1.64 lb)",
+   "connectivity": "Wi-Fi 6, 2.5G Ethernet, USB-C 3.2 Gen 2, Full HDMI",
+   "codecs": "XAVC S, XAVC HS, 10-Bit 4:2:2, S-Cinetone, S-Log3",
+   "storage": "Dual CFexpress Type A / SD UHS-II",
+   "stabilization": "8.5 Stops 5-Axis In-Body IBIS"
+  }
+ },
+ {
+  "id": "cam-canon-r5ii",
+  "name": "Canon EOS R5 Mark II",
+  "brand": "Canon",
+  "category": "cameras",
+  "price": 4299,
+  "releaseYear": 2024,
+  "rating": 9.6,
+  "image": "📷",
+  "scores": {
+   "imaging": 97,
+   "build": 94,
+   "video": 97,
+   "portability": 84,
+   "value": 87
+  },
+  "specs": {
+   "sensor": "45 MP Full-Frame Back-Illuminated Stacked CMOS",
+   "chipset": "DIGIC X + DIGIC Accelerator",
+   "mount": "Canon RF Mount",
+   "maxResolution": "8192 x 4320 (8K 60p RAW / 4K 120p)",
+   "dynamicRange": "14.5+ Stops",
+   "isoRange": "100 - 51,200 (Exp 50-102,400)",
+   "display": "3.2\" Vari-Angle Touchscreen LCD (2.1M dots)",
+   "batteryLife": "approx. 630 shots (LP-E6P)",
+   "weight": "745g (1.64 lb)",
+   "connectivity": "Wi-Fi 6E, Bluetooth 5.3, USB-C 3.2 Gen 2, Full HDMI",
+   "codecs": "Canon LOG 2/3, 12-Bit RAW, XF-HEVC S, XF-AVC S",
+   "storage": "Dual CFexpress Type B / SD UHS-II",
+   "stabilization": "8.5 Stops Coordinated Control IBIS"
+  }
+ },
+ {
+  "id": "cam-nikon-z9",
+  "name": "Nikon Z9",
+  "brand": "Nikon",
+  "category": "cameras",
+  "price": 5499,
+  "releaseYear": 2023,
+  "rating": 9.7,
+  "image": "📷",
+  "scores": {
+   "imaging": 98,
+   "build": 99,
+   "video": 96,
+   "portability": 65,
+   "value": 85
+  },
+  "specs": {
+   "sensor": "45.7 MP Full-Frame Stacked CMOS",
+   "chipset": "EXPEED 7 Dual Engine",
+   "mount": "Nikon Z Mount",
+   "maxResolution": "8256 x 4644 (8K 60p N-RAW / 4K 120p)",
+   "dynamicRange": "14.8 Stops",
+   "isoRange": "64 - 25,600 (Exp 32-102,400)",
+   "display": "3.2\" 4-Axis Tilting Touchscreen (2.1M dots)",
+   "batteryLife": "approx. 740 shots (EN-EL18d)",
+   "weight": "1340g (2.95 lb)",
+   "connectivity": "1G Ethernet, Wi-Fi 5, Bluetooth 5.0, USB-C, HDMI",
+   "codecs": "N-RAW (12-bit), ProRes RAW HQ, N-Log, H.265 10-bit",
+   "storage": "Dual CFexpress Type B / XQD",
+   "stabilization": "6.0 Stops 5-Axis Synchro VR"
+  }
+ },
+ {
+  "id": "cam-red-vaptor",
+  "name": "RED V-Raptor 8K VV",
+  "brand": "RED",
+  "category": "cameras",
+  "price": 24995,
+  "releaseYear": 2024,
+  "rating": 9.9,
+  "image": "🎥",
+  "scores": {
+   "imaging": 100,
+   "build": 96,
+   "video": 100,
+   "portability": 55,
+   "value": 70
+  },
+  "specs": {
+   "sensor": "35.4 MP V-RAPTOR 8K VV CMOS (40.96 x 21.60 mm)",
+   "chipset": "RED processing engine with DSMC3 unified platform",
+   "mount": "RF Mount (Adaptable to PL/EF)",
+   "maxResolution": "8192 x 4320 (8K 120fps / 4K 240fps)",
+   "dynamicRange": "17+ Stops",
+   "isoRange": "800 Native (Dual ISO capable)",
+   "display": "Optional Integrated 7.0\" Touch Monitor",
+   "batteryLife": "Micro V-Mount External Battery Dependent",
+   "weight": "1810g (4.0 lb body only)",
+   "connectivity": "12G-SDI, USB-C 3.2, Wi-Fi Control, Genlock/Timecode",
+   "codecs": "REDCODE RAW (HQ, MQ, LQ), ProRes 4444 XQ, ProRes 422 HQ",
+   "storage": "CFexpress Type B (up to 2GB/s writing)",
+   "stabilization": "Optical / Post Metadata R3D Gyro Stabilization"
+  }
+ },
+ {
+  "id": "cam-fuji-xh2s",
+  "name": "Fujifilm X-H2S",
+  "brand": "Fujifilm",
+  "category": "cameras",
+  "price": 2499,
+  "releaseYear": 2023,
+  "rating": 9.2,
+  "image": "📷",
+  "scores": {
+   "imaging": 90,
+   "build": 91,
+   "video": 93,
+   "portability": 88,
+   "value": 94
+  },
+  "specs": {
+   "sensor": "26.1 MP APS-C X-Trans CMOS 5 HS Stacked",
+   "chipset": "X-Processor 5",
+   "mount": "Fujifilm X Mount",
+   "maxResolution": "6240 x 4160 (6.2K 30p Open Gate / 4K 120p)",
+   "dynamicRange": "14 Stops (F-Log2)",
+   "isoRange": "160 - 12,800 (Exp 80-51,200)",
+   "display": "3.0\" Vari-Angle Touchscreen (1.62M dots)",
+   "batteryLife": "approx. 720 shots (NP-W235)",
+   "weight": "660g (1.45 lb)",
+   "connectivity": "Wi-Fi 5, Bluetooth 4.2, USB-C 3.2, Full HDMI",
+   "codecs": "ProRes 422 HQ, F-Log2 14-bit, H.265 10-bit 4:2:2",
+   "storage": "CFexpress Type B + SD UHS-II",
+   "stabilization": "7.0 Stops 5-Axis IBIS"
+  }
+ },
+ {
+  "id": "phone-apple-16promax",
+  "name": "Apple iPhone 16 Pro Max",
+  "brand": "Apple",
+  "category": "smartphones",
+  "price": 1199,
+  "releaseYear": 2024,
+  "rating": 9.7,
+  "image": "📱",
+  "scores": {
+   "imaging": 96,
+   "build": 98,
+   "video": 99,
+   "portability": 92,
+   "value": 85
+  },
+  "specs": {
+   "sensor": "48MP Fusion (1/1.28\") + 48MP UltraWide + 12MP 5x Tele",
+   "chipset": "Apple A18 Pro (3nm, 6-core CPU, 6-core GPU, 16-core NPU)",
+   "mount": "Triple Rear Camera Module",
+   "maxResolution": "4K 120fps Dolby Vision HDR / 48MP ProRAW",
+   "dynamicRange": "Computational Smart HDR 5 + ACES System",
+   "isoRange": "Auto Computational Dual ISO",
+   "display": "6.9\" Super Retina XDR OLED 120Hz ProMotion (2000 nits)",
+   "batteryLife": "4685 mAh (Up to 33h Video Playback)",
+   "weight": "227g (8.01 oz)",
+   "connectivity": "Wi-Fi 7, 5G mmWave, USB-C 3.2 (10Gbps), Thread, UWB 2",
+   "codecs": "ProRes 4K60 Log, HEVC, H.264, Spatial Audio / Video",
+   "storage": "256GB / 512GB / 1TB NVMe Storage",
+   "stabilization": "2nd Gen Sensor-Shift OIS + 3D Sensor-Shift Tele"
+  }
+ },
+ {
+  "id": "phone-samsung-s25ultra",
+  "name": "Samsung Galaxy S25 Ultra",
+  "brand": "Samsung",
+  "category": "smartphones",
+  "price": 1299,
+  "releaseYear": 2025,
+  "rating": 9.8,
+  "image": "📱",
+  "scores": {
+   "imaging": 97,
+   "build": 96,
+   "video": 95,
+   "portability": 90,
+   "value": 86
+  },
+  "specs": {
+   "sensor": "200MP Main (1/1.3\") + 50MP UW + 50MP 5x Tele + 10MP 3x",
+   "chipset": "Snapdragon 8 Elite for Galaxy (3nm, Oryon CPU)",
+   "mount": "Quad Rear Camera System with S-Pen Support",
+   "maxResolution": "8K 30fps / 4K 120fps 10-bit HDR",
+   "dynamicRange": "Super HDR 12-bit Raw capture",
+   "isoRange": "Auto Adaptive Pixel binning",
+   "display": "6.8\" Dynamic AMOLED 2X 120Hz LTPO (2600 nits Peak)",
+   "batteryLife": "5000 mAh (Up to 30h Video Playback)",
+   "weight": "219g (7.72 oz)",
+   "connectivity": "Wi-Fi 7, 5G, USB-C 3.2 (DisplayPort Out), UWB",
+   "codecs": "10-bit HDR10+, Expert RAW, HEVC, Log Video Profile",
+   "storage": "256GB / 512GB / 1TB UFS 4.0",
+   "stabilization": "Enhanced Optical Image Stabilization (OIS) + VDIS"
+  }
+ },
+ {
+  "id": "phone-google-pixel9pro",
+  "name": "Google Pixel 9 Pro XL",
+  "brand": "Google",
+  "category": "smartphones",
+  "price": 1099,
+  "releaseYear": 2024,
+  "rating": 9.4,
+  "image": "📱",
+  "scores": {
+   "imaging": 98,
+   "build": 92,
+   "video": 92,
+   "portability": 91,
+   "value": 89
+  },
+  "specs": {
+   "sensor": "50MP Main (1/1.31\") + 48MP UW + 48MP 5x Telephoto",
+   "chipset": "Google Tensor G4 (4nm, Titan M2 Security Coprocessor)",
+   "mount": "Triple Camera Bar",
+   "maxResolution": "8K 30fps Video Boost / 4K 60fps HDR",
+   "dynamicRange": "Ultra HDR Dual-Exposure Raw",
+   "isoRange": "Night Sight Computational Auto",
+   "display": "6.8\" Super Actua LTPO OLED 120Hz (3000 nits Peak)",
+   "batteryLife": "5060 mAh (Up to 24h+ Battery)",
+   "weight": "221g (7.80 oz)",
+   "connectivity": "Wi-Fi 7, 5G Sub6/mmWave, USB-C 3.2, UWB",
+   "codecs": "10-bit HDR, Video Boost Raw, Ultra HDR Stills",
+   "storage": "128GB / 256GB / 512GB / 1TB UFS 3.1",
+   "stabilization": "Dual-axis OIS + EIS Advanced Video Stabilization"
+  }
+ },
+ {
+  "id": "phone-sony-xperia1vi",
+  "name": "Sony Xperia 1 VI",
+  "brand": "Sony",
+  "category": "smartphones",
+  "price": 1399,
+  "releaseYear": 2024,
+  "rating": 9.3,
+  "image": "📱",
+  "scores": {
+   "imaging": 95,
+   "build": 94,
+   "video": 96,
+   "portability": 93,
+   "value": 78
+  },
+  "specs": {
+   "sensor": "48MP Exmor T for Mobile (1/1.35\") + 12MP True Optical Zoom 85-170mm",
+   "chipset": "Snapdragon 8 Gen 3 (4nm)",
+   "mount": "Triple ZEISS T* Coated Lenses",
+   "maxResolution": "4K 120fps HDR on all rear lenses",
+   "dynamicRange": "15+ Stops S-Cinetone for Mobile",
+   "isoRange": "Manual ISO 64 - 12,800",
+   "display": "6.5\" FHD+ HDR OLED 120Hz (Powered by BRAVIA)",
+   "batteryLife": "5000 mAh (2-Day Battery Life Rating)",
+   "weight": "192g (6.77 oz)",
+   "connectivity": "3.5mm Audio Jack, Wi-Fi 7, USB-C 3.2, MicroSD Card slot",
+   "codecs": "S-Cinetone, Alpha Profile Log, 4K 120p slow-motion",
+   "storage": "256GB / 512GB + MicroSD expansion up to 1.5TB",
+   "stabilization": "Optical SteadyShot with FlawlessEye"
+  }
+ },
+ {
+  "id": "lap-apple-mbp16-m4",
+  "name": "Apple MacBook Pro 16\" (M4 Max)",
+  "brand": "Apple",
+  "category": "laptops",
+  "price": 3499,
+  "releaseYear": 2024,
+  "rating": 9.9,
+  "image": "💻",
+  "scores": {
+   "imaging": 85,
+   "build": 99,
+   "video": 97,
+   "portability": 86,
+   "value": 88
+  },
+  "specs": {
+   "sensor": "12MP Center Stage Camera with Desk View",
+   "chipset": "Apple M4 Max (16-Core CPU, 40-Core GPU, 16-Core Neural Engine)",
+   "mount": "Integrated Unibody Chassis",
+   "maxResolution": "8K External Display Output @ 60Hz or 4K @ 240Hz",
+   "dynamicRange": "Liquid Retina XDR (1,000,000:1 Contrast Ratio)",
+   "isoRange": "Studio-Grade Computational Camera Sensor",
+   "display": "16.2\" Liquid Retina XDR Mini-LED 120Hz ProMotion (1600 nits Peak)",
+   "batteryLife": "100Wh Battery (Up to 24 Hours Battery Life)",
+   "weight": "2.14 kg (4.7 lb)",
+   "connectivity": "3x Thunderbolt 5 (80Gbps), HDMI 2.1, SDXC slot, MagSafe 3",
+   "codecs": "Hardware-accelerated ProRes RAW, H.264, HEVC, AV1 Decoder",
+   "storage": "1TB to 8TB Ultra-Fast Unified NVMe SSD",
+   "stabilization": "N/A (Spatial Audio 6-Speaker System with Force-Cancelling)"
+  }
+ },
+ {
+  "id": "lap-asus-zephyrusg16",
+  "name": "ASUS ROG Zephyrus G16 (OLED)",
+  "brand": "ASUS",
+  "category": "laptops",
+  "price": 2899,
+  "releaseYear": 2024,
+  "rating": 9.5,
+  "image": "💻",
+  "scores": {
+   "imaging": 82,
+   "build": 95,
+   "video": 94,
+   "portability": 88,
+   "value": 91
+  },
+  "specs": {
+   "sensor": "1080p FHD IR Camera with Windows Hello",
+   "chipset": "Intel Core Ultra 9 185H + NVIDIA GeForce RTX 4090 Laptop GPU (115W)",
+   "mount": "CNC Machined Aluminum Unibody",
+   "maxResolution": "4K HDMI 2.1 FRL Output",
+   "dynamicRange": "VESA DisplayHDR True Black 500",
+   "isoRange": "N/A",
+   "display": "16.0\" 2.5K (2560x1600) ROG Nebula OLED 240Hz 0.2ms",
+   "batteryLife": "90Wh Battery (Up to 9 Hours Light Use)",
+   "weight": "1.95 kg (4.30 lb)",
+   "connectivity": "Thunderbolt 4, USB-C 3.2 Gen 2, HDMI 2.1, SD Express 7.0 Reader",
+   "codecs": "NVENC 8th Gen Dual Encoder (AV1 Support), DirectX 12 Ultimate",
+   "storage": "2TB PCIe 4.0 NVMe M.2 SSD",
+   "stabilization": "ROG Intelligent Cooling with Vapor Chamber & Tri-Fans"
+  }
+ },
+ {
+  "id": "lap-dell-xps16",
+  "name": "Dell XPS 16 (2024)",
+  "brand": "Dell",
+  "category": "laptops",
+  "price": 2749,
+  "releaseYear": 2024,
+  "rating": 9.1,
+  "image": "💻",
+  "scores": {
+   "imaging": 80,
+   "build": 94,
+   "video": 89,
+   "portability": 84,
+   "value": 82
+  },
+  "specs": {
+   "sensor": "1080p FHD Web Camera with ExpressSign-in",
+   "chipset": "Intel Core Ultra 7 155H + NVIDIA RTX 4070 (60W)",
+   "mount": "Gorilla Glass 3 Touchpad & CNC Aluminum Chassis",
+   "maxResolution": "Dual 4K External Display via Thunderbolt 4",
+   "dynamicRange": "Dolby Vision & DisplayHDR 400",
+   "isoRange": "N/A",
+   "display": "16.3\" 4K+ (3840x2400) OLED Touch Screen 90Hz (400 nits)",
+   "batteryLife": "99.5Wh Battery (Up to 11 Hours Battery)",
+   "weight": "2.20 kg (4.80 lb)",
+   "connectivity": "3x Thunderbolt 4 (USB Type-C with DisplayPort and Power Delivery)",
+   "codecs": "AV1, HEVC, H.264, Intel QuickSync Video",
+   "storage": "1TB PCIe 4.0 NVMe SSD",
+   "stabilization": "Dual Opposing Fan Thermal Management"
+  }
+ },
+ {
+  "id": "disp-asus-pg32ucdm",
+  "name": "ASUS ROG Swift OLED PG32UCDM",
+  "brand": "ASUS",
+  "category": "displays",
+  "price": 1299,
+  "releaseYear": 2024,
+  "rating": 9.8,
+  "image": "🖥️",
+  "scores": {
+   "imaging": 99,
+   "build": 96,
+   "video": 98,
+   "portability": 50,
+   "value": 92
+  },
+  "specs": {
+   "sensor": "3rd Gen QD-OLED Panel with Custom Heatsink & Graphene Film",
+   "chipset": "ROG Smart KVM & Uniform Brightness Engine",
+   "mount": "VESA 100x100mm + Ergonomic Stand",
+   "maxResolution": "3840 x 2160 (4K UHD @ 240Hz 0.03ms GTG)",
+   "dynamicRange": "Dolby Vision + VESA DisplayHDR True Black 400 (1000 nits Peak)",
+   "isoRange": "99% DCI-P3 Color Gamut (Delta E < 2 Factory Calibrated)",
+   "display": "31.5\" 4K QD-OLED Anti-Reflection Coating",
+   "batteryLife": "AC Power (90W USB-C Power Delivery)",
+   "weight": "8.8 kg (19.4 lb with stand)",
+   "connectivity": "2x HDMI 2.1, 1x DisplayPort 1.4 (DSC), 1x USB-C (90W PD), USB Hub",
+   "codecs": "HDR10, Dolby Vision Pass-Through",
+   "storage": "N/A",
+   "stabilization": "Custom Heatsink + Neo Proximity Sensor (OLED Care)"
+  }
+ },
+ {
+  "id": "disp-apple-prodisplay-xdr",
+  "name": "Apple Pro Display XDR",
+  "brand": "Apple",
+  "category": "displays",
+  "price": 4999,
+  "releaseYear": 2023,
+  "rating": 9.6,
+  "image": "🖥️",
+  "scores": {
+   "imaging": 99,
+   "build": 99,
+   "video": 97,
+   "portability": 40,
+   "value": 72
+  },
+  "specs": {
+   "sensor": "IPS LCD with 576 Local Dimming Zones (Nano-Texture Glass)",
+   "chipset": "Apple Timing Controller (TCON) chip",
+   "mount": "Pro Stand Magnetic Latch / VESA Adapter",
+   "maxResolution": "6016 x 3384 (6K Retina @ 60Hz, 218 ppi)",
+   "dynamicRange": "Extreme Dynamic Range (XDR) - 1,000 nits sustained, 1,600 peak",
+   "isoRange": "100% P3 Wide Color, 10-bit Depth (1.073 Billion Colors)",
+   "display": "32.0\" 6K Retina IPS LCD panel",
+   "batteryLife": "AC Mains Powered",
+   "weight": "7.48 kg (16.49 lb monitor only)",
+   "connectivity": "1x Thunderbolt 3 (Host Port 85W), 3x USB-C Ports",
+   "codecs": "Reference Modes: Rec.709, Rec.2020, P3-DCI, HDR10",
+   "storage": "N/A",
+   "stabilization": "Thermal Aluminum Lattice Design"
+  }
+ },
+ {
+  "id": "disp-samsung-g9-oled",
+  "name": "Samsung Odyssey OLED G9 (G95SD)",
+  "brand": "Samsung",
+  "category": "displays",
+  "price": 1599,
+  "releaseYear": 2024,
+  "rating": 9.6,
+  "image": "🖥️",
+  "scores": {
+   "imaging": 97,
+   "build": 95,
+   "video": 97,
+   "portability": 35,
+   "value": 90
+  },
+  "specs": {
+   "sensor": "49\" 1800R Curved QD-OLED Panel with Glare-Free Tech",
+   "chipset": "NQ8 AI Gen3 Processor (4K Upscaling & Motion Enhancer)",
+   "mount": "VESA 100x100mm + CoreSync RGB Ring Stand",
+   "maxResolution": "5120 x 1440 (Dual QHD Ultra-Wide @ 240Hz 0.03ms)",
+   "dynamicRange": "DisplayHDR True Black 400 (1000 nits Peak)",
+   "isoRange": "99% DCI-P3 Color Space",
+   "display": "49.0\" Curved Dual QHD QD-OLED 32:9 Aspect Ratio",
+   "batteryLife": "AC Power (Internal PSU)",
+   "weight": "12.9 kg (28.4 lb with stand)",
+   "connectivity": "1x DisplayPort 1.4, 2x HDMI 2.1, Micro HDMI 2.1, USB Hub",
+   "codecs": "FreeSync Premium Pro, Gaming Hub Smart OS",
+   "storage": "N/A",
+   "stabilization": "Dynamic Cooling System with Pulsed Heat Pipe"
+  }
+ }
+]</script>
+<script>
+"use strict";
+
+/* ---------- icons (inline SVG, lucide-style stroke icons) ---------- */
+const P = {
+  cpu: '<rect width="16" height="16" x="4" y="4" rx="2"/><rect width="6" height="6" x="9" y="9"/><path d="M15 2v2"/><path d="M15 20v2"/><path d="M2 15h2"/><path d="M2 9h2"/><path d="M20 15h2"/><path d="M20 9h2"/><path d="M9 2v2"/><path d="M9 20v2"/>',
+  camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+  smartphone: '<rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/>',
+  laptop: '<path d="M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"/>',
+  monitor: '<rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/>',
+  layers: '<path d="m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z"/><path d="m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65"/><path d="m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65"/>',
+  arrowLeftRight: '<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
+  barChart3: '<path d="M3 3v18h18"/><path d="M18 17V9"/><path d="M13 17V5"/><path d="M8 17v-3"/>',
+  search: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+  share2: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/>',
+  scale: '<path d="m16 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="m2 16 3-8 3 8c-.87.65-1.92 1-3 1s-2.13-.35-3-1Z"/><path d="M7 21h10"/><path d="M12 3v18"/><path d="M3 7h2c2 0 5-1 7-2 2 1 5 2 7 2h2"/>',
+  filter: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  eye: '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>',
+  trash2: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  sparkles: '<path d="M12 3l1.9 5.7 5.7 1.9-5.7 1.9L12 18.2l-1.9-5.7L4.4 10.6l5.7-1.9z"/><path d="M19 15l.9 2.6 2.6.9-2.6.9L19 22l-.9-2.6-2.6-.9 2.6-.9z"/>',
+  checkCircle2: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  alertCircle: '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>'
+};
+function icon(name, cls) {
+  return '<svg class="ic ' + (cls || 'sm') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (P[name] || '') + '</svg>';
+}
+
+/* ---------- data & constants ---------- */
+const DEVICE_DATASET = JSON.parse(document.getElementById('dataset').textContent);
+const CATEGORIES = [
+  { id: 'all', name: 'All Devices', icon: 'layers' },
+  { id: 'cameras', name: 'Cameras & Cinema', icon: 'camera' },
+  { id: 'smartphones', name: 'Smartphones', icon: 'smartphone' },
+  { id: 'laptops', name: 'Laptops & Workstations', icon: 'laptop' },
+  { id: 'displays', name: 'Displays & Monitors', icon: 'monitor' }
+];
+const BRANDS = ['All Brands', 'Sony', 'Canon', 'Nikon', 'RED', 'Fujifilm', 'Apple', 'Samsung', 'Google', 'ASUS', 'Dell'];
+const MATRIX_ROWS = [
+  { label: 'Category', key: 'category', format: (v) => String(v).toUpperCase() },
+  { label: 'Release Year', key: 'releaseYear' },
+  { label: 'Sensor / Panel Tech', specKey: 'sensor' },
+  { label: 'Processor / Chipset', specKey: 'chipset' },
+  { label: 'Mount / Form Factor', specKey: 'mount' },
+  { label: 'Max Resolution / Speed', specKey: 'maxResolution' },
+  { label: 'Dynamic Range / Color', specKey: 'dynamicRange' },
+  { label: 'ISO / Sensitivity', specKey: 'isoRange' },
+  { label: 'Display / Viewfinder', specKey: 'display' },
+  { label: 'Battery / Power', specKey: 'batteryLife' },
+  { label: 'Weight & Mass', specKey: 'weight' },
+  { label: 'Connectivity & I/O', specKey: 'connectivity' },
+  { label: 'Supported Codecs / Tech', specKey: 'codecs' },
+  { label: 'Storage Expansion', specKey: 'storage' },
+  { label: 'Stabilization / Thermal', specKey: 'stabilization' }
+];
+const ANALYTICS_METRICS = [
+  { label: 'Imaging & Sensor Quality', key: 'imaging', grad: 'linear-gradient(to right,#06b6d4,#3b82f6)' },
+  { label: 'Video & Codec Throughput', key: 'video', grad: 'linear-gradient(to right,#8b5cf6,#a855f7)' },
+  { label: 'Build & Thermal Resilience', key: 'build', grad: 'linear-gradient(to right,#10b981,#14b8a6)' },
+  { label: 'Portability & Battery', key: 'portability', grad: 'linear-gradient(to right,#f59e0b,#eab308)' },
+  { label: 'Value for Money Index', key: 'value', grad: 'linear-gradient(to right,#f43f5e,#ec4899)' }
+];
+
+/* ---------- state ---------- */
+let selectedCategory = 'all';
+let selectedBrand = 'All Brands';
+let searchQuery = '';
+let priceMax = 30000;
+let compareIds = ['cam-sony-a1ii', 'cam-canon-r5ii'];
+let viewMode = 'matrix'; // 'matrix' | 'grid' | 'analytics' | 'scanner'
+let highlightDiffs = false;
+let activeModalDevice = null;
+
+/* ---------- helpers ---------- */
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+function money(n) { return '$' + Number(n).toLocaleString('en-US'); }
+function filteredDevices() {
+  return DEVICE_DATASET.filter((device) => {
+    const matchCat = selectedCategory === 'all' || device.category === selectedCategory;
+    const matchBrand = selectedBrand === 'All Brands' || device.brand === selectedBrand;
+    const matchPrice = device.price <= priceMax;
+    const q = searchQuery.toLowerCase().trim();
+    const matchQuery = !q ||
+      device.name.toLowerCase().includes(q) ||
+      device.brand.toLowerCase().includes(q) ||
+      device.specs.sensor.toLowerCase().includes(q) ||
+      device.specs.chipset.toLowerCase().includes(q) ||
+      device.specs.maxResolution.toLowerCase().includes(q);
+    return matchCat && matchBrand && matchPrice && matchQuery;
+  });
+}
+function compareDevices() { return DEVICE_DATASET.filter((d) => compareIds.includes(d.id)); }
+function byId(id) { return DEVICE_DATASET.find((d) => d.id === id) || null; }
+
+/* ---------- actions ---------- */
+function setView(mode) { viewMode = mode; render(); }
+function setCategory(id) { selectedCategory = id; render(); }
+function setBrand(b) { selectedBrand = b; render(); }
+function clearCompare() { compareIds = []; render(); }
+function resetFilters() {
+  selectedCategory = 'all'; selectedBrand = 'All Brands';
+  searchQuery = ''; priceMax = 30000;
+  document.getElementById('searchInput').value = '';
+  document.getElementById('priceRange').value = 25000;
+  render();
+}
+function toggleCompare(id) {
+  if (compareIds.includes(id)) {
+    compareIds = compareIds.filter((item) => item !== id);
+  } else {
+    if (compareIds.length >= 4) {
+      alert('You can compare up to 4 devices side-by-side.');
+      return;
+    }
+    compareIds = [...compareIds, id];
+  }
+  render();
+}
+function openModal(id) { activeModalDevice = byId(id); renderModal(); }
+function closeModal() { activeModalDevice = null; renderModal(); }
+function modalToggle() {
+  if (activeModalDevice) { const id = activeModalDevice.id; closeModal(); toggleCompare(id); }
+}
+function copyComparisonReport() {
+  const devs = compareDevices();
+  if (devs.length === 0) return;
+  let report = 'CROSS-BRAND SPECIFICATION COMPARISON REPORT\nGenerated on: ' + new Date().toLocaleDateString('en-US') + '\n\n';
+  devs.forEach((dev) => {
+    report += '=== ' + dev.name.toUpperCase() + ' (' + dev.brand + ') ===\n';
+    report += 'Price: ' + money(dev.price) + ' | Overall Rating: ' + dev.rating + '/10\n';
+    report += 'Sensor/Panel: ' + dev.specs.sensor + '\n';
+    report += 'Processor/Chipset: ' + dev.specs.chipset + '\n';
+    report += 'Resolution: ' + dev.specs.maxResolution + '\n';
+    report += 'Dynamic Range/Color: ' + dev.specs.dynamicRange + '\n';
+    report += 'Display: ' + dev.specs.display + '\n';
+    report += 'Battery/Power: ' + dev.specs.batteryLife + '\n';
+    report += 'Weight: ' + dev.specs.weight + '\n';
+    report += 'Connectivity: ' + dev.specs.connectivity + '\n\n';
+  });
+  const done = () => {
+    document.getElementById('toastRoot').innerHTML =
+      '<div class="toast">' + icon('checkCircle2', 'lg') + '<span>Comparison Report Copied to Clipboard!</span></div>';
+    setTimeout(() => { document.getElementById('toastRoot').innerHTML = ''; }, 3000);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(report).then(done, () => fallbackCopy(report, done));
+  } else {
+    fallbackCopy(report, done);
+  }
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch (e) { /* clipboard unavailable */ }
+  document.body.removeChild(ta); done();
+}
+
+/* ---------- chrome (header / filters) ---------- */
+function renderChrome() {
+  const tabs = [
+    { mode: 'matrix', label: 'Side-by-Side', ic: 'arrowLeftRight' },
+    { mode: 'grid', label: 'Catalog', ic: 'layers' },
+    { mode: 'analytics', label: 'Score Radar', ic: 'barChart3' },
+    { mode: 'scanner', label: 'Deep Scanner', ic: 'search' }
+  ];
+  document.getElementById('viewTabs').innerHTML = tabs.map((t) =>
+    '<button class="tab' + (viewMode === t.mode ? ' on' : '') + '" onclick="setView(\'' + t.mode + '\')">' +
+    icon(t.ic) + '<span>' + t.label + '</span></button>'
+  ).join('');
+  document.getElementById('categoryPills').innerHTML = CATEGORIES.map((cat) =>
+    '<button class="pill' + (selectedCategory === cat.id ? ' on' : '') + '" onclick="setCategory(\'' + cat.id + '\')">' +
+    icon(cat.icon) + '<span>' + esc(cat.name) + '</span></button>'
+  ).join('');
+  document.getElementById('brandBtns').innerHTML =
+    '<span class="blabel">' + icon('filter', 'sm') + ' Brand:</span>' +
+    BRANDS.map((b) =>
+      '<button class="bbtn' + (selectedBrand === b ? ' on' : '') + '" onclick="setBrand(\'' + b + '\')">' + esc(b) + '</button>'
+    ).join('');
+  document.getElementById('pinnedCount').textContent = compareIds.length + '/4';
+  document.getElementById('exportBtn').disabled = compareIds.length === 0;
+  const dt = document.getElementById('diffToggleWrap');
+  dt.hidden = viewMode !== 'matrix';
+  document.getElementById('diffToggle').checked = highlightDiffs;
+  document.getElementById('priceVal').textContent = priceMax >= 25000 ? '$Any' : money(priceMax);
+  document.getElementById('searchClear').hidden = !searchQuery;
+}
+
+/* ---------- views ---------- */
+function viewMatrix() {
+  const devs = compareDevices();
+  let h = '<div class="space-y">';
+  h += '<div class="viewhead"><div>' +
+    '<h2 class="vt">' + icon('arrowLeftRight', 'lg') + ' Cross-Brand Hardware Matrix</h2>' +
+    '<p class="vsub">Compare pinned hardware models side-by-side. Click "+ Add to Compare" from the catalog to pin more devices.</p>' +
+    '</div>';
+  if (devs.length > 0) {
+    h += '<button class="btn-clear" onclick="clearCompare()">' + icon('trash2') + ' Clear Matrix</button>';
+  }
+  h += '</div>';
+  if (devs.length === 0) {
+    h += '<div class="empty">' +
+      '<svg class="ic big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + P.scale + '</svg>' +
+      '<h3>No Devices In Comparison Matrix</h3>' +
+      '<p>Select devices from the catalog or deep scanner below to pin them for side-by-side spec analysis.</p>' +
+      '<button class="btn-primary" onclick="setView(\'grid\')">Browse Catalog</button></div>';
+  } else {
+    h += '<div class="tblwrap"><table class="matrix"><thead><tr>' +
+      '<th class="rowlabel">Specification Field</th>';
+    devs.forEach((dev) => {
+      h += '<th class="devhead">' +
+        '<button class="dev-x" title="Remove from comparison" onclick="toggleCompare(\'' + dev.id + '\')">' + icon('x') + '</button>' +
+        '<div class="dev-emoji">' + esc(dev.image) + '</div>' +
+        '<span class="brand-badge">' + esc(dev.brand) + '</span>' +
+        '<div class="dev-name">' + esc(dev.name) + '</div>' +
+        '<div class="dev-pricerow"><span class="dev-price">' + money(dev.price) + '</span>' +
+        '<span class="rate-badge">★ ' + dev.rating + ' / 10</span></div>' +
+        '<button class="btn-quick" onclick="openModal(\'' + dev.id + '\')">' + icon('eye') + ' Quick View</button>' +
+        '</th>';
+    });
+    h += '</tr></thead><tbody>';
+    MATRIX_ROWS.forEach((row) => {
+      const values = devs.map((d) => (row.specKey ? d.specs[row.specKey] : d[row.key]));
+      const isDifferent = new Set(values.map(String)).size > 1;
+      h += '<tr' + (highlightDiffs && isDifferent ? ' class="diffrow"' : '') + '>' +
+        '<td class="rowlabel">' + esc(row.label) +
+        (highlightDiffs && isDifferent ? '<span class="diff-dot">● DIFF</span>' : '') + '</td>';
+      devs.forEach((dev) => {
+        const val = row.specKey ? dev.specs[row.specKey] : dev[row.key];
+        const displayVal = row.format ? row.format(val) : val;
+        h += '<td class="cell">' + esc(displayVal == null || displayVal === '' ? 'N/A' : displayVal) + '</td>';
+      });
+      h += '</tr>';
+    });
+    h += '<tr class="scorerow"><td class="rowlabel">Spec Performance Score</td>';
+    devs.forEach((dev) => {
+      const avg = Math.round((dev.scores.imaging + dev.scores.build + dev.scores.video + dev.scores.portability + dev.scores.value) / 5);
+      h += '<td class="cell"><div class="score-flex"><span class="sl">Score:</span><span class="sv">' + avg + ' / 100</span></div>' +
+        '<div class="bar"><div style="width:' + avg + '%;background:linear-gradient(to right,#06b6d4,#3b82f6);"></div></div></td>';
+    });
+    h += '</tr></tbody></table></div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function viewGrid() {
+  const devs = filteredDevices();
+  let h = '<div class="space-y">';
+  h += '<div class="viewhead"><div>' +
+    '<h2 class="vt">Hardware Catalog (' + devs.length + ')</h2>' +
+    '<p class="vsub">Select devices to inspect detailed specs or add to side-by-side comparison matrix.</p>' +
+    '</div></div>';
+  if (devs.length === 0) {
+    h += '<div class="empty">' +
+      '<svg class="ic big" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + P.alertCircle + '</svg>' +
+      '<p style="color:#94a3b8;font-weight:500;font-size:0.875rem;max-width:none;">No hardware matches your active filters.</p>' +
+      '<button class="linkish" onclick="resetFilters()">Reset all filters</button></div>';
+  } else {
+    h += '<div class="grid">';
+    devs.forEach((dev) => {
+      const isPinned = compareIds.includes(dev.id);
+      h += '<div class="card"><div>' +
+        '<div class="card-top"><span class="card-brand">' + esc(dev.brand) + '</span>' +
+        '<span class="card-price">' + money(dev.price) + '</span></div>' +
+        '<div class="card-title"><div class="card-emoji">' + esc(dev.image) + '</div><div>' +
+        '<h3 class="card-name">' + esc(dev.name) + '</h3>' +
+        '<p class="card-meta">Released ' + dev.releaseYear + ' • Rated ' + dev.rating + '/10</p>' +
+        '</div></div>' +
+        '<div class="spec-preview">' +
+        '<div class="spr"><span class="k">Sensor/Chip:</span><span class="v">' + esc(dev.specs.sensor || dev.specs.chipset) + '</span></div>' +
+        '<div class="spr"><span class="k">Max Res:</span><span class="v cy">' + esc(dev.specs.maxResolution) + '</span></div>' +
+        '<div class="spr"><span class="k">Weight:</span><span class="v">' + esc(dev.specs.weight) + '</span></div>' +
+        '</div></div>' +
+        '<div class="card-actions">' +
+        '<button class="btn-full" onclick="openModal(\'' + dev.id + '\')">' + icon('eye') + '<span>Full Specs</span></button>' +
+        '<button class="btn-cmp' + (isPinned ? ' on' : '') + '" onclick="toggleCompare(\'' + dev.id + '\')">' +
+        icon(isPinned ? 'check' : 'plus') + '<span>' + (isPinned ? 'Pinned' : 'Compare') + '</span></button>' +
+        '</div></div>';
+    });
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function viewAnalytics() {
+  const devs = compareDevices();
+  let h = '<div class="space-y">';
+  h += '<div><h2 class="vt">' + icon('barChart3', 'lg') + ' Performance &amp; Advantage Radar Breakdown</h2>' +
+    '<p class="vsub">Visualizing multidimensional performance across Imaging/Display Quality, Build &amp; Thermals, Video Capabilities, Portability, and Value Score.</p></div>';
+  h += '<div class="agrid">';
+  if (devs.length === 0) {
+    h += '<div class="empty" style="grid-column:1/-1;"><p style="color:#94a3b8;font-size:0.875rem;max-width:none;margin:0;">Please pin 1 or more devices to view visual analytics radar.</p></div>';
+  } else {
+    devs.forEach((dev) => {
+      h += '<div class="acard"><div class="acard-head"><div class="acard-id">' +
+        '<span class="acard-emoji">' + esc(dev.image) + '</span><div>' +
+        '<h3 class="acard-name">' + esc(dev.name) + '</h3>' +
+        '<span class="acard-sub">' + esc(dev.brand) + ' • ' + money(dev.price) + '</span>' +
+        '</div></div>' +
+        '<span class="acard-rate">Rating ' + dev.rating + '/10</span></div>';
+      ANALYTICS_METRICS.forEach((m) => {
+        const score = dev.scores[m.key];
+        h += '<div class="metric"><div class="mr"><span class="ml">' + esc(m.label) + '</span>' +
+          '<span class="mv">' + score + ' / 100</span></div>' +
+          '<div class="abar"><div style="width:' + score + '%;background:' + m.grad + ';"></div></div></div>';
+      });
+      h += '</div>';
+    });
+  }
+  h += '</div></div>';
+  return h;
+}
+
+function viewScanner() {
+  const devs = filteredDevices();
+  let h = '<div class="space-y">';
+  h += '<div><h2 class="vt">' + icon('search', 'lg') + ' Raw Deep Parameter Spec Scanner</h2>' +
+    '<p class="vsub">Low-level spec field query database across all brands and device hardware lines.</p></div>';
+  h += '<div class="tblwrap"><table class="scan"><thead><tr>' +
+    '<th>Device Name</th><th>Brand</th><th>Category</th><th>Price</th>' +
+    '<th>Sensor / Core Architecture</th><th>Max Video / Display Res</th><th>Weight</th>' +
+    '<th class="right">Action</th></tr></thead><tbody>';
+  devs.forEach((dev) => {
+    h += '<tr>' +
+      '<td class="sname"><span class="inl"><span>' + esc(dev.image) + '</span><span>' + esc(dev.name) + '</span></span></td>' +
+      '<td class="sbrand">' + esc(dev.brand) + '</td>' +
+      '<td class="scat">' + esc(dev.category) + '</td>' +
+      '<td class="sprice">' + money(dev.price) + '</td>' +
+      '<td class="sspec">' + esc(dev.specs.sensor || dev.specs.chipset) + '</td>' +
+      '<td class="sres">' + esc(dev.specs.maxResolution) + '</td>' +
+      '<td class="sw">' + esc(dev.specs.weight) + '</td>' +
+      '<td class="right"><button class="btn-inspect" onclick="openModal(\'' + dev.id + '\')">Inspect</button></td>' +
+      '</tr>';
+  });
+  h += '</tbody></table></div></div>';
+  return h;
+}
+
+/* ---------- modal ---------- */
+function renderModal() {
+  const root = document.getElementById('modalRoot');
+  if (!activeModalDevice) { root.innerHTML = ''; return; }
+  const dev = activeModalDevice;
+  const items = Object.entries(dev.specs).map(([key, value]) =>
+    '<div class="specitem"><span class="sk">' + esc(key.replace(/([A-Z])/g, ' $1')) + '</span>' +
+    '<span class="sv2">' + esc(value) + '</span></div>'
+  ).join('');
+  root.innerHTML =
+    '<div class="modal-bg" onclick="if(event.target===this)closeModal()"><div class="modal">' +
+    '<button class="modal-x" onclick="closeModal()">' + icon('x', 'lg') + '</button>' +
+    '<div class="modal-head"><div class="modal-emoji">' + esc(dev.image) + '</div><div>' +
+    '<span class="brand-badge">' + esc(dev.brand) + '</span>' +
+    '<h2>' + esc(dev.name) + '</h2>' +
+    '<p class="modal-meta">Released ' + dev.releaseYear + ' • Price: ' + money(dev.price) + '</p>' +
+    '</div></div>' +
+    '<h3>Deep Technical Specifications</h3>' +
+    '<div class="specgrid">' + items + '</div>' +
+    '<div class="modal-actions"><button class="btn-pin" onclick="modalToggle()">' +
+    (compareIds.includes(dev.id) ? 'Remove from Matrix' : 'Pin to Matrix') + '</button></div>' +
+    '</div></div>';
+}
+
+/* ---------- render & init ---------- */
+function render() {
+  renderChrome();
+  const root = document.getElementById('viewRoot');
+  if (viewMode === 'matrix') root.innerHTML = viewMatrix();
+  else if (viewMode === 'grid') root.innerHTML = viewGrid();
+  else if (viewMode === 'analytics') root.innerHTML = viewAnalytics();
+  else root.innerHTML = viewScanner();
+  renderModal();
+}
+document.getElementById('logoIcon').innerHTML = icon('cpu');
+document.getElementById('exportIcon').innerHTML = icon('share2');
+document.getElementById('pinnedIcon').innerHTML = icon('scale');
+document.getElementById('searchIcon').innerHTML = icon('search');
+document.getElementById('searchClear').innerHTML = icon('x');
+document.getElementById('diffIcon').innerHTML = icon('sparkles');
+document.getElementById('exportBtn').addEventListener('click', copyComparisonReport);
+document.getElementById('searchInput').addEventListener('input', (e) => { searchQuery = e.target.value; render(); });
+document.getElementById('searchClear').addEventListener('click', () => {
+  searchQuery = ''; document.getElementById('searchInput').value = ''; render();
+});
+document.getElementById('priceRange').addEventListener('input', (e) => { priceMax = Number(e.target.value); render(); });
+document.getElementById('diffToggle').addEventListener('change', (e) => { highlightDiffs = e.target.checked; render(); });
+render();
+</script>
+</body>
+</html>

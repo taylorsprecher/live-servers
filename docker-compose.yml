@@ -141,6 +141,17 @@ services:
     ports:
       - "127.0.0.1:18109:8000"
 
+  specmatrix:
+    build:
+      context: ./services/specmatrix
+    container_name: live-specmatrix
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      BASE_PATH: /specmatrix
+    ports:
+      - "127.0.0.1:18110:8000"
+
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -159,6 +170,7 @@ services:
       - celltower
       - cport
       - members
+      - specmatrix
 
 volumes:
   maclan-data:
