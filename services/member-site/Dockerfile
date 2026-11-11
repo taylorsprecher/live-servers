@@ -9,6 +9,7 @@ ENV PYTHONUNBUFFERED=1 \
     BASE_PATH=/members \
     MEMBERS_DB_PATH=/data/members.db \
     CONTENT_DIR=/data/content \
+    UPLOADS_DIR=/data/uploads \
     PORT=8000
 
 EXPOSE 8000

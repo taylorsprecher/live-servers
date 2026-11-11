@@ -42,6 +42,27 @@ served from CONTENT_DIR/<product>/ (with a fallback to the legacy
 CONTENT_DIR/<bundle file> location) only to signed-in members who hold
 access for that product.
 
+Member uploads (department inbox): any signed-in member can upload
+documents at GET/POST /members/upload (anonymous users are redirected
+to sign-in). Files are validated against a document allowlist
+(pdf/doc/docx/xls/xlsx/png/jpg/jpeg/zip, magic-byte checked), capped
+at MEMBER_UPLOAD_MAX_BYTES, filename-sanitized, and stored on the
+volume under UPLOADS_DIR/<member_id>/ — never in CONTENT_DIR, never in
+git, never at a public URL. Each member sees only their own uploads;
+downloads (/members/upload/download/<id>) are served only to the
+owning member or to the owner. The owner sees every member's uploads,
+grouped by member, in the roster area of the member desk. Deleting an
+account removes its upload rows and files.
+
+Connection-permissions standard (Taylor, 2026-11-08): account creation
+in Taylor's apps asks for Cellular, Wi-Fi (Local Network) and
+Bluetooth up front. A web page cannot raise iOS native permission
+prompts, so the signup flow and the upload page present this as an
+explicit connection step/checklist naming all three, with live
+browser-reported status only where the browser genuinely exposes it
+(online status, connection type, Bluetooth availability) — never fake
+system prompts.
+
 Collections: the upload endpoint also accepts collection targets
 (currently "teachback"). Collection files are individual documents
 (.zip/.pdf/.md/.txt/.docx) staged under CONTENT_DIR/teachback/ and
@@ -63,6 +84,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import threading
 import time
@@ -89,6 +111,28 @@ BTC_RATE_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_cur
 BTC_RATE_SOURCE = "CoinGecko (api.coingecko.com simple/price, USD)"
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB cap on course-file uploads
 ZIP_MAGICS = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # legacy .doc/.xls container
+
+# Member (department) uploads: a per-member inbox on the same volume,
+# deliberately OUTSIDE CONTENT_DIR so member files can never be served
+# as course content or reached by a public URL.
+UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "/data/uploads")
+MEMBER_UPLOAD_MAX_BYTES = 25 * 1024 * 1024  # 25 MB cap per member file
+MEMBER_UPLOAD_EXTS = (
+    ".pdf", ".doc", ".docx", ".xls", ".xlsx",
+    ".png", ".jpg", ".jpeg", ".zip",
+)
+MEMBER_UPLOAD_CONTENT_TYPES = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".zip": "application/zip",
+}
 
 COURSES = [
     {
@@ -146,6 +190,7 @@ _db.row_factory = sqlite3.Row
 
 def init_db():
     os.makedirs(CONTENT_DIR, exist_ok=True)
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
     with _lock, _db:
         _db.executescript(
             """
@@ -195,6 +240,14 @@ def init_db():
                 owner_email TEXT NOT NULL,
                 course_key TEXT NOT NULL,
                 filename TEXT NOT NULL,
+                bytes INTEGER NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS member_uploads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                member_id INTEGER NOT NULL REFERENCES members(id),
+                filename TEXT NOT NULL,
+                stored_name TEXT NOT NULL,
                 bytes INTEGER NOT NULL,
                 created_at INTEGER NOT NULL
             );
@@ -254,6 +307,47 @@ def grant_access(member_id, course_key):
             "INSERT OR IGNORE INTO access (member_id, course_key) VALUES (?, ?)",
             (member_id, course_key),
         )
+
+
+def member_upload_dir(member_id):
+    """Per-member inbox directory on the volume (never public)."""
+    return os.path.join(UPLOADS_DIR, str(member_id))
+
+
+def member_uploads(member_id):
+    with _lock:
+        return _db.execute(
+            "SELECT * FROM member_uploads WHERE member_id = ? "
+            "ORDER BY created_at DESC",
+            (member_id,),
+        ).fetchall()
+
+
+def all_member_uploads():
+    """Every member upload, newest first, with the uploader's identity
+    (owner view)."""
+    with _lock:
+        return _db.execute(
+            "SELECT u.*, m.name AS member_name, m.email AS member_email "
+            "FROM member_uploads u JOIN members m ON m.id = u.member_id "
+            "ORDER BY u.created_at DESC"
+        ).fetchall()
+
+
+def member_upload_magic_ok(filename, data):
+    """Sniff that the bytes match the document type the name claims."""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext == ".pdf":
+        return data.startswith(b"%PDF-")
+    if ext == ".png":
+        return data.startswith(b"\x89PNG\r\n\x1a\n")
+    if ext in (".jpg", ".jpeg"):
+        return data.startswith(b"\xff\xd8\xff")
+    if ext in (".zip", ".docx", ".xlsx"):
+        return any(data.startswith(magic) for magic in ZIP_MAGICS)
+    if ext in (".doc", ".xls"):
+        return data.startswith(OLE_MAGIC)
+    return False
 
 
 def product_dir(course_key):
@@ -499,6 +593,51 @@ def catalog_cards():
     return out
 
 
+def connection_step_html():
+    """Taylor's standing app standard (2026-11-08): account creation in
+    Taylor's apps asks for Cellular, Wi-Fi (Local Network) and Bluetooth
+    up front. This is a web app: it cannot raise iOS native permission
+    prompts, so the flow presents the step as an explicit checklist
+    naming all three, with live status only where the browser genuinely
+    reports it (online state, connection type, Bluetooth availability).
+    No fake system dialogs."""
+    return """
+<div class="card"><h2>Connection step — please allow all three</h2>
+<p class="small">When you create an account, this training app asks for
+the connections it uses up front. A web page cannot open your phone's
+system permission dialogs, so when your phone or browser asks, please
+allow all three:</p>
+<table>
+<tr><td><strong>Cellular</strong></td><td>keeps the site, downloads and
+uploads working away from Wi-Fi</td></tr>
+<tr><td><strong>Wi-Fi (Local Network)</strong></td><td>reaches the
+training pages and files on your local network</td></tr>
+<tr><td><strong>Bluetooth</strong></td><td>pairs training devices and
+accessories</td></tr>
+</table>
+<p class="small" id="conn-status">Connection status: checking…</p>
+<script>
+(function () {
+  var parts = [navigator.onLine ? "online" : "offline"];
+  if (navigator.connection && navigator.connection.effectiveType) {
+    parts.push("connection: " + navigator.connection.effectiveType);
+  }
+  var el = document.getElementById("conn-status");
+  function done(bt) {
+    if (bt !== null) { parts.push("Bluetooth: " + bt); }
+    el.textContent = "Connection status (as reported by this browser): "
+      + parts.join(" · ");
+  }
+  if (navigator.bluetooth && navigator.bluetooth.getAvailability) {
+    navigator.bluetooth.getAvailability().then(function (a) {
+      done(a ? "available" : "not available on this device/browser");
+    }, function () { done(null); });
+  } else { done(null); }
+})();
+</script></div>
+"""
+
+
 def home_page(message="", ok=False):
     msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
     body = f"""
@@ -515,9 +654,8 @@ def home_page(message="", ok=False):
 <label>Full name</label><input type="text" name="name" required>
 <label>Email</label><input type="email" name="email" required>
 <label>Password (8+ characters)</label><input type="password" name="password" minlength="8" required>
-<button type="submit">Create account</button></form>
-<p class="small">For course use on a phone or tablet, please allow Cellular,
-Wi-Fi (Local Network), and Bluetooth access when your device prompts you.</p></div>
+<button type="submit">Create account</button></form></div>
+{connection_step_html()}
 <h2>Courses</h2>
 {catalog_cards()}
 <p class="small">Payment is taken on this site (card, Google Pay, Apple Pay,
@@ -647,6 +785,43 @@ The Teach-Back collection takes individual documents
 <p><a class="btn secondary" href="{BASE}/desk">Back to Member Desk</a></p>
 """
     return PAGE.format(title="Course File Upload", body=body)
+
+
+def member_upload_page(member, message="", ok=False):
+    msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
+    rows = member_uploads(member["id"])
+    if rows:
+        trs = "".join(
+            f'<tr><td><a href="{BASE}/upload/download/{r["id"]}">{esc(r["filename"])}</a></td>'
+            f'<td>{r["bytes"]:,} bytes</td>'
+            f'<td class="small">{esc(time.strftime("%Y-%m-%d %H:%M", time.gmtime(r["created_at"])))} UTC</td></tr>'
+            for r in rows
+        )
+        listing = (
+            "<table><tr><th>File</th><th>Size</th><th>Uploaded</th></tr>"
+            f"{trs}</table>"
+        )
+    else:
+        listing = '<p class="small">You have not uploaded anything yet.</p>'
+    body = f"""
+<h1>Upload Documents</h1>
+<p class="small">Send training-related documents for your department to
+Taylor's Transgender Patient Awareness, LLC. Your uploads go to your
+private member inbox on the server — only you and the site owner can
+see them, and they are never public.</p>
+{msg}
+{connection_step_html()}
+<div class="card"><h2>Upload a document</h2>
+<form method="post" action="{BASE}/upload" enctype="multipart/form-data">
+<label>File — PDF, Word (.doc/.docx), Excel (.xls/.xlsx), image
+(.png/.jpg), or ZIP; max {MEMBER_UPLOAD_MAX_BYTES // (1024 * 1024)} MB</label>
+<input type="file" name="file" required>
+<button type="submit">Upload</button></form></div>
+<div class="card"><h2>Your uploads</h2>
+{listing}</div>
+<p><a class="btn secondary" href="{BASE}/desk">Back to Member Desk</a></p>
+"""
+    return PAGE.format(title="Upload Documents", body=body)
 
 
 def desk_page(member, message="", ok=False):
@@ -788,6 +963,27 @@ def desk_page(member, message="", ok=False):
             )
         if not pay_rows:
             pay_rows = '<tr><td colspan="4" class="small">No card payments yet.</td></tr>'
+        up_rows = all_member_uploads()
+        if up_rows:
+            grouped = {}
+            for r in up_rows:
+                grouped.setdefault((r["member_name"], r["member_email"]), []).append(r)
+            up_sections = ""
+            for (mname, memail), items in grouped.items():
+                item_rows = "".join(
+                    f'<tr><td class="small">{esc(time.strftime("%Y-%m-%d %H:%M", time.gmtime(r["created_at"])))} UTC</td>'
+                    f'<td><a href="{BASE}/upload/download/{r["id"]}">{esc(r["filename"])}</a></td>'
+                    f'<td>{r["bytes"]:,} bytes</td></tr>'
+                    for r in items
+                )
+                up_sections += (
+                    f'<p><strong>{esc(mname)}</strong> '
+                    f'<span class="small">{esc(memail)}</span></p>'
+                    "<table><tr><th>When (UTC)</th><th>File</th><th>Size</th></tr>"
+                    f"{item_rows}</table>"
+                )
+        else:
+            up_sections = '<p class="small">No member uploads received yet.</p>'
         roster = f"""
 <div class="card"><h2>Owner roster — grant / revoke course access</h2>
 <table><tr><th>Member</th><th>Email</th><th>CCCE</th><th>EMSPR</th></tr>{trs}</table>
@@ -797,6 +993,10 @@ def desk_page(member, message="", ok=False):
 <div class="card"><h2>Course files</h2>
 <p class="small">Stage or replace the protected course bundles.</p>
 <a class="btn secondary" href="{BASE}/admin/upload">Open the upload page</a></div>
+<div class="card"><h2>Member uploads received</h2>
+<p class="small">Documents members sent from the upload page, grouped by
+member. Only you can see other members' uploads.</p>
+{up_sections}</div>
 <div class="card"><h2>Recent card payments (Stripe)</h2>
 <table><tr><th>Member</th><th>Product</th><th>Amount</th><th>Session</th></tr>{pay_rows}</table></div>"""
 
@@ -825,6 +1025,10 @@ def desk_page(member, message="", ok=False):
 <h2>Your courses</h2>
 {rows}
 {teachback}
+<div class="card"><strong>Upload documents</strong><br>
+<span class="small">Send training-related documents for your
+department.</span><br>
+<a class="btn" href="{BASE}/upload">Open the upload page</a></div>
 {roster}
 <div class="card"><h2>Delete account</h2>
 <form method="post" action="{BASE}/delete-account">
@@ -922,6 +1126,22 @@ class Handler(BaseHTTPRequestHandler):
             elif "cancelled" in qs:
                 message = "Checkout was cancelled — no charge was made."
             return self.send_html(desk_page(member, message, ok))
+        if path == BASE + "/upload":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            qs = parse_qs(parsed.query)
+            message = qs.get("msg", [""])[0]
+            return self.send_html(
+                member_upload_page(member, message, ok=bool(message))
+            )
+        if path.startswith(BASE + "/upload/download/"):
+            tail = path[len(BASE + "/upload/download/"):]
+            try:
+                upload_id = int(tail)
+            except ValueError:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            return self.member_upload_download(upload_id)
         if path == BASE + "/admin/upload":
             member, _ = self.current_member()
             # Fail closed: the upload page exists only for the owner.
@@ -1135,12 +1355,125 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
             )
         )
 
+    def member_upload(self):
+        """Signed-in member document upload (department inbox). Anyone
+        not signed in is sent to sign-in. Files are allowlist + magic
+        checked, capped at MEMBER_UPLOAD_MAX_BYTES, sanitized, and
+        written ONLY to UPLOADS_DIR/<member_id>/ on the volume — never
+        CONTENT_DIR, never the repo tree, never a public URL."""
+        member, _ = self.current_member()
+        if not member:
+            return self.redirect(BASE + "/")
+
+        def reject(message, status=400):
+            return self.send_html(member_upload_page(member, message), status=status)
+
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        # Small headroom over the file cap for multipart framing.
+        cap_mb = MEMBER_UPLOAD_MAX_BYTES // (1024 * 1024)
+        if length <= 0 or length > MEMBER_UPLOAD_MAX_BYTES + 1024 * 1024:
+            self.close_connection = True
+            return reject(
+                f"Upload missing or larger than the {cap_mb} MB cap.",
+                status=413,
+            )
+        body = self.rfile.read(length)
+        ctype = self.headers.get("Content-Type", "")
+        if not ctype.startswith("multipart/form-data"):
+            return reject("Please use the upload form on this page.")
+        _fields, files = parse_multipart(body, ctype)
+        if "file" not in files:
+            return reject("No file received — choose a file and try again.")
+        filename, data = files["file"]
+        if not data:
+            return reject("That file is empty.")
+        if len(data) > MEMBER_UPLOAD_MAX_BYTES:
+            return reject(f"That file is over the {cap_mb} MB cap.", status=413)
+        filename = sanitize_filename(filename, MEMBER_UPLOAD_EXTS)
+        if filename is None:
+            return reject(
+                "That file type is not accepted. Please send a PDF, Word "
+                "(.doc/.docx), Excel (.xls/.xlsx), image (.png/.jpg), or "
+                "ZIP file."
+            )
+        if not member_upload_magic_ok(filename, data):
+            return reject(
+                "That file does not look like the document type its name "
+                "claims."
+            )
+        dest_dir = member_upload_dir(member["id"])
+        os.makedirs(dest_dir, exist_ok=True)
+        # Same name again -> keep both (name-2.ext, name-3.ext, ...):
+        # a member inbox never silently overwrites an earlier document.
+        stored = filename
+        stem, ext = os.path.splitext(filename)
+        n = 2
+        while os.path.exists(os.path.join(dest_dir, stored)):
+            stored = f"{stem}-{n}{ext}"
+            n += 1
+        tmp_path = os.path.join(dest_dir, f".upload-{secrets.token_hex(6)}.tmp")
+        try:
+            with open(tmp_path, "wb") as fh:
+                fh.write(data)
+            os.replace(tmp_path, os.path.join(dest_dir, stored))
+        except OSError as e:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            return reject(f"Upload could not be saved: {e}", status=500)
+        with _lock, _db:
+            _db.execute(
+                "INSERT INTO member_uploads (member_id, filename, "
+                "stored_name, bytes, created_at) VALUES (?, ?, ?, ?, ?)",
+                (member["id"], filename, stored, len(data), int(time.time())),
+            )
+        return self.send_html(
+            member_upload_page(
+                member,
+                f"Uploaded {filename} ({len(data):,} bytes). Thank you — "
+                "it is in your member inbox.",
+                ok=True,
+            )
+        )
+
+    def member_upload_download(self, upload_id):
+        """Download one member upload. Served ONLY to the member who
+        uploaded it or to the owner; everyone else is fail-closed 403,
+        anonymous users are sent to sign-in. The allowlist is the
+        member_uploads table itself — a file that is not recorded
+        there is never served."""
+        member, _ = self.current_member()
+        if not member:
+            return self.redirect(BASE + "/")
+        with _lock:
+            row = _db.execute(
+                "SELECT * FROM member_uploads WHERE id = ?", (upload_id,)
+            ).fetchone()
+        if row is None:
+            return self.send_html("<h1>Not found</h1>", status=404)
+        is_owner = member["email"].lower() == OWNER_EMAIL
+        if not is_owner and row["member_id"] != member["id"]:
+            return self.send_html("<h1>Forbidden</h1>", status=403)
+        fpath = os.path.join(
+            member_upload_dir(row["member_id"]), row["stored_name"]
+        )
+        if not os.path.isfile(fpath):
+            return self.send_html("<h1>Not found</h1>", status=404)
+        ext = os.path.splitext(row["filename"])[1].lower()
+        return self.stream_file(
+            fpath,
+            MEMBER_UPLOAD_CONTENT_TYPES.get(ext, "application/octet-stream"),
+        )
+
     def do_POST(self):
         path = urlparse(self.path).path
         if path == BASE + "/stripe/webhook":
             return self.stripe_webhook()
         if path == BASE + "/admin/upload":
             return self.admin_upload()
+        if path == BASE + "/upload":
+            return self.member_upload()
         form = self.form()
         if path == BASE + "/signup":
             name = form.get("name", "").strip()
@@ -1322,7 +1655,10 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
                 _db.execute("DELETE FROM sessions WHERE member_id = ?", (member["id"],))
                 _db.execute("DELETE FROM manual_orders WHERE member_id = ?", (member["id"],))
                 _db.execute("DELETE FROM payments WHERE member_id = ?", (member["id"],))
+                _db.execute("DELETE FROM member_uploads WHERE member_id = ?", (member["id"],))
                 _db.execute("DELETE FROM members WHERE id = ?", (member["id"],))
+            # The member's inbox files go with the account.
+            shutil.rmtree(member_upload_dir(member["id"]), ignore_errors=True)
             return self.redirect(BASE + "/", extra_headers=[self.clear_cookie()])
         return self.send_html("<h1>Not found</h1>", status=404)
 

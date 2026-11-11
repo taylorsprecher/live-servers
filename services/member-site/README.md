@@ -57,6 +57,26 @@ loopback only; the gateway is the public entry point).
   no separate purchase or access row — so the owner's roster
   grant/revoke of CCCE controls it. Teach-backs are never folded into
   `CCCE_Course_Files.zip`; the bundle stays byte-identical.
+- **Member uploads — department inbox** (`/members/upload`, any
+  signed-in member; anonymous users are redirected to sign-in):
+  members send training-related documents (PDF, .doc/.docx, .xls/.xlsx,
+  PNG/JPG, ZIP — extension allowlist plus magic-byte check), 25 MB per
+  file, filenames sanitized. Files land in a per-member inbox at
+  `/data/uploads/<member_id>/` on the `members-data` volume — outside
+  `/data/content/`, never in git, never at a public URL. Each member
+  sees and downloads only their own uploads
+  (`/members/upload/download/<id>`, fail-closed 403 for anyone else);
+  the owner sees all uploads grouped by member, with download access,
+  in the roster area of the member desk. Uploading the same filename
+  twice keeps both copies (`name-2.ext`, …). Deleting an account
+  removes its upload rows and files.
+- **Connection step (Taylor's app standard, 2026-11-08)**: account
+  creation asks for Cellular, Wi-Fi (Local Network), and Bluetooth up
+  front. A web page cannot raise iOS native permission prompts, so the
+  signup flow and the upload page present this as an explicit
+  connection checklist naming all three, with live status only where
+  the browser genuinely reports it (online state, connection type,
+  Bluetooth availability) — no fake system prompts.
 - **Owner** = the member account registered with
   `taylorsprecher@gmail.com`. The roster (grant/revoke, BTC confirmation,
   Stripe payment log) is fail-closed to everyone else. Until the owner
