@@ -39,7 +39,7 @@ FORCE=0
 
 cd "$COMPOSE_DIR" || { echo "fix-celltower: cannot cd to $COMPOSE_DIR"; exit 1; }
 
-health() { curl -s -o /dev/null -w '%{http_code}' -m 5 "$1" 2>/dev/null || echo 000; }
+health() { curl -s -o /dev/null -w '%{http_code}' -m 5 "$1" 2>/dev/null || true; }
 
 state() {
   docker ps -a --filter "name=$CONTAINER" \
