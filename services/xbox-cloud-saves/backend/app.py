@@ -80,6 +80,16 @@ BASE_PATH = os.environ.get("BASE_PATH", "").rstrip("/")
 if BASE_PATH and not BASE_PATH.startswith("/"):
     BASE_PATH = "/" + BASE_PATH
 
+# Public base URL for minted transfer URLs, when the app sits behind a
+# gateway that cannot convey its public port: this stack's nginx
+# forwards Host via $host (port stripped) and X-Forwarded-Port carries
+# the internal listener port, so request.base_url mints port-less
+# URLs that miss the gateway's public :443 and 404. Same remedy the
+# stack already uses elsewhere (STAGE_BASE_URL): an explicit
+# env-provided public base, maintained in the host .env by install.sh.
+# Unset (local runs, tests) -> fall back to request.base_url.
+PUBLIC_BASE_URL = os.environ.get("XSAVE_PUBLIC_BASE_URL", "").rstrip("/")
+
 auth = auth_stub if AUTH_MODE == "stub" else auth_xsts
 storage = storage_s3 if STORAGE_MODE == "s3" else storage_stub
 presign = presign_s3 if PRESIGN_MODE == "s3" else presign_stub
@@ -197,13 +207,19 @@ def list_saves(xuid: str = Depends(require_xuid)):
     return {"xuid": xuid, "saves": storage.list_saves(xuid)}
 
 
+def _public_base(request: Request) -> str:
+    if PUBLIC_BASE_URL:
+        return PUBLIC_BASE_URL
+    return str(request.base_url).rstrip("/")
+
+
 def _upload_url(request: Request, xuid: str, name: str) -> dict:
     try:
         storage.validate_save_name(name)
     except storage.InvalidSaveName as exc:
         raise ApiError(400, f"invalid request: {exc}")
     key = storage.key_for(xuid, name)
-    base = str(request.base_url).rstrip("/")
+    base = _public_base(request)
     return {
         "uploadUrl": presign.make_transfer_url(base, "put", key),
         "expiresIn": presign.EXPIRES_IN,
@@ -218,7 +234,7 @@ def _download_url(request: Request, xuid: str, name: str) -> dict:
     if name not in {s["name"] for s in storage.list_saves(xuid)}:
         raise ApiError(404, "save not found")
     key = storage.key_for(xuid, name)
-    base = str(request.base_url).rstrip("/")
+    base = _public_base(request)
     return {
         "downloadUrl": presign.make_transfer_url(base, "get", key),
         "expiresIn": presign.EXPIRES_IN,

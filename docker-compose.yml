@@ -34,6 +34,10 @@ services:
       XSAVE_PRESIGN: local
       XSAVE_XSTS_SIGNING_KEY: ${XSAVE_XSTS_SIGNING_KEY}
       XSAVE_DEV_SECRET: ${XSAVE_DEV_SECRET}
+      # Public base for minted transfer URLs (the gateway strips the
+      # port from Host; see backend/app.py). install.sh maintains this
+      # in .env; empty = request.base_url fallback (local/tests).
+      XSAVE_PUBLIC_BASE_URL: ${XSAVE_PUBLIC_BASE_URL:-}
     volumes:
       - xsave-data:/data/xsave
     ports:

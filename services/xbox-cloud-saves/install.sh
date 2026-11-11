@@ -57,6 +57,35 @@ for var in XSAVE_XSTS_SIGNING_KEY XSAVE_DEV_SECRET; do
   fi
 done
 
+echo "=== ENSURE PUBLIC BASE URL (.env) ==="
+# The gateway strips the port from Host, so the app cannot mint
+# reachable transfer URLs from the request alone (see backend/app.py).
+# Maintain XSAVE_PUBLIC_BASE_URL here: keep an operator-set value,
+# else derive from STAGE_BASE_URL, else the instance's public IPv4,
+# else this deployment's documented gateway address.
+if grep -q "^XSAVE_PUBLIC_BASE_URL=.\\+" .env; then
+  echo "XSAVE_PUBLIC_BASE_URL present — kept"
+else
+  sed -i "/^XSAVE_PUBLIC_BASE_URL=$/d" .env
+  PUBLIC_BASE=""
+  STAGE_BASE="$(grep -E '^STAGE_BASE_URL=' .env | tail -1 | cut -d= -f2- | tr -d '[:space:]')"
+  if [ -n "${STAGE_BASE}" ]; then
+    PUBLIC_BASE="${STAGE_BASE%/}/xbox"
+  fi
+  if [ -z "${PUBLIC_BASE}" ]; then
+    TOKEN="$(curl -s -m 2 -X PUT -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' http://169.254.169.254/latest/api/token 2>/dev/null || true)"
+    PUBIP="$(curl -s -m 2 -H "X-aws-ec2-metadata-token: ${TOKEN}" http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || true)"
+    if [ -n "${PUBIP}" ]; then
+      PUBLIC_BASE="http://${PUBIP}:443/xbox"
+    fi
+  fi
+  if [ -z "${PUBLIC_BASE}" ]; then
+    PUBLIC_BASE="http://52.41.84.116:443/xbox"
+  fi
+  printf 'XSAVE_PUBLIC_BASE_URL=%s\n' "${PUBLIC_BASE}" >> .env
+  echo "XSAVE_PUBLIC_BASE_URL set to ${PUBLIC_BASE}"
+fi
+
 echo "=== BUILD + UP xbox only ==="
 docker compose up -d --build xbox
 
