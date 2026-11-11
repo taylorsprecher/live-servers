@@ -1,0 +1,36 @@
+name: Stage course zip on members volume
+
+# One-off, manually dispatched. Copies ops/stage-course-zip.{py,sh} to
+# the host and runs the wrapper, which executes the python inside the
+# live-members container: the master course zip (already on the volume
+# in a throwaway member's upload inbox — never in git, never on a
+# third-party store) is copied to /data/content/ccce/ and
+# /data/content/emspr/ and MD5-verified against the master on file.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stage-course-zip:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy staging scripts to host
+        run: |
+          scp -i ~/.ssh/id_deploy ops/stage-course-zip.py ops/stage-course-zip.sh \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/"
+
+      - name: Run staging on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/stage-course-zip.sh'
