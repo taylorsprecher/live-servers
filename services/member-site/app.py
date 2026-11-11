@@ -1022,6 +1022,18 @@ member. Only you can see other members' uploads.</p>
 <span class="small">{esc(member["email"])}</span>
 <form class="inline" method="post" action="{BASE}/signout" style="float:right">
 <button class="secondary" type="submit">Sign out</button></form></div>
+<div class="card"><h2>How access works</h2>
+<p>Course access is <strong>$15 per person</strong>.</p>
+<p>Your account gets access — it becomes <strong>entitled</strong> — when:</p>
+<ul>
+<li>your Cash App payment is confirmed by the owner, or</li>
+<li>your card checkout completes (card checkout is being switched on —
+not live yet), or</li>
+<li>the owner grants your account access from the roster (for example,
+teach-back access for departments, or past buyers honored).</li>
+</ul>
+<p>Until then, you can log in and use the site, but course downloads
+stay locked.</p></div>
 <h2>Your courses</h2>
 {rows}
 {teachback}
