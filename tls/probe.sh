@@ -34,8 +34,7 @@ docker run --rm goacme/lego:latest certificates --help 2>&1 | head -20 || true
 echo "--- lego v5: FULL run --help (renew semantics) ---"
 docker run --rm goacme/lego:latest run --help 2>&1 | grep -iE 'renew|force|days|reuse' || echo "(no renew/force/days flags in run --help)"
 
-echo "=== CRON (deploy user) ==="
-command -v crontab || echo "no crontab binary"
+echo "=== CRON (deploy user) ==="command -v crontab || echo "no crontab binary"
 crontab -l 2>&1 | head -5
 systemctl is-active cron 2>/dev/null || systemctl is-active crond 2>/dev/null || echo "cron service state unknown"
 
@@ -51,5 +50,9 @@ curl -s -o /dev/null -w 'gateway /members/health http_code=%{http_code}\n' --max
 echo "=== RAM / DISK ==="
 free -m
 df -h /home/deploy | tail -1
+
+echo "=== TLS-STATE TREE (diagnostic) ==="
+ls -laR /home/deploy/live-servers/tls-state/ 2>&1 | head -40
+find /home/deploy -name 'members.911transedu.net*' 2>/dev/null | head -10
 
 echo "=== PROBE DONE ==="
