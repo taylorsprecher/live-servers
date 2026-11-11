@@ -1,0 +1,67 @@
+name: TLS for members.911transedu.net
+
+# Manually dispatched stages of the members HTTPS setup (see tls/README.md):
+#   setup - stage A: TLS plumbing + self-signed placeholder + renewal cron
+#   issue - stage B: Let's Encrypt issuance (TLS-ALPN-01) + gateway reload
+#   apply - gateway-only refresh after config-only commits (e.g. redirect)
+#   renew - run the renewal check now (also runs weekly via host crontab)
+# All host work happens in tls/*.sh; full output lands in this run log.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "TLS stage to run"
+        required: true
+        type: choice
+        options:
+          - setup
+          - issue
+          - apply
+          - renew
+
+jobs:
+  tls:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Ensure target directory exists on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'mkdir -p /home/deploy/live-servers'
+
+      - name: Rsync repo to host (tls-state/ is host-only, never synced)
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            --exclude 'tls-state/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Run TLS stage on host
+        run: |
+          case "${{ inputs.action }}" in
+            setup) SCRIPT=tls/setup.sh ;;
+            issue) SCRIPT=tls/issue.sh ;;
+            apply) SCRIPT=tls/apply-gateway.sh ;;
+            renew) SCRIPT=tls/renew.sh ;;
+            *) echo "unknown action"; exit 1 ;;
+          esac
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "cd /home/deploy/live-servers && bash $SCRIPT"

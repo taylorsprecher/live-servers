@@ -160,6 +160,12 @@ services:
     network_mode: host
     volumes:
       - ./gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./gateway/locations-common.conf:/etc/nginx/locations-common.conf:ro
+      - ./gateway/locations-members-proxy.conf:/etc/nginx/locations-members-proxy.conf:ro
+      - ./gateway/locations-members-redirect.conf:/etc/nginx/locations-members-redirect.conf:ro
+      # Let's Encrypt cert for members.911transedu.net (host-only state,
+      # created by tls/setup.sh; never in git). See tls/README.md.
+      - ./tls-state/certs:/etc/nginx/certs:ro
     depends_on:
       - maclan
       - xbox

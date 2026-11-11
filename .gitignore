@@ -1,4 +1,5 @@
 .env
+tls-state/
 **/node_modules/
 **/.venv/
 **/venv/
