@@ -31,6 +31,8 @@ echo "[run --help matches:]"
 docker run --rm goacme/lego:latest run --help 2>&1 | grep -iE '\-\-path|\-\-storage|\-\-email|\-\-domains|\-\-accept|\-\-server' || true
 echo "[certificates --help matches:]"
 docker run --rm goacme/lego:latest certificates --help 2>&1 | head -20 || true
+echo "--- lego v5: FULL run --help (renew semantics) ---"
+docker run --rm goacme/lego:latest run --help 2>&1 | grep -iE 'renew|force|days|reuse' || echo "(no renew/force/days flags in run --help)"
 
 echo "=== CRON (deploy user) ==="
 command -v crontab || echo "no crontab binary"
