@@ -36,7 +36,19 @@ loopback only; the gateway is the public entry point).
   card checkout shows as "being switched on".
 - **Course contents**: served only to signed-in members with access, from
   `/data/content/` on the `members-data` volume — never a public URL.
-  (Staging the bundle there is a separate, owner-approved step.)
+- **Course-file upload** (`/members/admin/upload`, owner session only,
+  fail-closed 403 for everyone else): the owner stages bundles through
+  the upload page (multipart form) or a raw zip POST with `?product=`
+  (`ccce` or `emspr`) and `X-Filename`. Zip-only (magic bytes + zipfile
+  check), 100 MB cap, written to `/data/content/<product>/` on the
+  volume — never into the repo, never committed to git. Uploads are
+  logged in SQLite (`uploads` table: owner email, product, filename,
+  bytes, timestamp); re-uploading the same filename replaces it.
+  Downloads come from `/data/content/<product>/` (legacy top-level
+  bundle location still honored) and require sign-in + product access.
+  The real bundle is staged by the owner after go-live from the master
+  on file (`~/workspace/your_files/CCCE_Course_Files.zip`, MD5
+  d456b0c6bf3a20718b02a64313d6a224) — no Drive download needed.
 - **Owner** = the member account registered with
   `taylorsprecher@gmail.com`. The roster (grant/revoke, BTC confirmation,
   Stripe payment log) is fail-closed to everyone else. Until the owner

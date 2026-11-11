@@ -29,6 +29,19 @@ Payments (on-site; no GoDaddy in this app):
 Content: full course files are served ONLY to signed-in members with
 access, from CONTENT_DIR on the volume — never a public URL.
 
+Course-file upload: POST /members/admin/upload (owner session only,
+fail-closed 403 for everyone else). Accepts either a browser multipart
+form (fields: product, file) or a raw zip body with the product named in
+the ?product= query parameter (or X-Product header) and the filename in
+X-Filename. Files are zip-only (magic bytes + zipfile check), capped at
+MAX_UPLOAD_BYTES, and written to CONTENT_DIR/<product>/ on the volume —
+never into the repo tree, never committed to git. Every upload is logged
+(owner email, product, filename, bytes, timestamp) in the uploads table.
+Re-uploading the same filename replaces it atomically. Downloads are
+served from CONTENT_DIR/<product>/ (with a fallback to the legacy
+CONTENT_DIR/<bundle file> location) only to signed-in members who hold
+access for that product.
+
 Owner = member registered with OWNER_EMAIL; the roster (grant/revoke,
 BTC confirm, payment log) is fail-closed to everyone else.
 Sessions: random token, stored hashed, HttpOnly cookie, 30-day lifetime.
@@ -46,6 +59,7 @@ import threading
 import time
 import urllib.request
 import urllib.error
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse, urlencode
 
@@ -64,6 +78,8 @@ BTC_RECEIVE_ADDRESS = os.environ.get("BTC_RECEIVE_ADDRESS", "")
 CASHAPP_CASHTAG = os.environ.get("CASHAPP_CASHTAG") or "$taylorsprecher2026"
 BTC_RATE_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
 BTC_RATE_SOURCE = "CoinGecko (api.coingecko.com simple/price, USD)"
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB cap on course-file uploads
+ZIP_MAGICS = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
 
 COURSES = [
     {
@@ -137,6 +153,14 @@ def init_db():
                 confirmed_at INTEGER,
                 confirmed_by TEXT
             );
+            CREATE TABLE IF NOT EXISTS uploads (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_email TEXT NOT NULL,
+                course_key TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                bytes INTEGER NOT NULL,
+                created_at INTEGER NOT NULL
+            );
             """
         )
 
@@ -195,8 +219,99 @@ def grant_access(member_id, course_key):
         )
 
 
+def product_dir(course_key):
+    return os.path.join(CONTENT_DIR, course_key)
+
+
+def staged_files(course_key):
+    """Zip files staged for a product: [(filename, size, mtime), ...]."""
+    out = []
+    d = product_dir(course_key)
+    if os.path.isdir(d):
+        for name in sorted(os.listdir(d)):
+            path = os.path.join(d, name)
+            if os.path.isfile(path) and name.lower().endswith(".zip"):
+                out.append((name, os.path.getsize(path), int(os.path.getmtime(path))))
+    return out
+
+
+def resolve_content_path(course):
+    """The file a download for this product serves, or None.
+
+    Order: the canonical bundle name inside CONTENT_DIR/<product>/, then
+    the newest zip staged there, then the legacy bundle at
+    CONTENT_DIR/<bundle file> (pre-upload-path staging location).
+    """
+    files = staged_files(course["key"])
+    for name, _size, _mtime in files:
+        if name == course["file"]:
+            return os.path.join(product_dir(course["key"]), name)
+    if files:
+        newest = max(files, key=lambda f: f[2])
+        return os.path.join(product_dir(course["key"]), newest[0])
+    legacy = os.path.join(CONTENT_DIR, course["file"])
+    if os.path.isfile(legacy):
+        return legacy
+    return None
+
+
 def content_available(course):
-    return os.path.isfile(os.path.join(CONTENT_DIR, course["file"]))
+    return resolve_content_path(course) is not None
+
+
+def sanitize_filename(name):
+    """Reduce an uploaded filename to a safe .zip basename, or None."""
+    name = os.path.basename((name or "").strip().replace("\\", "/"))
+    name = re.sub(r"[^A-Za-z0-9._-]", "_", name)
+    if not name or name.startswith(".") or not name.lower().endswith(".zip"):
+        return None
+    if len(name) > 120:
+        return None
+    return name
+
+
+def parse_multipart(body, content_type):
+    """Minimal stdlib multipart/form-data parser.
+
+    Returns (fields, files): fields maps name -> str; files maps
+    name -> (filename, bytes). Good enough for one browser form.
+    """
+    fields, files = {}, {}
+    m = re.search(r"boundary=([^;]+)", content_type or "")
+    if not m:
+        return fields, files
+    boundary = m.group(1).strip().strip('"').encode("utf-8")
+    delimiter = b"--" + boundary
+    for part in body.split(delimiter):
+        if part in (b"", b"--", b"--\r\n", b"\r\n"):
+            continue
+        if part.startswith(b"\r\n"):
+            part = part[2:]
+        if part.endswith(b"\r\n"):
+            part = part[:-2]
+        if part == b"--":
+            break
+        head, sep, data = part.partition(b"\r\n\r\n")
+        if not sep:
+            continue
+        headers = {}
+        for line in head.split(b"\r\n"):
+            if b":" in line:
+                k, v = line.split(b":", 1)
+                headers[k.strip().lower().decode("utf-8", "replace")] = (
+                    v.strip().decode("utf-8", "replace")
+                )
+        disp = headers.get("content-disposition", "")
+        name_m = re.search(r'name="([^"]*)"', disp)
+        if not name_m:
+            continue
+        name = name_m.group(1)
+        file_m = re.search(r'filename="([^"]*)"', disp)
+        if file_m is not None:
+            files[name] = (file_m.group(1), data)
+        else:
+            fields[name] = data.decode("utf-8", "replace")
+    return fields, files
 
 
 # ---------------------------------------------------------------- Stripe --
@@ -291,7 +406,7 @@ PAGE = """<!DOCTYPE html>
  h1 {{ font-size: 1.5rem; }} h2 {{ font-size: 1.15rem; margin-top: 28px; }}
  .card {{ background: #1a2129; border: 1px solid #2b3644; border-radius: 10px; padding: 16px; margin: 14px 0; }}
  label {{ display: block; margin: 10px 0 4px; font-size: .9rem; color: #b9c4cf; }}
- input {{ width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid #39485a; background: #0d1117; color: #e8ecef; }}
+ input, select {{ width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px; border: 1px solid #39485a; background: #0d1117; color: #e8ecef; }}
  button, .btn {{ display: inline-block; margin-top: 14px; padding: 10px 18px; border: 0; border-radius: 6px; background: #2f81f7; color: #fff; font-size: 1rem; cursor: pointer; text-decoration: none; }}
  button.secondary, .btn.secondary {{ background: #39485a; }}
  button:disabled {{ background: #39485a; cursor: not-allowed; }}
@@ -382,6 +497,74 @@ Full contents are released to member accounts after payment.</p></div>
 <p><a class="btn" href="{BASE}/">Sign in / Create account</a></p>
 """
     return PAGE.format(title="Course Preview", body=body)
+
+
+def upload_page(member, message="", ok=False):
+    msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
+    options = "".join(
+        f'<option value="{c["key"]}">{esc(c["short"])} — {esc(c["name"])}</option>'
+        for c in COURSES
+    )
+    sections = ""
+    for c in COURSES:
+        files = staged_files(c["key"])
+        legacy = os.path.join(CONTENT_DIR, c["file"])
+        legacy_note = ""
+        if os.path.isfile(legacy):
+            legacy_note = (
+                f'<tr><td>{esc(c["file"])} (top level)</td>'
+                f"<td>{os.path.getsize(legacy):,} bytes</td></tr>"
+            )
+        if files:
+            trs = "".join(
+                f"<tr><td>{esc(name)}</td><td>{size:,} bytes</td></tr>"
+                for name, size, _mtime in files
+            )
+        elif not legacy_note:
+            trs = '<tr><td colspan="2" class="small">No files staged yet.</td></tr>'
+        else:
+            trs = ""
+        sections += (
+            f'<div class="card"><h2>Staged files — {esc(c["short"])}</h2>'
+            f"<table><tr><th>File</th><th>Size</th></tr>{trs}{legacy_note}</table></div>"
+        )
+    with _lock:
+        log_rows = _db.execute(
+            "SELECT * FROM uploads ORDER BY created_at DESC LIMIT 10"
+        ).fetchall()
+    log = ""
+    if log_rows:
+        log = (
+            '<div class="card"><h2>Recent uploads</h2><table>'
+            "<tr><th>When (UTC)</th><th>Product</th><th>File</th><th>Size</th></tr>"
+            + "".join(
+                f'<tr><td class="small">{esc(time.strftime("%Y-%m-%d %H:%M", time.gmtime(r["created_at"])))}</td>'
+                f'<td>{esc(r["course_key"])}</td><td>{esc(r["filename"])}</td>'
+                f'<td>{r["bytes"]:,} bytes</td></tr>'
+                for r in log_rows
+            )
+            + "</table></div>"
+        )
+    body = f"""
+<h1>Course File Upload</h1>
+<p class="small">Owner only. Files go to the protected content area on the
+server volume — they are never public and never part of the site code.</p>
+{msg}
+<div class="card"><h2>Upload a course bundle (.zip)</h2>
+<form method="post" action="{BASE}/admin/upload" enctype="multipart/form-data">
+<label>Product</label>
+<select name="product">{options}</select>
+<label>Zip file (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)</label>
+<input type="file" name="file" accept=".zip" required>
+<button type="submit">Upload</button></form>
+<p class="small">Uploading a file with the same name replaces the staged
+copy. The bundle for both products is CCCE_Course_Files.zip — upload it
+once under CCCE and once under EMSPR.</p></div>
+{sections}
+{log}
+<p><a class="btn secondary" href="{BASE}/desk">Back to Member Desk</a></p>
+"""
+    return PAGE.format(title="Course File Upload", body=body)
 
 
 def desk_page(member, message="", ok=False):
@@ -529,6 +712,9 @@ def desk_page(member, message="", ok=False):
 <p class="small">Only the owner account sees this roster.</p></div>
 <div class="card"><h2>Pending manual-payment orders (Bitcoin / Cash App)</h2>
 <table><tr><th>#</th><th>Member</th><th>Product</th><th>Method</th><th>Amount</th><th></th></tr>{btc_rows}</table></div>
+<div class="card"><h2>Course files</h2>
+<p class="small">Stage or replace the protected course bundles.</p>
+<a class="btn secondary" href="{BASE}/admin/upload">Open the upload page</a></div>
 <div class="card"><h2>Recent card payments (Stripe)</h2>
 <table><tr><th>Member</th><th>Product</th><th>Amount</th><th>Session</th></tr>{pay_rows}</table></div>"""
 
@@ -638,6 +824,14 @@ class Handler(BaseHTTPRequestHandler):
             elif "cancelled" in qs:
                 message = "Checkout was cancelled — no charge was made."
             return self.send_html(desk_page(member, message, ok))
+        if path == BASE + "/admin/upload":
+            member, _ = self.current_member()
+            # Fail closed: the upload page exists only for the owner.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            qs = parse_qs(parsed.query)
+            message = qs.get("msg", [""])[0]
+            return self.send_html(upload_page(member, message, ok=bool(message)))
         if path.startswith(BASE + "/content/"):
             key = path[len(BASE + "/content/"):]
             return self.serve_content(key)
@@ -655,8 +849,8 @@ class Handler(BaseHTTPRequestHandler):
                 "<h1>Locked</h1><p>This content needs course access.</p>",
                 status=403,
             )
-        fpath = os.path.join(CONTENT_DIR, course["file"])
-        if not os.path.isfile(fpath):
+        fpath = resolve_content_path(course)
+        if fpath is None:
             return self.send_html(
                 "<h1>Files being added</h1><p>Your access is saved. The "
                 "course files are being added to the site — check back "
@@ -667,8 +861,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/zip")
         self.send_header(
-            "Content-Disposition", f'attachment; filename="{course["file"]}"'
+            "Content-Disposition",
+            f'attachment; filename="{os.path.basename(fpath)}"',
         )
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("Content-Length", str(size))
         self.end_headers()
         with open(fpath, "rb") as fh:
@@ -678,10 +874,98 @@ class Handler(BaseHTTPRequestHandler):
                     break
                 self.wfile.write(chunk)
 
+    def admin_upload(self):
+        """Owner-only course-bundle upload. Fail-closed: 403 for anyone
+        who is not the signed-in owner. Accepts a browser multipart form
+        (fields product + file) or a raw zip body with ?product=ccce|emspr
+        (or X-Product header) and X-Filename. Writes ONLY to
+        CONTENT_DIR/<product>/ on the volume — never the repo tree."""
+        member, _ = self.current_member()
+        if not member or member["email"].lower() != OWNER_EMAIL:
+            return self.send_html("<h1>Forbidden</h1>", status=403)
+
+        def reject(message, status=400):
+            return self.send_html(upload_page(member, message), status=status)
+
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        # Small headroom over the file cap for multipart framing.
+        if length <= 0 or length > MAX_UPLOAD_BYTES + 1024 * 1024:
+            self.close_connection = True
+            return reject(
+                f"Upload missing or larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB cap.",
+                status=413,
+            )
+        body = self.rfile.read(length)
+        ctype = self.headers.get("Content-Type", "")
+        product = None
+        filename = None
+        data = None
+        if ctype.startswith("multipart/form-data"):
+            fields, files = parse_multipart(body, ctype)
+            product = (fields.get("product") or "").strip().lower()
+            if "file" in files:
+                filename, data = files["file"]
+        else:
+            qs = parse_qs(urlparse(self.path).query)
+            product = (
+                qs.get("product", [""])[0]
+                or self.headers.get("X-Product", "")
+            ).strip().lower()
+            filename = self.headers.get("X-Filename", "")
+            data = body
+        if product not in COURSE_KEYS:
+            return reject("Choose a product: ccce or emspr.")
+        course = COURSE_BY_KEY[product]
+        filename = sanitize_filename(filename) or sanitize_filename(course["file"])
+        if filename is None:
+            return reject("The uploaded file must be a .zip file.")
+        if not data:
+            return reject("No file data received.")
+        if len(data) > MAX_UPLOAD_BYTES:
+            return reject(
+                f"That file is over the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB cap.",
+                status=413,
+            )
+        if not any(data.startswith(magic) for magic in ZIP_MAGICS):
+            return reject("That file is not a zip archive.")
+        dest_dir = product_dir(product)
+        os.makedirs(dest_dir, exist_ok=True)
+        tmp_path = os.path.join(dest_dir, f".upload-{secrets.token_hex(6)}.tmp")
+        final_path = os.path.join(dest_dir, filename)
+        try:
+            with open(tmp_path, "wb") as fh:
+                fh.write(data)
+            if not zipfile.is_zipfile(tmp_path):
+                os.unlink(tmp_path)
+                return reject("That file is not a valid zip archive.")
+            os.replace(tmp_path, final_path)  # duplicate upload replaces cleanly
+        except OSError as e:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            return reject(f"Upload could not be saved: {e}", status=500)
+        with _lock, _db:
+            _db.execute(
+                "INSERT INTO uploads (owner_email, course_key, filename, bytes, "
+                "created_at) VALUES (?, ?, ?, ?, ?)",
+                (member["email"], product, filename, len(data), int(time.time())),
+            )
+        return self.send_html(
+            upload_page(
+                member,
+                f"Uploaded {filename} ({len(data):,} bytes) for "
+                f"{course['short']}. Members with access can download it now.",
+                ok=True,
+            )
+        )
+
     def do_POST(self):
         path = urlparse(self.path).path
         if path == BASE + "/stripe/webhook":
             return self.stripe_webhook()
+        if path == BASE + "/admin/upload":
+            return self.admin_upload()
         form = self.form()
         if path == BASE + "/signup":
             name = form.get("name", "").strip()
