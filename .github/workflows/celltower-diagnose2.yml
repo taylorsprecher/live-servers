@@ -1,0 +1,33 @@
+name: Cell Tower diagnose 2 (read-only)
+
+# One-off, manually dispatched. Copies services/cell-tower-lan/diagnose2.sh
+# to the host and runs it: jobs-table state, server-side log lines, and the
+# server process's kernel I/O counters for live-celltower. Read-only.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  celltower-diagnose2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy diagnose2.sh to host
+        run: |
+          scp -i ~/.ssh/id_deploy services/cell-tower-lan/diagnose2.sh \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/celltower-diagnose2.sh"
+
+      - name: Run diagnose2.sh on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/celltower-diagnose2.sh'
