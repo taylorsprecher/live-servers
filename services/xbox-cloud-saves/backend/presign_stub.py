@@ -8,7 +8,7 @@ module mints an equivalent capability token:
 
     token = base64url(payload) "." base64url(HMAC-SHA256(payload, secret))
 
-where payload = {"op": "get"|"put", "key": "users/{xuid}/{name}",
+where payload = {"op": "get"|"put", "key": "users/{xuid}/savefiles/{name}",
                  "exp": <unix ts, now + 900>}
 
 The token is embedded in a local URL:  {base}/transfer/{token}

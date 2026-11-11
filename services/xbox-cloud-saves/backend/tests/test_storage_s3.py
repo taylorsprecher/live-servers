@@ -11,7 +11,7 @@ BOB = "2535222222222222"
 
 
 def test_key_layout_and_name_rules(s3):
-    assert s3.key_for(ALICE, "save_slot1.dat") == f"users/{ALICE}/save_slot1.dat"
+    assert s3.key_for(ALICE, "save_slot1.dat") == f"users/{ALICE}/savefiles/save_slot1.dat"
     for bad in ["../evil", "a/b", "", "..", "bad name!"]:
         with pytest.raises(s3.InvalidSaveName):
             s3.validate_save_name(bad)
@@ -41,9 +41,9 @@ def test_objects_land_under_user_prefix(s3):
         obj["Key"]
         for obj in s3.get_client().list_objects_v2(Bucket=s3.get_bucket()).get("Contents", [])
     }
-    assert f"users/{ALICE}/a.dat" in keys
+    assert f"users/{ALICE}/savefiles/a.dat" in keys
     assert f"users/{ALICE}/_index.json" in keys
-    assert f"users/{BOB}/b.dat" in keys
+    assert f"users/{BOB}/savefiles/b.dat" in keys
 
 
 def test_user_isolation(s3):

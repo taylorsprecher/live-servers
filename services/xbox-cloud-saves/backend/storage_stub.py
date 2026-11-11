@@ -6,7 +6,7 @@ Production (Phase 3 of the plan) stores saves in S3 buckets
 (xsave-dev / xsave-stage / xsave-prod, versioning + encryption on).
 This stub stores the exact same key layout on the local filesystem:
 
-    {STORAGE_DIR}/users/{xuid}/{save_name}
+    {STORAGE_DIR}/users/{xuid}/savefiles/{save_name}
     {STORAGE_DIR}/users/{xuid}/_index.json     <- per-user metadata index
 
 so swapping in boto3 later changes this module only.
@@ -57,9 +57,17 @@ def validate_save_name(name: str) -> str:
 
 
 def key_for(xuid: str, name: str) -> str:
-    """Canonical storage key. Paths are ALWAYS derived from the XUID —
-    never from a client-supplied user id (Phase 2/3 rule)."""
-    return f"users/{xuid}/{name}"
+    """Canonical storage key, per the Xbox AWS S3 plan: save objects
+    live under users/{xuid}/savefiles/{saveId}. Paths are ALWAYS
+    derived from the XUID — never from a client-supplied user id
+    (Phase 2/3 rule)."""
+    return f"users/{xuid}/savefiles/{name}"
+
+
+def _parse_key(key: str) -> tuple[str, str]:
+    """Split a canonical save key into (xuid, name)."""
+    parts = key.split("/", 3)
+    return parts[1], parts[3]
 
 
 def _user_dir(xuid: str) -> str:
@@ -85,13 +93,14 @@ def _save_index(xuid: str, index: dict) -> None:
 
 
 def _path_for_key(key: str) -> str:
-    # Keys are internally generated (users/{xuid}/{name}); join safely.
+    # Keys are internally generated (users/{xuid}/savefiles/{name});
+    # join safely.
     parts = key.split("/")
     return os.path.join(STORAGE_DIR, *parts)
 
 
 def put_bytes(key: str, data: bytes) -> dict:
-    xuid, name = key.split("/")[1], key.split("/", 2)[2]
+    xuid, name = _parse_key(key)
     path = _path_for_key(key)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "wb") as fh:

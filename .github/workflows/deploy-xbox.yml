@@ -1,0 +1,48 @@
+name: Deploy xbox service only (automatic install)
+
+# Targeted deploy: rsync the repo (same as deploy.yml), then run the
+# xbox service's automatic installer on the host
+# (services/xbox-cloud-saves/install.sh). The installer ensures the
+# deploy secrets, builds/recreates ONLY the xbox container, waits for
+# health, and self-verifies with an end-to-end presigned-URL save
+# round-trip through the gateway. Used instead of the full deploy.sh
+# when only the xbox service changed or the full-build RAM gate is not
+# met in steady state. Gateway/TLS config, the audited production app,
+# and all other services are untouched.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-xbox:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync repo to host
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'tls-state/' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Run xbox automatic installer on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/services/xbox-cloud-saves/install.sh'

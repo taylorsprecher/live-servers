@@ -6,7 +6,7 @@ same public interface (put_bytes / get_bytes / list_saves /
 delete_save / key_for / validate_save_name, same exceptions, same
 metadata model) implemented with boto3 against S3:
 
-    s3://{BUCKET}/users/{xuid}/{save_name}
+    s3://{BUCKET}/users/{xuid}/savefiles/{save_name}
     s3://{BUCKET}/users/{xuid}/_index.json     <- per-user metadata index
 
 The bucket defaults to "xsave-dev" (Phase 1 of the plan) and can be
@@ -113,9 +113,17 @@ def validate_save_name(name: str) -> str:
 
 
 def key_for(xuid: str, name: str) -> str:
-    """Canonical storage key. Paths are ALWAYS derived from the XUID —
-    never from a client-supplied user id (Phase 2/3 rule)."""
-    return f"users/{xuid}/{name}"
+    """Canonical storage key, per the Xbox AWS S3 plan: save objects
+    live under users/{xuid}/savefiles/{saveId}. Paths are ALWAYS
+    derived from the XUID — never from a client-supplied user id
+    (Phase 2/3 rule)."""
+    return f"users/{xuid}/savefiles/{name}"
+
+
+def _parse_key(key: str) -> tuple[str, str]:
+    """Split a canonical save key into (xuid, name)."""
+    parts = key.split("/", 3)
+    return parts[1], parts[3]
 
 
 def _index_key(xuid: str) -> str:
@@ -167,7 +175,7 @@ def _record_meta(xuid: str, name: str, size: int, sha256: str) -> dict:
 
 
 def put_bytes(key: str, data: bytes) -> dict:
-    xuid, name = key.split("/")[1], key.split("/", 2)[2]
+    xuid, name = _parse_key(key)
     sha256 = hashlib.sha256(data).hexdigest()
     meta = _record_meta(xuid, name, len(data), sha256)
     get_client().put_object(
@@ -192,9 +200,9 @@ def index_uploaded_object(key: str) -> dict | None:
     metadata, or None for keys that are not save objects (including
     the index objects themselves)."""
     parts = key.split("/")
-    if len(parts) != 3 or parts[0] != "users" or parts[2] == "_index.json":
+    if len(parts) != 4 or parts[0] != "users" or parts[2] != "savefiles":
         return None
-    xuid, name = parts[1], parts[2]
+    xuid, name = parts[1], parts[3]
     data = get_bytes(key)
     return _record_meta(xuid, name, len(data), hashlib.sha256(data).hexdigest())
 

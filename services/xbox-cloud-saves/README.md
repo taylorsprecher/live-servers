@@ -12,7 +12,7 @@ pre-signed-URL flow, with the cloud pieces simulated locally.
 | Piece | Stub | Production equivalent |
 |---|---|---|
 | Xbox XSTS auth | `backend/auth_stub.py` — `/auth/dev-login` issues an unsigned fake token for any gamertag; XUID derived from the gamertag | Microsoft-validated XSTS JWT; XUID from token claims |
-| S3 | `backend/storage_stub.py` — files under `backend/storage_data/users/{xuid}/` | S3 buckets `xsave-dev/stage/prod` with versioning + encryption |
+| S3 | `backend/storage_stub.py` — files under `backend/storage_data/users/{xuid}/savefiles/` | S3 buckets `xsave-dev/stage/prod` with versioning + encryption |
 | Pre-signed URLs | `backend/presign_stub.py` — HMAC capability tokens at `/transfer/{token}`, 15-min expiry, single object + operation | boto3 SigV4 pre-signed URLs |
 | API Gateway + Lambda | One FastAPI app | HTTP API + Lambda handlers (SAM increment next) |
 
@@ -63,6 +63,36 @@ curl -s '<downloadUrl>' -o save_slot1.dat                       # fetch bytes
 curl -s -X DELETE $B/saves/save_slot1.dat -H "Authorization: $AUTH"
 curl -s $B/health                                               # stub disclosure
 ```
+
+## Automatic install (demo host)
+
+On the live-servers host, `install.sh` installs this design into the
+existing demo environment automatically and idempotently: it ensures
+the two deploy secrets in the host `.env` (generating them only if
+missing), builds/recreates **only** the `live-xbox` container, waits
+for health, then self-verifies through the gateway with
+`verify_roundtrip.py` (demo login → upload URL → PUT → download URL →
+GET byte-identical → cleanup), exiting non-zero if any step fails.
+
+```bash
+bash /home/deploy/live-servers/services/xbox-cloud-saves/install.sh
+# or dispatch the "Deploy xbox service only (automatic install)"
+# GitHub Actions workflow (.github/workflows/deploy-xbox.yml)
+python3 verify_roundtrip.py --base http://52.41.84.116:443/xbox  # standalone check
+```
+
+Storage keys follow the document's layout: `users/{xuid}/savefiles/{saveId}`.
+
+## Real AWS (aws/)
+
+Taylor's call (2026-11-11): "Make all real." The `aws/` directory
+provisions the design as **real** resources in Taylor's AWS member
+account 589997396938 ("Index Zero"), us-west-2: dedicated encrypted
+S3 bucket, least-privilege Lambda role, Python presigned-URL Lambda,
+API Gateway, CloudWatch logging — with XSTS validation wired to the
+real Xbox Live services (real tokens additionally require a Microsoft
+relying-party registration, which is not on file — see `aws/README.md`
+for the exact status and how to run the provisioner from CloudShell).
 
 ## Layout
 

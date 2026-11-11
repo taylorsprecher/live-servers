@@ -53,7 +53,7 @@ All mutable state is under `XSAVE_STORAGE_DIR` (image default
 `/data/xsave`), mirroring the S3 key layout:
 
 ```
-/data/xsave/users/{xuid}/{save_name}    save file bytes
+/data/xsave/users/{xuid}/savefiles/{save_name}   save file bytes
 /data/xsave/users/{xuid}/_index.json    per-user metadata index
                                         (name, saveVersion, size, sha256, timestamp)
 ```

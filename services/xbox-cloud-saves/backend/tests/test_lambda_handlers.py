@@ -83,7 +83,7 @@ def test_full_production_loop(s3):
     # The URL must be scoped to the caller's own users/{xuid}/ prefix.
     user_hash, token = auth_xsts.parse_xbl_token(headers["Authorization"])
     xuid = auth_xsts.get_xuid(auth_xsts.validate_xsts_token(token, user_hash))
-    assert key == f"users/{xuid}/slot1.dat"
+    assert key == f"users/{xuid}/savefiles/slot1.dat"
 
     # 2. Bytes land directly in S3; the ObjectCreated handler indexes.
     _simulate_client_put(s3, upload_url, data)
