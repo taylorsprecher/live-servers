@@ -13,9 +13,14 @@ cd /home/deploy/live-servers
 mkdir -p tls-state/lego tls-state/certs
 
 echo "--- renew run $(date -u '+%Y-%m-%dT%H:%M:%SZ') ---"
+# Ownership normalization (see tls/issue.sh): lego state must stay
+# deploy-owned or this script cannot read the cert it just renewed.
+docker run --rm --entrypoint chown \
+  -v /home/deploy/live-servers/tls-state/lego:/lego-data \
+  nginx:alpine -R "$(id -u):$(id -g)" /lego-data
 # Lego v5 folded renewal into 'run' (get or renew): --renew-days 30
 # makes it renew only when <=30 days remain and no-op otherwise.
-docker run --rm --network host \
+docker run --rm --network host --user "$(id -u):$(id -g)" \
   -v /home/deploy/live-servers/tls-state/lego:/lego-data \
   goacme/lego:latest \
   run \
