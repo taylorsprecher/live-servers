@@ -25,6 +25,12 @@ fi
 docker run --rm goacme/lego:latest --help 2>&1 | sed -n '1,30p' || true
 echo "--- lego 'run' challenge/port flags ---"
 docker run --rm goacme/lego:latest run --help 2>&1 | grep -iE 'tls|http\.|port' | head -25 || true
+echo "--- lego v5 flag survey (where do path/email/domains/accept-tos live?) ---"
+docker run --rm goacme/lego:latest --help 2>&1 | grep -iE 'path|storage|email|domain|accept|server' || true
+echo "[run --help matches:]"
+docker run --rm goacme/lego:latest run --help 2>&1 | grep -iE '\-\-path|\-\-storage|\-\-email|\-\-domains|\-\-accept|\-\-server' || true
+echo "[certificates --help matches:]"
+docker run --rm goacme/lego:latest certificates --help 2>&1 | head -20 || true
 
 echo "=== CRON (deploy user) ==="
 command -v crontab || echo "no crontab binary"
