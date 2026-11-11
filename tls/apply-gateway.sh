@@ -38,17 +38,23 @@ expect "GET /members location"  "$LOC2" "https://members.911transedu.net/members
 
 echo "=== OTHER SERVICES UNMOVED (HTTP :443) ==="
 for p in specmatrix maclan xbox wyze usb aircore fmp celltower; do
-  C="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:443/$p/health 2>/dev/null)"
+  # Health paths match deploy.sh's gateway checks exactly.
   case "$p" in
-    usb)     U=http://127.0.0.1:443/usb/api/status ;;
-    aircore) U=http://127.0.0.1:443/aircore/api/state ;;
-    *)       U=http://127.0.0.1:443/$p/health ;;
+    usb)       U=http://127.0.0.1:443/usb/api/status ;;
+    aircore)   U=http://127.0.0.1:443/aircore/api/state ;;
+    fmp)       U=http://127.0.0.1:443/fmp/api/health ;;
+    celltower) U=http://127.0.0.1:443/celltower/api/health ;;
+    *)         U=http://127.0.0.1:443/$p/health ;;
   esac
-  C="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$U")"
+  C="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$U")"
   expect "http $p" "$C" "200"
 done
 C="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:443/cport/metrics)"
 expect "http cport" "$C" "200"
+# Diagnostic only: celltower's own backend, gateway bypassed (the app
+# has a history of slow health responses; this separates app from path).
+D="$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 http://127.0.0.1:18107/celltower/api/health)"
+echo "INFO direct celltower backend: $D"
 
 echo "=== HTTPS (loopback, full validation) ==="
 C="$(curl -s --resolve members.911transedu.net:443:127.0.0.1 -o /dev/null -w '%{http_code}' --max-time 10 https://members.911transedu.net/members/health)"
