@@ -1,8 +1,9 @@
 # Member-Site — training site with real member logins and on-site payment
 
 Deployed on the audited AWS host as part of the live-servers set, behind the
-nginx gateway at **http://52.41.84.116:443/members/** (host port 18109,
-loopback only; the gateway is the public entry point).
+nginx gateway at **https://members.911transedu.net/members/** (also
+http://52.41.84.116:443/members/, which redirects to the HTTPS name;
+host port 18109, loopback only; the gateway is the public entry point).
 
 - Python 3 stdlib only: `http.server`, `sqlite3`, `hashlib.pbkdf2_hmac`,
   `urllib` (Stripe REST API + BTC rate quote). No pip installs.
@@ -25,10 +26,21 @@ loopback only; the gateway is the public entry point).
   receive address, and the owner confirms receipt in the roster to unlock.
   Receive address comes from the host env (`BTC_RECEIVE_ADDRESS`); while
   unset, Bitcoin shows as "not yet available".
-- **Cash App**: same manual pattern — a pending order shows the USD amount
-  and Taylor's cashtag `$taylorsprecher2026` (public receive handle;
-  override via `CASHAPP_CASHTAG`); the owner confirms receipt in the
-  roster to unlock. Manual orders (Bitcoin + Cash App) share one log.
+- **Cash App — the operative purchase path (2026-11-12)**: same manual
+  pattern — a pending order shows the USD amount and Taylor's cashtag
+  `$taylorsprecher2026` (public receive handle; override via
+  `CASHAPP_CASHTAG`); the owner confirms receipt in the roster to
+  unlock. Manual orders (Bitcoin + Cash App) share one log. Stripe is
+  NOT connected (no keys on the host), so card checkout — though wired
+  in code — is never presented as available while `STRIPE_SECRET_KEY`
+  is unset; every buyer-facing page names Cash App as the way to buy
+  and card checkout as "being switched on".
+- **Purchase pages** (`/members/buy/ccce`, `/members/buy/emspr`,
+  public): stable per-product buy pages showing the price, the
+  cashtag, the note guidance (put your account email in the Cash App
+  payment note), and the owner-confirmation unlock; signed-in members
+  get the order button on the page. The public training site's buy
+  buttons point at these URLs (2026-11-12 sales decision).
 - **Keys are environment-only** (host `/home/deploy/live-servers/.env`,
   passed through docker-compose): `STRIPE_SECRET_KEY`,
   `STRIPE_WEBHOOK_SECRET`, `BTC_RECEIVE_ADDRESS`. Never hardcoded, never
@@ -88,4 +100,9 @@ loopback only; the gateway is the public entry point).
   saves accounts but cannot be shared publicly). Taylor chose 2026-11-11
   to host this version on the AWS server for a public address, then moved
   payment on-site ("Take on that site itself and remove GoDaddy" — that
-  change applies to this member site only, not the public training site).
+  change applied to this member site only at the time). On 2026-11-12
+  Taylor extended the decision to ALL sales ("Sales on our own site —
+  buyers pay through members.911transedu.net, no GoDaddy links"): this
+  member site is now the sales channel for the CCCE course and EMSPR,
+  with Cash App as the operative payment path, and the public training
+  site's buy buttons repoint to the `/members/buy/<key>` pages here.

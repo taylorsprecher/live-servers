@@ -26,6 +26,16 @@ Payments (on-site; no GoDaddy in this app):
     Manual orders (Bitcoin + Cash App) share one log: order, member,
     product, amount, timestamp, confirmation.
 
+SALES DECISION (2026-11-12, Taylor: "Sales on our own site — buyers pay
+through members.911transedu.net"): sales run fully through THIS site.
+Stripe is NOT connected (no keys on the host), so the operative
+purchase path is the manual Cash App flow; the Stripe checkout stays
+wired in code but is never presented as available while
+STRIPE_SECRET_KEY is unset. Each product has a stable public buy page
+at /members/buy/<key> showing the price, the cashtag, the note
+guidance (the buyer's account email), and the owner-confirmation
+unlock — the public training site's buy buttons point at those pages.
+
 Content: full course files are served ONLY to signed-in members with
 access, from CONTENT_DIR on the volume — never a public URL.
 
@@ -588,6 +598,7 @@ def catalog_cards():
         out += (
             f'<div class="card"><strong>{esc(c["name"])}</strong><br>'
             f'<span class="small">{esc(c["price"])} USD — one-time payment</span><br>'
+            f'<a class="btn" href="{BASE}/buy/{c["key"]}">Buy — {esc(c["price"])}</a> '
             f'<a class="btn secondary" href="{BASE}/preview">Preview the course</a></div>'
         )
     return out
@@ -658,9 +669,11 @@ def home_page(message="", ok=False):
 {connection_step_html()}
 <h2>Courses</h2>
 {catalog_cards()}
-<p class="small">Payment is taken on this site (card, Google Pay, Apple Pay,
-Bitcoin, or Cash App). Card and wallet payments unlock automatically;
-Bitcoin and Cash App unlock when the owner confirms receipt.</p>
+<p class="small">Sold only on this site. Buy with Cash App: send the
+price to {esc(CASHAPP_CASHTAG)} and put your account email in the
+payment note — access unlocks once the owner confirms receipt. Card
+checkout is being switched on and is not live yet; Bitcoin is not yet
+available.</p>
 """
     return PAGE.format(title="Training Site — Members", body=body)
 
@@ -688,14 +701,117 @@ Appendix 1):</p>
 <tr><td><strong>Total</strong></td><td><strong>24</strong></td></tr>
 </table>
 <p class="small">This preview shows the outline only. The full course
-contents are released to member accounts after payment.</p></div>
+contents are released to member accounts after payment.</p>
+<p><a class="btn" href="{BASE}/buy/ccce">Buy the CCCE Course — $15</a></p></div>
 <div class="card"><h2>EMSPR Protocols</h2>
 <p><strong>Price: $6,000 USD</strong></p>
 <p>The EMSPR protocol set for EMS agencies and training programs.
-Full contents are released to member accounts after payment.</p></div>
+Full contents are released to member accounts after payment.</p>
+<p><a class="btn" href="{BASE}/buy/emspr">Buy EMSPR Protocols — $6,000</a></p></div>
+<div class="card"><h2>How to buy</h2>
+<p>Both products are sold only on this site, through Cash App:</p>
+<ol>
+<li>Create your free member account with your email.</li>
+<li>In Cash App, send the product price to
+<strong><code>{esc(CASHAPP_CASHTAG)}</code></strong>.</li>
+<li>Put <strong>your account email</strong> in the Cash App payment
+note — that is how your payment is matched to your account.</li>
+<li>Access unlocks as soon as the owner confirms receipt — your
+download then appears on your Member Desk.</li>
+</ol>
+<p class="small">Card checkout is being switched on and is not live
+yet — Cash App above is the way to buy today.</p></div>
 <p><a class="btn" href="{BASE}/">Sign in / Create account</a></p>
 """
     return PAGE.format(title="Course Preview", body=body)
+
+
+def buy_page(course, member=None, message="", ok=False):
+    """Stable public purchase page for one product: /members/buy/<key>.
+
+    Cash App is the operative way to buy (2026-11-12 sales decision;
+    Stripe is not connected). The page always shows the price, the
+    cashtag, the note guidance (the buyer's account email), and the
+    owner-confirmation unlock. Card checkout is named as not live yet
+    and is never offered as a working button here. Signed-in members
+    get the order button on this page; everyone else gets the
+    sign-in/create-account step first (their account email is the
+    identity the payment note must carry)."""
+    msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
+    amount = f"${course['cents'] / 100:,.2f}"
+    if member is not None and course["key"] in member_access(member["id"]):
+        action = (
+            "<p><strong>You already have access to this product.</strong></p>"
+            f'<p><a class="btn" href="{BASE}/content/{course["key"]}">'
+            "Download the full contents</a></p>"
+        )
+    elif member is not None:
+        with _lock:
+            pending = _db.execute(
+                "SELECT * FROM manual_orders WHERE member_id = ? AND "
+                "course_key = ? AND method = 'cashapp' AND status = 'pending' "
+                "ORDER BY created_at",
+                (member["id"], course["key"]),
+            ).fetchall()
+        if pending:
+            o = pending[-1]
+            action = (
+                f'<p>Your Cash App order #{o["id"]} is recorded: send '
+                f"<strong>{esc(o['amount_text'])}</strong> to "
+                f"<code>{esc(CASHAPP_CASHTAG)}</code> in Cash App with your "
+                "account email in the payment note. Access unlocks as soon "
+                "as the owner confirms receipt.</p>"
+            )
+        else:
+            action = (
+                f'<form method="post" action="{BASE}/cashapp/order">'
+                f'<input type="hidden" name="course_key" value="{course["key"]}">'
+                f'<button type="submit">Record my Cash App order — {amount}</button></form>'
+                '<p class="small">Record the order when you send the '
+                "payment — it is what the owner confirms against.</p>"
+            )
+    else:
+        action = (
+            f'<p><a class="btn" href="{BASE}/">Sign in / Create your free '
+            "account</a></p>"
+            '<p class="small">Your account comes first — the email on it '
+            "is what you put in the Cash App note, and it is the account "
+            "that receives the access.</p>"
+        )
+    per_person = (
+        "<p>Course access is <strong>$15 per person</strong> — each "
+        "buyer needs their own account and payment.</p>"
+        if course["key"] == "ccce"
+        else ""
+    )
+    body = f"""
+<h1>Buy — {esc(course["name"])}</h1>
+<p class="small">Taylor's Transgender Patient Awareness, LLC · sold only on this site</p>
+{msg}
+<div class="card"><h2>Price: {esc(course["price"])} USD</h2>
+<p>One-time payment. The files are released to your member account
+only — access unlocks here on this site.</p>
+{per_person}
+<h2>How to buy — Cash App</h2>
+<ol>
+<li>Create your member account (or sign in) with your email.</li>
+<li>In Cash App, send exactly <strong>{amount}</strong> to
+<strong><code>{esc(CASHAPP_CASHTAG)}</code></strong>.</li>
+<li>In the Cash App payment note, put
+<strong>your account email</strong> — that is how your payment is
+matched to your account.</li>
+<li>Access unlocks as soon as the owner confirms receipt. Your
+download then appears on your Member Desk.</li>
+</ol>
+{action}
+</div>
+<p class="small">Card checkout is being switched on and is not live
+yet — Cash App above is the way to buy today. Bitcoin is not yet
+available.</p>
+<p><a class="btn secondary" href="{BASE}/preview">Preview the courses</a>
+<a class="btn secondary" href="{BASE}/desk">Member Desk</a></p>
+"""
+    return PAGE.format(title=f"Buy — {course['short']}", body=body)
 
 
 def upload_page(member, message="", ok=False):
@@ -872,6 +988,23 @@ def desk_page(member, message="", ok=False):
                         "matched.<br>Access unlocks when the owner confirms "
                         "receipt.</p>"
                     )
+            # Cash App is the operative purchase path (2026-11-12 sales
+            # decision) and is presented first, as the primary action,
+            # with the full instructions inline: exact amount, cashtag,
+            # account email in the note, owner-confirmation unlock.
+            amount = f"${c['cents'] / 100:,.2f}"
+            parts.append(
+                '<p><strong>Buy with Cash App:</strong> send '
+                f"<strong>{amount}</strong> to "
+                f"<code>{esc(CASHAPP_CASHTAG)}</code> in Cash App and put "
+                "your account email in the payment note, then record "
+                "your order:</p>"
+                f'<form class="inline" method="post" action="{BASE}/cashapp/order">'
+                f'<input type="hidden" name="course_key" value="{c["key"]}">'
+                f'<button type="submit">Pay with Cash App — {amount}</button></form>'
+                '<p class="small">Access unlocks when the owner confirms '
+                "receipt.</p>"
+            )
             if BTC_RECEIVE_ADDRESS:
                 parts.append(
                     f'<form class="inline" method="post" action="{BASE}/bitcoin/order">'
@@ -880,30 +1013,27 @@ def desk_page(member, message="", ok=False):
                 )
             else:
                 parts.append('<p class="small">Bitcoin: not yet available.</p>')
-            parts.append(
-                f'<form class="inline" method="post" action="{BASE}/cashapp/order">'
-                f'<input type="hidden" name="course_key" value="{c["key"]}">'
-                f'<button class="secondary" type="submit">Pay with Cash App</button></form>'
-            )
-            btc_part = "".join(parts)
+            manual = "".join(parts)
             if STRIPE_SECRET_KEY:
-                buy = (
+                status = (
                     f'<form class="inline" method="post" action="{BASE}/checkout">'
                     f'<input type="hidden" name="course_key" value="{c["key"]}">'
-                    f'<button type="submit">Buy — {esc(c["price"])}</button></form> '
+                    f'<button type="submit">Buy by card — {esc(c["price"])}</button></form> '
+                    + manual
+                    + '<p class="small">Card, Google Pay and Apple Pay are '
+                    "accepted at checkout (Apple Card works as a card and "
+                    "via Apple Pay). Card access unlocks automatically when "
+                    "payment completes.</p>"
                 )
             else:
-                buy = (
-                    '<p class="small">Online card checkout is being switched '
-                    "on — check back shortly.</p>"
+                # Stripe is not connected: never present card checkout as
+                # a working option — Cash App above is the way to buy.
+                status = (
+                    manual
+                    + '<p class="small">Card checkout is being switched on '
+                    "and is not live yet — Cash App above is the way to "
+                    "buy today.</p>"
                 )
-            status = (
-                buy + btc_part
-                + '<p class="small">Card, Google Pay and Apple Pay are '
-                "accepted at checkout (Apple Card works as a card and via "
-                "Apple Pay). Access unlocks automatically when payment "
-                "completes.</p>"
-            )
         rows += (
             f'<div class="card"><strong>{esc(c["name"])}</strong><br>'
             f'<span class="small">{esc(c["price"])} USD</span><br>{status}</div>'
@@ -1117,6 +1247,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.wfile.write(data)
         if path == BASE + "/preview":
             return self.send_html(preview_page())
+        if path.startswith(BASE + "/buy/"):
+            course = COURSE_BY_KEY.get(path[len(BASE + "/buy/"):])
+            if course is None:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            member, _ = self.current_member()
+            return self.send_html(buy_page(course, member))
         if path == BASE + "/":
             member, _ = self.current_member()
             if member:
