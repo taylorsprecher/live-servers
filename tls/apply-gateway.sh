@@ -3,9 +3,11 @@
 # /members/ HTTP->HTTPS redirect). Recreates ONLY the gateway container
 # (deploy.sh's full rebuild + RAM gate is deliberately not used for a
 # config swap) and runs the full verification battery, including the
-# members-only redirect and proof the other services did not move.
+# members-only redirect, the per-subdomain HTTPS checks (2026-11-12),
+# and proof the other services did not move.
 set -u
 cd /home/deploy/live-servers
+source tls/lib.sh
 
 echo "=== CONFIG TEST (throwaway container) ==="
 docker run --rm \
@@ -61,6 +63,21 @@ C="$(curl -s --resolve members.911transedu.net:443:127.0.0.1 -o /dev/null -w '%{
 expect "https /members/health" "$C" "200"
 C="$(curl -s --resolve members.911transedu.net:443:127.0.0.1 -o /dev/null -w '%{http_code}' --max-time 10 https://members.911transedu.net/members/)"
 expect "https /members/ (no redirect loop)" "$C" "200"
+
+echo "=== HTTPS SERVICE SUBDOMAINS (loopback, full validation) ==="
+# A subdomain whose real Let's Encrypt cert is not installed yet (DNS
+# still propagating at rollout time) is reported PENDING, not failed;
+# once issued, the same check enforces a full-validation 200.
+for name in $(tls_new_names); do
+  fqdn="$(tls_fqdn "$name")"
+  dir="$(tls_certdir "$name")"
+  if [ -f "$dir/fullchain.pem" ] && openssl x509 -in "$dir/fullchain.pem" -noout -issuer 2>/dev/null | grep -q "Let's Encrypt"; then
+    C="$(curl -s --resolve "$fqdn:443:127.0.0.1" -o /dev/null -w '%{http_code}' --max-time 15 "https://$fqdn$(tls_health_path "$name")")"
+    expect "https $fqdn$(tls_health_path "$name")" "$C" "200"
+  else
+    echo "PENDING https $fqdn — no Let's Encrypt cert installed yet"
+  fi
+done
 
 echo "=== AUDITED APP (separate stack) ==="
 C="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:80/health)"

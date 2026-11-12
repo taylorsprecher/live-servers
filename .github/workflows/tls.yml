@@ -1,8 +1,12 @@
-name: TLS for members.911transedu.net
+name: TLS for 911transedu.net subdomains
 
-# Manually dispatched stages of the members HTTPS setup (see tls/README.md):
-#   setup - stage A: TLS plumbing + self-signed placeholder + renewal cron
-#   issue - stage B: Let's Encrypt issuance (TLS-ALPN-01) + gateway reload
+# Manually dispatched stages of the gateway HTTPS setup (see
+# tls/README.md). members came first (2026-11-11); the eight service
+# subdomains were added 2026-11-12 — same stages, now covering every
+# name in tls/lib.sh:
+#   setup - stage A: TLS plumbing + self-signed placeholders + renewal cron
+#   issue - stage B: Let's Encrypt issuance (TLS-ALPN-01, per subdomain)
+#           + gateway reload; safe to re-run (issued domains are skipped)
 #   apply - gateway-only refresh after config-only commits (e.g. redirect)
 #   renew - run the renewal check now (also runs weekly via host crontab)
 # All host work happens in tls/*.sh; full output lands in this run log.
