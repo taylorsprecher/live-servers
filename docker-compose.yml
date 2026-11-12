@@ -133,9 +133,15 @@ services:
       BASE_PATH: /members
       MEMBERS_DB_PATH: /data/members.db
       CONTENT_DIR: /data/content
-      PUBLIC_BASE_URL: http://52.41.84.116:443
+      # Checkout success/cancel return URLs are built from this base —
+      # it is the public HTTPS domain (Stripe returns buyers here).
+      PUBLIC_BASE_URL: https://members.911transedu.net
       # Payment keys live ONLY in the host .env (never in git). Empty =
-      # checkout disabled in the UI; the site runs normally.
+      # checkout disabled in the UI; the site runs normally. The
+      # members deploy workflow delivers the GitHub Actions secrets
+      # STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET into the host .env
+      # when they are configured (see services/member-site/
+      # STRIPE_GO_LIVE.md).
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       BTC_RECEIVE_ADDRESS: ${BTC_RECEIVE_ADDRESS:-}

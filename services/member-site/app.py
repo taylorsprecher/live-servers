@@ -36,6 +36,18 @@ at /members/buy/<key> showing the price, the cashtag, the note
 guidance (the buyer's account email), and the owner-confirmation
 unlock — the public training site's buy buttons point at those pages.
 
+STRIPE GO-LIVE PREP (2026-11-12, Taylor: "Add them via Stripe"):
+Google Pay and Apple Pay are added through the Stripe Checkout path
+above, alongside Cash App (which remains the no-fee option). The site
+side is ready: automatic payment methods, HTTPS return URLs on
+members.911transedu.net, wallet-named copy that renders only while
+STRIPE_SECRET_KEY is set, and a key-delivery step in the members
+deploy workflow that writes the GitHub Actions secrets
+STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET into the host .env (never
+committed, never logged). Until Taylor connects Stripe and those
+secrets exist, behavior is exactly as described above. The full
+checklist lives in STRIPE_GO_LIVE.md in this directory.
+
 Content: full course files are served ONLY to signed-in members with
 access, from CONTENT_DIR on the volume — never a public URL.
 
@@ -108,7 +120,9 @@ BASE = os.environ.get("BASE_PATH", "/members").rstrip("/")
 DB_PATH = os.environ.get("MEMBERS_DB_PATH", "/data/members.db")
 CONTENT_DIR = os.environ.get("CONTENT_DIR", "/data/content")
 PORT = int(os.environ.get("PORT", "8000"))
-PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "http://52.41.84.116:443").rstrip("/")
+PUBLIC_BASE_URL = os.environ.get(
+    "PUBLIC_BASE_URL", "https://members.911transedu.net"
+).rstrip("/")
 OWNER_EMAIL = "taylorsprecher@gmail.com"
 SESSION_DAYS = 30
 PBKDF2_ROUNDS = 200_000
@@ -651,6 +665,18 @@ accessories</td></tr>
 
 def home_page(message="", ok=False):
     msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
+    if STRIPE_SECRET_KEY:
+        pay_note = (
+            "Or pay by card, Google Pay or Apple Pay at checkout — "
+            "card access unlocks automatically when payment completes."
+        )
+        if not BTC_RECEIVE_ADDRESS:
+            pay_note += " Bitcoin is not yet available."
+    else:
+        pay_note = (
+            "Card checkout is being switched on and is not live yet; "
+            "Bitcoin is not yet available."
+        )
     body = f"""
 <h1>Training Site — Member Sign-In</h1>
 <p class="small">Taylor's Transgender Patient Awareness, LLC · 911transedu.net</p>
@@ -671,14 +697,24 @@ def home_page(message="", ok=False):
 {catalog_cards()}
 <p class="small">Sold only on this site. Buy with Cash App: send the
 price to {esc(CASHAPP_CASHTAG)} and put your account email in the
-payment note — access unlocks once the owner confirms receipt. Card
-checkout is being switched on and is not live yet; Bitcoin is not yet
-available.</p>
+payment note — access unlocks once the owner confirms receipt.
+{pay_note}</p>
 """
     return PAGE.format(title="Training Site — Members", body=body)
 
 
 def preview_page():
+    if STRIPE_SECRET_KEY:
+        card_line = (
+            "You can also pay by card, Google Pay or Apple Pay on each "
+            "product's buy page — card access unlocks automatically "
+            "when payment completes."
+        )
+    else:
+        card_line = (
+            "Card checkout is being switched on and is not live yet — "
+            "Cash App above is the way to buy today."
+        )
     body = f"""
 <h1>Course Preview</h1>
 <p class="small">Taylor's Transgender Patient Awareness, LLC</p>
@@ -719,8 +755,7 @@ note — that is how your payment is matched to your account.</li>
 <li>Access unlocks as soon as the owner confirms receipt — your
 download then appears on your Member Desk.</li>
 </ol>
-<p class="small">Card checkout is being switched on and is not live
-yet — Cash App above is the way to buy today.</p></div>
+<p class="small">{card_line}</p></div>
 <p><a class="btn" href="{BASE}/">Sign in / Create account</a></p>
 """
     return PAGE.format(title="Course Preview", body=body)
@@ -730,13 +765,17 @@ def buy_page(course, member=None, message="", ok=False):
     """Stable public purchase page for one product: /members/buy/<key>.
 
     Cash App is the operative way to buy (2026-11-12 sales decision;
-    Stripe is not connected). The page always shows the price, the
-    cashtag, the note guidance (the buyer's account email), and the
-    owner-confirmation unlock. Card checkout is named as not live yet
-    and is never offered as a working button here. Signed-in members
-    get the order button on this page; everyone else gets the
-    sign-in/create-account step first (their account email is the
-    identity the payment note must carry)."""
+    Stripe was not yet connected). The page always shows the price,
+    the cashtag, the note guidance (the buyer's account email), and
+    the owner-confirmation unlock. While STRIPE_SECRET_KEY is unset,
+    card checkout is named as not live yet and is never offered as a
+    working button here; once the key exists (Taylor, 2026-11-12:
+    "Add them via Stripe"), the page also presents paying by card,
+    Google Pay or Apple Pay via Stripe Checkout, with Cash App
+    remaining the alternative. Signed-in members get the order button
+    on this page; everyone else gets the sign-in/create-account step
+    first (their account email is the identity the payment note must
+    carry)."""
     msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
     amount = f"${course['cents'] / 100:,.2f}"
     if member is not None and course["key"] in member_access(member["id"]):
@@ -784,6 +823,46 @@ def buy_page(course, member=None, message="", ok=False):
         if course["key"] == "ccce"
         else ""
     )
+    # Card / wallet option (Taylor, 2026-11-12: "Add them via Stripe").
+    # While STRIPE_SECRET_KEY is unset the note stays exactly as before
+    # — card is never presented as live and Cash App is the way to buy.
+    # When the key exists, the page presents paying by card, Google Pay
+    # or Apple Pay via Stripe Checkout, with Cash App remaining the
+    # alternative above; signed-in members without access get the
+    # checkout button itself.
+    btc_note = (
+        "" if BTC_RECEIVE_ADDRESS
+        else " Bitcoin is not yet available."
+    )
+    if not STRIPE_SECRET_KEY:
+        card_note = (
+            '<p class="small">Card checkout is being switched on and is '
+            "not live yet — Cash App above is the way to buy today."
+            f"{btc_note}</p>"
+        )
+    elif member is not None and course["key"] in member_access(member["id"]):
+        card_note = f'<p class="small">{esc(btc_note.strip())}</p>' if btc_note else ""
+    elif member is not None:
+        card_note = (
+            "<h2>Or pay by card, Google Pay or Apple Pay</h2>"
+            "<p>Pay through Stripe Checkout — card, Google Pay and "
+            "Apple Pay are accepted (Apple Card works as a card and via "
+            "Apple Pay). Access unlocks automatically as soon as "
+            "payment completes.</p>"
+            f'<form method="post" action="{BASE}/checkout">'
+            f'<input type="hidden" name="course_key" value="{course["key"]}">'
+            f'<button type="submit">Pay by card / Google Pay / Apple Pay '
+            f"— {amount}</button></form>"
+        )
+        if btc_note:
+            card_note += f'<p class="small">{esc(btc_note.strip())}</p>'
+    else:
+        card_note = (
+            '<p class="small">You can also pay by card, Google Pay or '
+            "Apple Pay at Stripe Checkout once you sign in — card "
+            "access unlocks automatically when payment completes."
+            f"{btc_note}</p>"
+        )
     body = f"""
 <h1>Buy — {esc(course["name"])}</h1>
 <p class="small">Taylor's Transgender Patient Awareness, LLC · sold only on this site</p>
@@ -805,9 +884,7 @@ download then appears on your Member Desk.</li>
 </ol>
 {action}
 </div>
-<p class="small">Card checkout is being switched on and is not live
-yet — Cash App above is the way to buy today. Bitcoin is not yet
-available.</p>
+{card_note}
 <p><a class="btn secondary" href="{BASE}/preview">Preview the courses</a>
 <a class="btn secondary" href="{BASE}/desk">Member Desk</a></p>
 """
@@ -1145,6 +1222,17 @@ member. Only you can see other members' uploads.</p>
             '<span class="small">Unlocks with the CCCE course.</span></div>'
         )
 
+    if STRIPE_SECRET_KEY:
+        card_li = (
+            "<li>your card checkout completes — access unlocks "
+            "automatically when payment completes, or</li>"
+        )
+    else:
+        card_li = (
+            "<li>your card checkout completes (card checkout is being "
+            "switched on — not live yet), or</li>"
+        )
+
     body = f"""
 <h1>Member Desk</h1>
 {msg}
@@ -1157,8 +1245,7 @@ member. Only you can see other members' uploads.</p>
 <p>Your account gets access — it becomes <strong>entitled</strong> — when:</p>
 <ul>
 <li>your Cash App payment is confirmed by the owner, or</li>
-<li>your card checkout completes (card checkout is being switched on —
-not live yet), or</li>
+{card_li}
 <li>the owner grants your account access from the roster (for example,
 teach-back access for departments, or past buyers honored).</li>
 </ul>
