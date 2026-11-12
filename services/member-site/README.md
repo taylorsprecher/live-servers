@@ -31,7 +31,7 @@ host port 18109, loopback only; the gateway is the public entry point).
   unset, Bitcoin shows as "not yet available".
 - **Cash App — the operative purchase path (2026-11-12)**: same manual
   pattern — a pending order shows the USD amount and Taylor's cashtag
-  `$taylorsprecher2026` (public receive handle; override via
+  `$taylorsprecher` (public receive handle; override via
   `CASHAPP_CASHTAG`); the owner confirms receipt in the roster to
   unlock. Manual orders (Bitcoin + Cash App) share one log. Stripe is
   NOT connected (no keys on the host), so card checkout — though wired

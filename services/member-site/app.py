@@ -21,7 +21,7 @@ Payments (on-site; no GoDaddy in this app):
     While the address is unset, Bitcoin shows as "not yet available".
   * Cash App (same manual pattern as Bitcoin): the app creates a PENDING
     order showing the USD amount and Taylor's cashtag (CASHAPP_CASHTAG,
-    default $taylorsprecher2026 — a public receive handle). The owner
+    default $taylorsprecher — a public receive handle). The owner
     confirms receipt in the roster; confirmation unlocks the product.
     Manual orders (Bitcoin + Cash App) share one log: order, member,
     product, amount, timestamp, confirmation.
@@ -130,7 +130,7 @@ PBKDF2_ROUNDS = 200_000
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 BTC_RECEIVE_ADDRESS = os.environ.get("BTC_RECEIVE_ADDRESS", "")
-CASHAPP_CASHTAG = os.environ.get("CASHAPP_CASHTAG") or "$taylorsprecher2026"
+CASHAPP_CASHTAG = os.environ.get("CASHAPP_CASHTAG") or "$taylorsprecher"
 BTC_RATE_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
 BTC_RATE_SOURCE = "CoinGecko (api.coingecko.com simple/price, USD)"
 MAX_UPLOAD_BYTES = 100 * 1024 * 1024  # 100 MB cap on course-file uploads
