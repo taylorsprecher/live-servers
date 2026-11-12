@@ -1,10 +1,11 @@
 name: Set Cash App cashtag in host .env (one-off)
 
 # One-off, manually dispatched. Copies ops/set-cashapp-cashtag.sh to
-# the host and runs it, setting CASHAPP_CASHTAG=$taylorsprecher in
-# /home/deploy/live-servers/.env so course payments go to Taylor's
-# Business Cash App account (Taylor, 2026-11-12: "Switch course
-# payments to $taylorsprecher (Business)"). Run the members deploy
+# the host and runs it, setting CASHAPP_CASHTAG=$taylorsprecher2026 in
+# /home/deploy/live-servers/.env so course payments go back to the
+# account that carries Taylor's Bitcoin features (Taylor, 2026-11-12:
+# "Move course payments back to $taylorsprecher2026", reversing the
+# same-day switch to the Business account). Run the members deploy
 # afterwards to recreate the members container with the new env.
 
 on:

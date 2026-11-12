@@ -2,12 +2,13 @@ name: Verify Cash App cashtag on live pages (one-off)
 
 # One-off, manually dispatched, read-only. Curls the public member-site
 # pages from the runner (no crawl cache) and reports, per page: HTTP
-# status, occurrences of the NEW payment cashtag ($taylorsprecher, not
-# followed by another digit/letter), and occurrences of the OLD one
-# ($taylorsprecher2026). Fails if any page is not 200, any page still
-# shows the old cashtag, or a buy/home/preview page lacks the new one.
-# Verifies the 2026-11-12 retarget: "Switch course payments to
-# $taylorsprecher (Business)".
+# status, occurrences of the payment cashtag ($taylorsprecher2026), and
+# occurrences of any bare $taylorsprecher left after stripping the 2026
+# form. Fails if any page is not 200, any page still shows a bare
+# Business cashtag, or a buy/home/preview page lacks the 2026 cashtag.
+# Verifies the 2026-11-12 reversal: "Move course payments back to
+# $taylorsprecher2026" (the Bitcoin features, including the 50%
+# Receive-as-Bitcoin auto-convert, exist only on that account).
 
 on:
   workflow_dispatch:
@@ -24,11 +25,11 @@ jobs:
             url="$1"; want_cashtag="$2"
             body="$(mktemp)"
             code="$(curl -s -o "${body}" -w '%{http_code}' "${url}")"
-            old="$(grep -o 'taylorsprecher2026' "${body}" | wc -l)"
-            new="$(grep -oE '\$taylorsprecher([^0-9A-Za-z]|$)' "${body}" | wc -l)"
-            echo "${url} -> HTTP ${code}, new_cashtag=${new}, old_cashtag=${old}"
+            new="$(grep -o 'taylorsprecher2026' "${body}" | wc -l)"
+            bare="$(sed 's/taylorsprecher2026//g' "${body}" | grep -o 'taylorsprecher' | wc -l)"
+            echo "${url} -> HTTP ${code}, cashtag_2026=${new}, bare_business=${bare}"
             [ "${code}" = "200" ] || fail=1
-            [ "${old}" = "0" ] || fail=1
+            [ "${bare}" = "0" ] || fail=1
             if [ "${want_cashtag}" = "yes" ] && [ "${new}" -lt 1 ]; then fail=1; fi
             rm -f "${body}"
           }
@@ -41,4 +42,4 @@ jobs:
             echo "VERDICT: FAIL"
             exit 1
           fi
-          echo "VERDICT: OK — all pages 200, new cashtag present where expected, old cashtag absent everywhere."
+          echo "VERDICT: OK — all pages 200, $taylorsprecher2026 present where expected, no bare $taylorsprecher anywhere."
