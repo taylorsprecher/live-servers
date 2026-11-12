@@ -1,0 +1,53 @@
+name: Deploy syncflow service only
+
+# Targeted deploy: rsync the repo (same as deploy.yml), then build and
+# recreate ONLY the syncflow service on the host and force-recreate
+# the gateway so it loads the /syncflow route from
+# locations-common.conf. Used instead of the full deploy.sh so
+# deploy.sh's RAM gate is not in play for a one-service change; see
+# ops/deploy-syncflow.sh for the reasoning. TLS config, DNS, all other
+# routes and services are untouched. A final step runs the service's
+# end-to-end test against the public gateway.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-syncflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync repo to host
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'secrets/' \
+            --exclude 'tls-state/' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Build + up syncflow only on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/ops/deploy-syncflow.sh'
+
+      - name: End-to-end sync test through the public gateway
+        run: |
+          sleep 5
+          python3 services/syncflow/e2e_test.py "http://52.41.84.116:443/syncflow"

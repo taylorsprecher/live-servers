@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SyncFlow — Backend–Frontend Sync Flow</title>
+<style>
+  :root {
+    --bg: #0b1220; --panel: #111a2e; --panel2: #0e1626; --line: #1e2a44;
+    --text: #e6edf3; --dim: #8b98b8; --accent: #4f8cff; --green: #3fb96f;
+    --red: #e5534b; --orange: #d29922; --purple: #a371f7;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 1.2rem 1rem 2.5rem; }
+  h1 { font-size: 1.5rem; margin: 0 0 .25rem; }
+  .sub { color: var(--dim); margin: 0 0 1rem; font-size: .95rem; }
+  /* Spec flow diagram header: the four columns of the diagram */
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: .45rem; margin-bottom: 1.2rem; }
+  .flow .step { flex: 1 1 150px; background: var(--panel); border: 1px solid var(--line);
+                border-radius: 10px; padding: .55rem .7rem; }
+  .flow .step b { display: block; font-size: .92rem; }
+  .flow .step span { color: var(--dim); font-size: .78rem; }
+  .flow .arrow { align-self: center; color: var(--accent); font-size: 1.15rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 1rem; }
+  .panel h2 { font-size: 1.05rem; margin: 0 0 .3rem; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .panel .hint { color: var(--dim); font-size: .82rem; margin: 0 0 .8rem; }
+  .ver { background: var(--accent); color: #fff; border-radius: 999px; padding: .05rem .55rem; font-size: .78rem; }
+  .stale { background: var(--orange); color: #161006; }
+  label { display: block; font-size: .78rem; color: var(--dim); margin: .6rem 0 .2rem; }
+  input[type="text"], textarea { width: 100%; background: var(--panel2); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: .5rem .6rem; font-size: .95rem; }
+  textarea { resize: vertical; min-height: 3.2em; }
+  .row { display: flex; gap: .5rem; margin-top: .9rem; flex-wrap: wrap; }
+  button { background: var(--accent); color: #fff; border: 0; border-radius: 8px;
+           padding: .55rem 1rem; font-size: .92rem; cursor: pointer; }
+  button.secondary { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  button.danger { background: var(--red); }
+  button:disabled { opacity: .55; cursor: default; }
+  .status { margin-top: .7rem; font-size: .85rem; min-height: 1.2em; color: var(--dim); }
+  .status.ok { color: var(--green); }
+  .status.err { color: var(--red); }
+  .status.working { color: var(--orange); }
+  .delta { margin-top: .5rem; font-size: .83rem; background: var(--panel2); border: 1px solid var(--line);
+           border-radius: 8px; padding: .5rem .6rem; display: none; }
+  .delta code { color: var(--purple); }
+  #resolver { display: none; border-color: var(--red); }
+  #resolver h2 { color: var(--red); }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; margin-top: .5rem; }
+  th, td { border: 1px solid var(--line); padding: .4rem .5rem; text-align: left; vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; }
+  .events { list-style: none; margin: 0; padding: 0; max-height: 340px; overflow-y: auto; font-size: .86rem; }
+  .events li { border-bottom: 1px solid var(--line); padding: .45rem .2rem; display: flex; gap: .55rem; align-items: baseline; flex-wrap: wrap; }
+  .badge { border-radius: 6px; padding: .05rem .45rem; font-size: .74rem; font-weight: 700; color: #fff; white-space: nowrap; }
+  .b-updated { background: var(--green); } .b-delta { background: var(--purple); } .b-conflict { background: var(--red); }
+  .events .meta { color: var(--dim); font-size: .78rem; }
+  .events .empty { color: var(--dim); border: 0; }
+  .deltas { font-size: .85rem; }
+  .deltas .item { border-bottom: 1px solid var(--line); padding: .45rem .2rem; }
+  .deltas code { color: var(--purple); }
+  .foot { margin-top: 1.2rem; color: var(--dim); font-size: .82rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>SyncFlow</h1>
+  <p class="sub">The Backend–Frontend Sync Flow, running live: optimistic updates, versioned deltas, and 409 conflict resolution between two devices editing one profile.</p>
+
+  <div class="flow" aria-label="Sync flow diagram">
+    <div class="step"><b>Frontend Client</b><span>Profile Screen · Optimistic Update · Conflict Resolver · Event Listener</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>API Gateway</b><span>Fetch Latest Profile · Update Profile (base version)</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Sync &amp; Conflict Handling</b><span>Match → compute &amp; store delta · Mismatch → 409 Conflict</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Client Updates · Event Bus</b><span>Apply Delta · Show Conflict Resolver · Refresh Profile · PROFILE_UPDATED events</span></div>
+  </div>
+
+  <div class="grid">
+    <section class="panel" id="device-a">
+      <h2>📱 Device A — Phone <span class="ver">v?</span></h2>
+      <p class="hint">Profile Screen. Edits save optimistically: the panel updates first, then the gateway confirms.</p>
+      <div class="fields"></div>
+      <div class="row">
+        <button class="save">Save changes</button>
+        <button class="secondary refresh">Refresh profile</button>
+      </div>
+      <div class="status"></div>
+      <div class="delta"></div>
+    </section>
+
+    <section class="panel" id="device-b">
+      <h2>💻 Device B — Laptop <span class="ver">v?</span></h2>
+      <p class="hint">A second device with its own copy of the profile and its own base version. Save here first, then save a stale edit on Device A to produce a real 409 conflict.</p>
+      <div class="fields"></div>
+      <div class="row">
+        <button class="save">Save changes</button>
+        <button class="secondary refresh">Refresh profile</button>
+      </div>
+      <div class="status"></div>
+      <div class="delta"></div>
+    </section>
+
+    <section class="panel" id="resolver">
+      <h2>⚠️ Conflict Resolver</h2>
+      <p class="hint" id="resolver-note"></p>
+      <table>
+        <thead><tr><th>Field</th><th>Server value</th><th>Your value</th></tr></thead>
+        <tbody id="resolver-body"></tbody>
+      </table>
+      <div class="row">
+        <button id="keep-mine">Keep mine</button>
+        <button class="secondary" id="use-server">Use server</button>
+      </div>
+      <div class="status" id="resolver-status"></div>
+    </section>
+
+    <section class="panel">
+      <h2>📡 Event Stream <span style="color:var(--dim);font-size:.8rem;font-weight:400">— the Event Listener, live</span></h2>
+      <p class="hint">Events emitted by the Event Bus as they happen: DELTA_CREATED, PROFILE_UPDATED, CONFLICT_DETECTED.</p>
+      <ul class="events" id="events"><li class="empty">Listening…</li></ul>
+    </section>
+
+    <section class="panel">
+      <h2>🧾 Stored Deltas</h2>
+      <p class="hint">Every delta the sync engine computed and stored, oldest first.</p>
+      <div class="deltas" id="deltas"><span style="color:var(--dim)">None yet.</span></div>
+    </section>
+  </div>
+
+  <p class="foot">Demo data only — one invented demo profile. <button class="secondary" id="reset">Reset demo</button> restores the profile at version 1 and clears the delta history and event stream.</p>
+</div>
+
+<script>
+const BASE = "__BASE_PATH__";
+const FIELDS = [
+  ["name", "Name", false],
+  ["display_name", "Display name", false],
+  ["bio", "Bio", true],
+  ["location", "Location", false],
+  ["timezone", "Timezone", false],
+];
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+class Device {
+  constructor(id) {
+    this.root = document.getElementById(id);
+    this.synced = null;      // last server-agreed profile copy
+    this.baseVersion = null; // version that copy was fetched/saved at
+    this.fieldsEl = this.root.querySelector(".fields");
+    this.verEl = this.root.querySelector(".ver");
+    this.statusEl = this.root.querySelector(".status");
+    this.deltaEl = this.root.querySelector(".delta");
+    this.inputs = {};
+    for (const [field, label, area] of FIELDS) {
+      const lab = document.createElement("label");
+      lab.textContent = label;
+      const input = document.createElement(area ? "textarea" : "input");
+      if (!area) input.type = "text";
+      input.dataset.field = field;
+      this.fieldsEl.append(lab, input);
+      this.inputs[field] = input;
+    }
+    this.root.querySelector(".save").addEventListener("click", () => this.save());
+    this.root.querySelector(".refresh").addEventListener("click", () => this.refresh(true));
+  }
+  setStatus(text, cls) { this.statusEl.textContent = text; this.statusEl.className = "status " + (cls || ""); }
+  showProfile(profile, version) {
+    this.synced = { ...profile };
+    this.baseVersion = version;
+    for (const [field] of FIELDS) this.inputs[field].value = profile[field] ?? "";
+    this.verEl.textContent = "v" + version;
+    this.verEl.classList.remove("stale");
+  }
+  currentInputs() {
+    const out = {};
+    for (const [field] of FIELDS) out[field] = this.inputs[field].value;
+    return out;
+  }
+  pendingChanges() {
+    const mine = this.currentInputs(), out = {};
+    for (const [field] of FIELDS) if (mine[field] !== (this.synced[field] ?? "")) out[field] = mine[field];
+    return out;
+  }
+  async refresh(manual) {
+    try {
+      const r = await fetch(BASE + "/api/profile");
+      const data = await r.json();
+      this.showProfile(data.profile, data.version);
+      if (manual) this.setStatus("Refreshed — now showing server v" + data.version + ".", "ok");
+    } catch { this.setStatus("Could not reach the gateway.", "err"); }
+  }
+  async save() {
+    const changes = this.pendingChanges();
+    if (!Object.keys(changes).length) { this.setStatus("No changes to save.", ""); return; }
+    await submitUpdate(this, this.baseVersion, changes);
+  }
+}
+
+const deviceA = new Device("device-a");
+const deviceB = new Device("device-b");
+let conflict = null; // {device, serverProfile, serverVersion}
+
+async function submitUpdate(device, baseVersion, changes) {
+  // Optimistic update: the panel already shows the edits; mark the save
+  // in flight before the gateway answers.
+  device.setStatus("Optimistic update applied — syncing with the gateway…", "working");
+  device.deltaEl.style.display = "none";
+  let r, data;
+  try {
+    r = await fetch(BASE + "/api/profile/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ base_version: baseVersion, changes }),
+    });
+    data = await r.json();
+  } catch { device.setStatus("Could not reach the gateway.", "err"); return; }
+
+  if (r.status === 200) {
+    device.showProfile(data.profile, data.version);
+    const parts = Object.entries(data.delta || {}).map(([f, d]) => `<code>${esc(f)}</code>: ${esc(d.from)} → ${esc(d.to)}`);
+    if (parts.length) {
+      device.deltaEl.innerHTML = "Delta stored (confirmed v" + data.version + "):<br>" + parts.join("<br>");
+      device.deltaEl.style.display = "block";
+    }
+    device.setStatus("Saved — server confirmed v" + data.version + ".", "ok");
+    if (conflict && conflict.device === device) hideResolver();
+    pollEvents(); pollDeltas();
+  } else if (r.status === 409) {
+    device.verEl.textContent = "v" + device.baseVersion + " (stale)";
+    device.verEl.classList.add("stale");
+    device.setStatus("Conflict — the server is at v" + data.server_version + ". Resolve below.", "err");
+    showResolver(device, data);
+    pollEvents();
+  } else {
+    device.setStatus("Gateway error: " + (data.error || r.status), "err");
+  }
+}
+
+function showResolver(device, data) {
+  conflict = { device, serverProfile: data.server_profile, serverVersion: data.server_version };
+  const mine = device.currentInputs();
+  document.getElementById("resolver-note").textContent =
+    "Your base was v" + data.your_base_version + " but the server moved to v" + data.server_version +
+    ". Fields where your copy differs from the server:";
+  const tbody = document.getElementById("resolver-body");
+  tbody.innerHTML = "";
+  let rows = 0;
+  for (const [field, label] of FIELDS) {
+    if (mine[field] !== data.server_profile[field]) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${esc(label)}</td><td>${esc(data.server_profile[field])}</td><td>${esc(mine[field])}</td>`;
+      tbody.append(tr); rows++;
+    }
+  }
+  if (!rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td colspan='3'>Values match — only the version moved.</td>";
+    tbody.append(tr);
+  }
+  document.getElementById("resolver-status").textContent = "";
+  document.getElementById("resolver").style.display = "block";
+  document.getElementById("resolver").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+function hideResolver() {
+  conflict = null;
+  document.getElementById("resolver").style.display = "none";
+}
+document.getElementById("keep-mine").addEventListener("click", async () => {
+  if (!conflict) return;
+  const { device, serverProfile, serverVersion } = conflict;
+  const mine = device.currentInputs(), changes = {};
+  for (const [field] of FIELDS) if (mine[field] !== serverProfile[field]) changes[field] = mine[field];
+  hideResolver();
+  await submitUpdate(device, serverVersion, changes);
+});
+document.getElementById("use-server").addEventListener("click", () => {
+  if (!conflict) return;
+  const { device, serverProfile, serverVersion } = conflict;
+  device.showProfile(serverProfile, serverVersion);
+  device.setStatus("Discarded your edits — refreshed from server v" + serverVersion + ".", "ok");
+  device.deltaEl.style.display = "none";
+  hideResolver();
+});
+
+const EVENT_BADGE = { PROFILE_UPDATED: "b-updated", DELTA_CREATED: "b-delta", CONFLICT_DETECTED: "b-conflict" };
+async function pollEvents() {
+  try {
+    const r = await fetch(BASE + "/api/events");
+    const data = await r.json();
+    const ul = document.getElementById("events");
+    if (!data.events.length) { ul.innerHTML = '<li class="empty">No events yet — save an edit to emit one.</li>'; return; }
+    ul.innerHTML = data.events.map(e => {
+      let detail = "";
+      if (e.detail && e.detail.fields) detail = " · fields: " + e.detail.fields.join(", ");
+      if (e.type === "CONFLICT_DETECTED" && e.detail) detail = " · stale base v" + e.detail.your_base_version;
+      return `<li><span class="badge ${EVENT_BADGE[e.type] || ""}">${esc(e.type)}</span>` +
+             `<span>#${e.seq} · v${e.version}${esc(detail)}</span>` +
+             `<span class="meta">${esc(e.timestamp.replace("T", " ").replace("Z", " UTC"))}</span></li>`;
+    }).join("");
+    ul.scrollTop = ul.scrollHeight;
+  } catch { /* gateway unreachable; keep last render */ }
+}
+async function pollDeltas() {
+  try {
+    const r = await fetch(BASE + "/api/deltas");
+    const data = await r.json();
+    const box = document.getElementById("deltas");
+    if (!data.deltas.length) { box.innerHTML = '<span style="color:var(--dim)">None yet.</span>'; return; }
+    box.innerHTML = data.deltas.map(d =>
+      `<div class="item"><b>v${d.from_version} → v${d.to_version}</b> · ` +
+      Object.entries(d.changes).map(([f, c]) => `<code>${esc(f)}</code>: ${esc(c.from)} → ${esc(c.to)}`).join("; ") +
+      `</div>`).join("");
+  } catch { /* keep last render */ }
+}
+
+document.getElementById("reset").addEventListener("click", async () => {
+  await fetch(BASE + "/api/reset", { method: "POST" });
+  hideResolver();
+  await deviceA.refresh(false); await deviceB.refresh(false);
+  deviceA.setStatus("Demo reset — profile restored at v1.", "ok");
+  deviceB.setStatus("Demo reset — profile restored at v1.", "ok");
+  deviceA.deltaEl.style.display = "none"; deviceB.deltaEl.style.display = "none";
+  pollEvents(); pollDeltas();
+});
+
+deviceA.refresh(false); deviceB.refresh(false);
+pollEvents(); pollDeltas();
+setInterval(pollEvents, 2000);
+setInterval(pollDeltas, 2000);
+</script>
+</body>
+</html>

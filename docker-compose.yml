@@ -173,6 +173,20 @@ services:
     ports:
       - "127.0.0.1:18111:8000"
 
+  syncflow:
+    build:
+      context: ./services/syncflow
+    container_name: live-syncflow
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      BASE_PATH: /syncflow
+      SYNCFLOW_DATA_DIR: /data
+    volumes:
+      - syncflow-data:/data
+    ports:
+      - "127.0.0.1:18112:8000"
+
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -199,9 +213,11 @@ services:
       - members
       - specmatrix
       - portal
+      - syncflow
 
 volumes:
   maclan-data:
   xsave-data:
   celltower-data:
   members-data:
+  syncflow-data:
