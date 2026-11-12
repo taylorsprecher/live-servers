@@ -13,7 +13,12 @@ On load the pages probe the eight live-server subdomains client-side
 manual Refresh Status button. The company routes were added 2026-11-12
 at Taylor's direction ("Per company routes"); each carries the company
 name and public platform links only — no individual names, emails, or
-phone numbers.
+phone numbers. A company page also carries an optional per-company
+Teachbacks block (COMPANY_TEACHBACK_SECTIONS below, substituted for
+__TEACHBACK_SECTION__ in the template); only Hillsboro has one, for the
+Hillsboro Fire Teach-Back on the training site (added 2026-11-12 at
+Taylor's direction, completing the "Add ALL Teachback" pass and the
+company separation).
 
 Stateless: nothing is stored; the probes run in the visitor's browser.
 """
@@ -35,9 +40,31 @@ COMPANIES = {
     "oha": "OHA EMS",
 }
 
+_TRAINING_SITE = (
+    "https://muse.ai/s/911transedu-net-website-xkk6xaxm0ib1ak/"
+    "-hQ_ySKdwECtNsqmEyusrdqJDfrhiRX9-5oxqk2dnI4"
+)
+
+# slug -> optional Teachbacks block (HTML, no trailing newline; empty for
+# companies with no company-specific teachback on record). Substituted
+# for __TEACHBACK_SECTION__ in company.html, followed by a newline.
+COMPANY_TEACHBACK_SECTIONS = {
+    "hillsboro": (
+        '    <h2>Teachbacks</h2>\n'
+        '    <div class="grid">\n'
+        f'      <a class="card" href="{_TRAINING_SITE}#hillsboro-fire-teachback">'
+        '<div class="card-top"><span>Hillsboro Fire Teach-Back</span></div>'
+        '<span class="tag">This company&rsquo;s own teach-back — the 2019 '
+        'Hillsboro Fire training session and delivery record</span></a>\n'
+        '    </div>\n'
+    ),
+}
+
 
 def _company_page(slug):
-    return _COMPANY_TEMPLATE.replace("__COMPANY_NAME__", COMPANIES[slug]).encode()
+    page = _COMPANY_TEMPLATE.replace("__COMPANY_NAME__", COMPANIES[slug])
+    section = COMPANY_TEACHBACK_SECTIONS.get(slug, "")
+    return page.replace("__TEACHBACK_SECTION__", section).encode()
 
 
 class Handler(BaseHTTPRequestHandler):
