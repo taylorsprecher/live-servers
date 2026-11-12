@@ -162,6 +162,17 @@ services:
     ports:
       - "127.0.0.1:18110:8000"
 
+  portal:
+    build:
+      context: ./services/portal
+    container_name: live-portal
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      BASE_PATH: /portal
+    ports:
+      - "127.0.0.1:18111:8000"
+
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -187,6 +198,7 @@ services:
       - cport
       - members
       - specmatrix
+      - portal
 
 volumes:
   maclan-data:
