@@ -1,0 +1,36 @@
+name: Set Cash App cashtag in host .env (one-off)
+
+# One-off, manually dispatched. Copies ops/set-cashapp-cashtag.sh to
+# the host and runs it, setting CASHAPP_CASHTAG=$taylorsprecher in
+# /home/deploy/live-servers/.env so course payments go to Taylor's
+# Business Cash App account (Taylor, 2026-11-12: "Switch course
+# payments to $taylorsprecher (Business)"). Run the members deploy
+# afterwards to recreate the members container with the new env.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  set-cashapp-cashtag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy cashtag script to host
+        run: |
+          scp -i ~/.ssh/id_deploy ops/set-cashapp-cashtag.sh \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/set-cashapp-cashtag.sh"
+
+      - name: Run cashtag script on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/set-cashapp-cashtag.sh'
