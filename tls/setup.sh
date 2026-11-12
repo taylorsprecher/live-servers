@@ -93,7 +93,10 @@ check() {
 }
 FAIL=0
 echo "=== CHECKS ==="
-check http-members-health  http://127.0.0.1:443/members/health   200 || FAIL=1
+# Plain-HTTP /members/ has REDIRECTED to HTTPS since the members cert
+# went live (2026-11-11, Taylor's members-only rule) — 301 is the
+# correct answer here; the HTTPS check below proves the target works.
+check http-members-health  http://127.0.0.1:443/members/health   301 || FAIL=1
 check http-specmatrix     http://127.0.0.1:443/specmatrix/health 200 || FAIL=1
 check http-maclan         http://127.0.0.1:443/maclan/health     200 || FAIL=1
 # HTTPS via SNI on loopback; -k because this stage may still be the
