@@ -39,6 +39,28 @@ jobs:
             -e "ssh -i ~/.ssh/id_deploy" \
             ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
 
+      # Stripe key delivery: when BOTH secrets are configured, pipe
+      # them over SSH stdin into the host .env (compose reads it at
+      # `up` time) before the members build. Values travel on stdin
+      # only — never in argv, never echoed; GitHub also masks secret
+      # values in logs. When either secret is absent this step is a
+      # no-op and the deploy behaves exactly as before (Cash App stays
+      # the operative purchase path). See
+      # services/member-site/STRIPE_GO_LIVE.md.
+      - name: Deliver Stripe keys to host .env (only when both secrets are set)
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
+        run: |
+          if [ -z "${STRIPE_SECRET_KEY}" ] || [ -z "${STRIPE_WEBHOOK_SECRET}" ]; then
+            echo "Stripe secrets not both configured — skipping key delivery."
+            exit 0
+          fi
+          printf 'STRIPE_SECRET_KEY=%s\nSTRIPE_WEBHOOK_SECRET=%s\n' \
+            "${STRIPE_SECRET_KEY}" "${STRIPE_WEBHOOK_SECRET}" \
+            | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/live-servers/ops/set-stripe-keys.sh'
+
       - name: Build + up members only on host
         run: |
           ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \

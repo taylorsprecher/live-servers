@@ -45,7 +45,13 @@ host port 18109, loopback only; the gateway is the public entry point).
   passed through docker-compose): `STRIPE_SECRET_KEY`,
   `STRIPE_WEBHOOK_SECRET`, `BTC_RECEIVE_ADDRESS`. Never hardcoded, never
   committed. Without the Stripe secret key, the site runs normally and
-  card checkout shows as "being switched on".
+  card checkout shows as "being switched on". **Stripe go-live**
+  (Taylor, 2026-11-12 — "Add them via Stripe": Google Pay / Apple Pay
+  through Stripe Checkout, Cash App stays the no-fee path): when the
+  GitHub Actions secrets `STRIPE_SECRET_KEY` and
+  `STRIPE_WEBHOOK_SECRET` are configured, the members deploy workflow
+  delivers them into the host `.env` at deploy time; full checklist in
+  `STRIPE_GO_LIVE.md` in this directory.
 - **Course contents**: served only to signed-in members with access, from
   `/data/content/` on the `members-data` volume — never a public URL.
 - **Course-file upload** (`/members/admin/upload`, owner session only,
