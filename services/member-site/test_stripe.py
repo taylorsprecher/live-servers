@@ -351,13 +351,15 @@ class CopyTest(unittest.TestCase):
         app.STRIPE_SECRET_KEY = ""
         buy = app.buy_page(app.COURSE_BY_KEY["ccce"], None)
         self.assertIn("$taylorsprecher2026", buy)
-        self.assertIn("Card checkout is being switched on and is not live", buy)
+        self.assertNotIn("being switched on", buy)
+        self.assertNotIn("not live yet", buy)
         self.assertNotIn("Google Pay", buy)
         self.assertNotIn("/checkout", buy)
         self.assertIn("not live", app.preview_page())
         self.assertIn("not live yet", app.home_page())
         desk = app.desk_page(self.member)
-        self.assertIn("not live yet", desk)
+        self.assertNotIn("not live yet", desk)
+        self.assertNotIn("card checkout", desk)
         self.assertNotIn("accepted at checkout", desk)
 
     def test_with_key_wallet_copy(self):
@@ -397,7 +399,8 @@ class PagesSmokeTest(ServerFixture):
             self.assertEqual(code, 200, path)
             if "buy" in path:
                 self.assertIn("$taylorsprecher2026", body)
-                self.assertIn("not live yet", body)
+                self.assertNotIn("not live yet", body)
+                self.assertNotIn("being switched on", body)
 
 
 if __name__ == "__main__":

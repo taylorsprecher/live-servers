@@ -835,11 +835,7 @@ def buy_page(course, member=None, message="", ok=False):
         else " Bitcoin is not yet available."
     )
     if not STRIPE_SECRET_KEY:
-        card_note = (
-            '<p class="small">Card checkout is being switched on and is '
-            "not live yet — Cash App above is the way to buy today."
-            f"{btc_note}</p>"
-        )
+        card_note = f'<p class="small">{esc(btc_note.strip())}</p>' if btc_note else ""
     elif member is not None and course["key"] in member_access(member["id"]):
         card_note = f'<p class="small">{esc(btc_note.strip())}</p>' if btc_note else ""
     elif member is not None:
@@ -1103,14 +1099,9 @@ def desk_page(member, message="", ok=False):
                     "payment completes.</p>"
                 )
             else:
-                # Stripe is not connected: never present card checkout as
-                # a working option — Cash App above is the way to buy.
-                status = (
-                    manual
-                    + '<p class="small">Card checkout is being switched on '
-                    "and is not live yet — Cash App above is the way to "
-                    "buy today.</p>"
-                )
+                # Cash App only (Taylor, 2026-11-12: "Let's just keep
+                # Cash App") — no card wording on the desk.
+                status = manual
         rows += (
             f'<div class="card"><strong>{esc(c["name"])}</strong><br>'
             f'<span class="small">{esc(c["price"])} USD</span><br>{status}</div>'
@@ -1228,10 +1219,7 @@ member. Only you can see other members' uploads.</p>
             "automatically when payment completes, or</li>"
         )
     else:
-        card_li = (
-            "<li>your card checkout completes (card checkout is being "
-            "switched on — not live yet), or</li>"
-        )
+        card_li = ""
 
     body = f"""
 <h1>Member Desk</h1>
