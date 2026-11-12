@@ -55,6 +55,7 @@ jobs:
             --exclude '__pycache__' \
             --exclude 'demo/' \
             --exclude 'tls-state/' \
+            --exclude 'secrets/' \
             -e "ssh -i ~/.ssh/id_deploy" \
             ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
 
