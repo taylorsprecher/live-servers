@@ -23,6 +23,13 @@ subdomains.
   existing gateway, per-subdomain certs and member site.
 - Stateless: no database, no volume, nothing is saved server-side.
 - Health: `GET /portal/health` → `{"status": "ok"}`.
+- Company routes (added 2026-11-12, Taylor: "Per company routes"):
+  `/portal/hillsboro` (Hillsboro Fire & Rescue), `/portal/woodburn`
+  (Woodburn Ambulance), `/portal/monitor` (Monitor RFPD), `/portal/oha`
+  (OHA EMS). Each is rendered from `company.html` with the company name
+  substituted; pages carry the company name and public platform links
+  only — no individual names, emails, or phone numbers. The index page
+  links them in its "Company Routes" section.
 - Targeted deploy: `.github/workflows/deploy-portal.yml` rsyncs the
   repo and runs `ops/deploy-portal.sh`, which builds/recreates ONLY
   the portal container, then force-recreates the gateway so it loads

@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>__COMPANY_NAME__ — 911transedu.net Company Route</title>
+  <style>
+    :root { --bg: #0b1120; --card: #1e293b; --border: #334155; --text: #f8fafc; --muted: #94a3b8; --accent: #38bdf8; --ok: #22c55e; --err: #ef4444; --wait: #eab308; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 2rem 1.25rem; }
+    .container { max-width: 960px; margin: 0 auto; }
+    header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 2rem; }
+    h1 { font-size: 1.75rem; margin: 0; }
+    p.sub { color: var(--muted); margin: 0.25rem 0 0; }
+    button { background: var(--card); color: var(--text); border: 1px solid var(--border); padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-weight: 500; }
+    button:hover { border-color: var(--accent); }
+    h2 { font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); margin: 2rem 0 1rem; border-bottom: 1px solid #1e293b; padding-bottom: 0.5rem; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; }
+    a.card { display: flex; flex-direction: column; justify-content: space-between; background: var(--card); padding: 1rem; border-radius: 8px; text-decoration: none; color: var(--text); border: 1px solid var(--border); transition: border-color 0.2s, transform 0.1s; }
+    a.card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .card-top { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-weight: 600; }
+    .tag { font-size: 0.78rem; color: var(--muted); margin-top: 0.35rem; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--wait); flex-shrink: 0; }
+    .dot.online { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+    .dot.offline { background: var(--err); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>__COMPANY_NAME__</h1>
+        <p class="sub">Company route &middot; Taylor&rsquo;s Transgender Patient Awareness, LLC &middot; 911transedu.net</p>
+      </div>
+      <button onclick="checkAll()">&#8635; Refresh Status</button>
+    </header>
+
+    <h2>Member Access</h2>
+    <div class="grid">
+      <a class="card" href="https://members.911transedu.net/members/">
+        <div class="card-top"><span>Member Desk</span></div>
+        <span class="tag">Account &amp; Dashboard</span>
+      </a>
+      <a class="card" href="https://members.911transedu.net/members/upload">
+        <div class="card-top"><span>Member Upload</span></div>
+        <span class="tag">File Submission</span>
+      </a>
+      <a class="card" href="https://members.911transedu.net/members/buy/ccce">
+        <div class="card-top"><span>Buy CCCE &mdash; $15</span></div>
+        <span class="tag">Enrollment Checkout</span>
+      </a>
+      <a class="card" href="https://members.911transedu.net/members/buy/emspr">
+        <div class="card-top"><span>Buy EMSPR &mdash; $6,000</span></div>
+        <span class="tag">Enrollment Checkout</span>
+      </a>
+      <a class="card" href="https://members.911transedu.net/portal/">
+        <div class="card-top"><span>Network Portal</span></div>
+        <span class="tag">Live Status for All Services</span>
+      </a>
+      <a class="card" href="https://muse.ai/s/member-site-live-servers-phone-apps-bxc6xghv0c3xxxh/ljE5gM4ZazF6H4dEVeD_-e0b_Sx2piWj7bOnUdOoPSg">
+        <div class="card-top"><span>911 Apps Suite</span></div>
+        <span class="tag">Phone App Launcher</span>
+      </a>
+    </div>
+
+    <h2>Live Server Nodes</h2>
+    <div class="grid">
+      <a class="card" href="https://maclan.911transedu.net/" data-probe="https://maclan.911transedu.net/"><div class="card-top"><span>MacLAN</span><span class="dot"></span></div><span class="tag">maclan.911transedu.net</span></a>
+      <a class="card" href="https://xbox.911transedu.net/" data-probe="https://xbox.911transedu.net/"><div class="card-top"><span>Xbox Cloud Saves</span><span class="dot"></span></div><span class="tag">xbox.911transedu.net</span></a>
+      <a class="card" href="https://wyze.911transedu.net/" data-probe="https://wyze.911transedu.net/"><div class="card-top"><span>Wyze Bridge</span><span class="dot"></span></div><span class="tag">wyze.911transedu.net</span></a>
+      <a class="card" href="https://usb.911transedu.net/" data-probe="https://usb.911transedu.net/"><div class="card-top"><span>USB-SOVEREIGN</span><span class="dot"></span></div><span class="tag">usb.911transedu.net</span></a>
+      <a class="card" href="https://aircore.911transedu.net/" data-probe="https://aircore.911transedu.net/"><div class="card-top"><span>AirCore</span><span class="dot"></span></div><span class="tag">aircore.911transedu.net</span></a>
+      <a class="card" href="https://fmp.911transedu.net/" data-probe="https://fmp.911transedu.net/"><div class="card-top"><span>FMP-1.0</span><span class="dot"></span></div><span class="tag">fmp.911transedu.net</span></a>
+      <a class="card" href="https://celltower.911transedu.net/" data-probe="https://celltower.911transedu.net/"><div class="card-top"><span>Cell Tower LAN</span><span class="dot"></span></div><span class="tag">celltower.911transedu.net</span></a>
+      <a class="card" href="https://specmatrix.911transedu.net/" data-probe="https://specmatrix.911transedu.net/"><div class="card-top"><span>Spec Matrix</span><span class="dot"></span></div><span class="tag">specmatrix.911transedu.net</span></a>
+    </div>
+  </div>
+
+  <script>
+    async function probeHost(card) {
+      const url = card.dataset.probe;
+      const dot = card.querySelector('.dot');
+      if (!url || !dot) return;
+      dot.className = 'dot';
+      dot.title = 'Checking...';
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+      try {
+        await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: controller.signal });
+        dot.className = 'dot online';
+        dot.title = 'Reachable';
+      } catch {
+        dot.className = 'dot offline';
+        dot.title = 'Unreachable / Timeout';
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+    function checkAll() {
+      document.querySelectorAll('[data-probe]').forEach(probeHost);
+    }
+    checkAll();
+  </script>
+</body>
+</html>
