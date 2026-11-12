@@ -673,10 +673,7 @@ def home_page(message="", ok=False):
         if not BTC_RECEIVE_ADDRESS:
             pay_note += " Bitcoin is not yet available."
     else:
-        pay_note = (
-            "Card checkout is being switched on and is not live yet; "
-            "Bitcoin is not yet available."
-        )
+        pay_note = "Bitcoin is not yet available."
     body = f"""
 <h1>Training Site — Member Sign-In</h1>
 <p class="small">Taylor's Transgender Patient Awareness, LLC · 911transedu.net</p>
@@ -712,8 +709,7 @@ def preview_page():
         )
     else:
         card_line = (
-            "Card checkout is being switched on and is not live yet — "
-            "Cash App above is the way to buy today."
+            "Cash App is the way to buy — follow the four steps above."
         )
     body = f"""
 <h1>Course Preview</h1>
@@ -764,15 +760,17 @@ download then appears on your Member Desk.</li>
 def buy_page(course, member=None, message="", ok=False):
     """Stable public purchase page for one product: /members/buy/<key>.
 
-    Cash App is the operative way to buy (2026-11-12 sales decision;
-    Stripe was not yet connected). The page always shows the price,
-    the cashtag, the note guidance (the buyer's account email), and
-    the owner-confirmation unlock. While STRIPE_SECRET_KEY is unset,
-    card checkout is named as not live yet and is never offered as a
-    working button here; once the key exists (Taylor, 2026-11-12:
-    "Add them via Stripe"), the page also presents paying by card,
-    Google Pay or Apple Pay via Stripe Checkout, with Cash App
-    remaining the alternative. Signed-in members get the order button
+    Cash App is the operative way to buy (2026-11-12 sales decision).
+    The page always shows the price, the cashtag, the note guidance
+    (the buyer's account email), and the owner-confirmation unlock.
+    While STRIPE_SECRET_KEY is unset — the standing state since
+    Taylor closed the Stripe go-live on 2026-11-12 ("Let's just keep
+    Cash App") and the keys were removed — card checkout is never
+    offered as a working button here and Cash App is presented as
+    the way to buy. Were a key ever set again, the page would also
+    present paying by card, Google Pay or Apple Pay via Stripe
+    Checkout, with Cash App remaining the alternative. Signed-in
+    members get the order button
     on this page; everyone else gets the sign-in/create-account step
     first (their account email is the identity the payment note must
     carry)."""
@@ -1039,8 +1037,8 @@ def desk_page(member, message="", ok=False):
             else:
                 status = (
                     "<strong>Access granted</strong> — your access is saved. "
-                    "The course files are being added to the site; check back "
-                    "shortly to download them here."
+                    "The course files are being added to the site; they "
+                    "will appear here to download once added."
                 )
         else:
             parts = []
@@ -1415,8 +1413,8 @@ class Handler(BaseHTTPRequestHandler):
         if fpath is None:
             return self.send_html(
                 "<h1>Files being added</h1><p>Your access is saved. The "
-                "course files are being added to the site — check back "
-                "shortly.</p>",
+                "course files are being added to the site and will "
+                "appear here once added.</p>",
                 status=404,
             )
         return self.stream_file(fpath, "application/zip")
@@ -1449,7 +1447,8 @@ class Handler(BaseHTTPRequestHandler):
         if not files:
             return self.send_html(
                 "<h1>Files being added</h1><p>The teach-back documents "
-                "are being added to the site — check back shortly.</p>",
+                "are being added to the site and will appear here once "
+                "added.</p>",
                 status=404,
             )
         items = "".join(
@@ -1752,7 +1751,7 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
                 return self.redirect(url)
             if err == "not_configured":
                 return self.send_html(
-                    desk_page(member, "Online card checkout is being switched on — check back shortly.")
+                    desk_page(member, "Payment is by Cash App — the buy pages show the Cash App instructions for each course.")
                 )
             return self.send_html(
                 desk_page(member, f"Checkout could not be started: {err}")

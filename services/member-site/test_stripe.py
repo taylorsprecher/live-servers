@@ -15,7 +15,8 @@ Covers what the 2026-11-12 Stripe decision depends on:
     product on checkout.session.completed only when paid, and is
     idempotent on replay.
   * Buyer-facing copy: while no key exists, pages show Cash App as
-    the way to buy and card as "not live yet" (no wallet claims);
+    the way to buy, with no card checkout offered or mentioned
+    (no wallet claims);
     while a key exists, buy pages and the desk present paying by
     card, Google Pay or Apple Pay via Stripe Checkout, with Cash App
     still offered.
@@ -355,8 +356,14 @@ class CopyTest(unittest.TestCase):
         self.assertNotIn("not live yet", buy)
         self.assertNotIn("Google Pay", buy)
         self.assertNotIn("/checkout", buy)
-        self.assertIn("not live", app.preview_page())
-        self.assertIn("not live yet", app.home_page())
+        preview = app.preview_page()
+        home = app.home_page()
+        self.assertIn("$taylorsprecher2026", preview)
+        self.assertIn("$taylorsprecher2026", home)
+        for phrase in ("being switched on", "not live yet",
+                       "check back shortly"):
+            self.assertNotIn(phrase, preview)
+            self.assertNotIn(phrase, home)
         desk = app.desk_page(self.member)
         self.assertNotIn("not live yet", desk)
         self.assertNotIn("card checkout", desk)

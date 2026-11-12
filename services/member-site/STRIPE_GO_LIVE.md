@@ -1,17 +1,29 @@
 # Stripe go-live — card, Google Pay, Apple Pay on the member site
 
-Decision (Taylor, 2026-11-12): *"Add them via Stripe."* Google Pay and
-Apple Pay are added through Stripe Checkout, alongside the existing
-Cash App path — Cash App remains the no-fee option; nothing about the
-Cash App flow changes when Stripe goes live.
+> **STATUS — CLOSED (2026-11-12).** Taylor's decision: *"Let's just
+> keep Cash App."* Card checkout is **not** going live. The GitHub
+> Actions secrets were deleted and the Stripe lines were cleared
+> from the host `.env`; the member site presents Cash App as its
+> only payment method. This document is kept as the historical
+> record of the Stripe setup that was prepared and briefly
+> attempted — nothing in it is a pending step.
 
-The site side is already prepared (automatic payment methods in
+Decision history (Taylor, 2026-11-12): first *"Add them via Stripe"*
+— Google Pay and Apple Pay were to be added through Stripe Checkout,
+alongside the existing Cash App path, with Cash App remaining the
+no-fee option. Later the same day Taylor superseded it: *"Let's just
+keep Cash App."* That decision stands.
+
+The site side remains as prepared (automatic payment methods in
 Checkout, HTTPS return URLs, signature-verified webhook, wallet copy
-that renders only while the key exists). What remains is connecting
-Taylor's Stripe account and delivering two keys. **No key is ever
-committed to git, pasted into chat, or printed in a log.**
+that renders only while a key exists), but no key is configured, so
+none of it is offered to buyers. **No key is ever committed to git,
+pasted into chat, or printed in a log.**
 
 ## The two GitHub Actions secrets (exact names)
+
+*Historical: both secrets were created on 2026-11-12 and deleted the
+same day when the go-live was closed.*
 
 Repository `taylorsprecher/live-servers` → Settings → Secrets and
 variables → Actions:
@@ -22,6 +34,9 @@ variables → Actions:
 | `STRIPE_WEBHOOK_SECRET` | `whsec_…` | Stripe Dashboard → Developers → Webhooks → the endpoint below → Signing secret |
 
 ## Checklist
+
+*(Historical record of the steps prepared and performed on
+2026-11-12 — not a pending plan.)*
 
 1. **Create / activate the Stripe account** (Taylor's hands — needs
    the LLC's details and the payout bank account). Business:
@@ -55,11 +70,14 @@ variables → Actions:
 
 ## Turning card checkout back off
 
-Deleting the GitHub secrets stops *future* delivery but does not
-remove keys already written to the host. To fully disable card
-checkout: remove the `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET`
-lines from `/home/deploy/live-servers/.env` on the host and re-run
-the members deploy — the site returns to Cash App only.
+**This was done on 2026-11-12.** The GitHub secrets were deleted and
+the Stripe lines were removed from the host `.env`; the site runs
+Cash App only. The mechanics, for the record: deleting the GitHub
+secrets stops *future* delivery but does not remove keys already
+written to the host — fully disabling card checkout required
+removing the `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` lines
+from `/home/deploy/live-servers/.env` on the host and re-running
+the members deploy, which returned the site to Cash App only.
 
 ## Notes
 
@@ -67,5 +85,5 @@ the members deploy — the site returns to Cash App only.
   Dashboard; the site only records completed checkouts and grants
   access.
 - Test mode works the same way: a `sk_test_…` key plus a test-mode
-  webhook endpoint and its `whsec_…` can be delivered through the
-  same two secrets to rehearse before going live.
+  webhook endpoint and its `whsec_…` could be delivered through the
+  same two secrets to rehearse in test mode.

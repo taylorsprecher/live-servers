@@ -21,6 +21,9 @@ host port 18109, loopback only; the gateway is the public entry point).
   Checkout means no Apple Pay domain verification on this host). Payment
   unlocks automatically via the signature-verified webhook
   `POST /members/stripe/webhook` (`checkout.session.completed`).
+  **Status (2026-11-12): closed by the owner's decision** — no Stripe
+  keys are configured, so this path is never offered to buyers; the
+  code path is retained only. Cash App (below) is the payment method.
 - **Bitcoin**: separate path (Stripe does not process BTC). The app quotes
   BTC from the USD price (CoinGecko), creates a pending order showing the
   receive address, and the owner confirms receipt in the roster to unlock.
@@ -34,7 +37,10 @@ host port 18109, loopback only; the gateway is the public entry point).
   NOT connected (no keys on the host), so card checkout — though wired
   in code — is never presented as available while `STRIPE_SECRET_KEY`
   is unset; every buyer-facing page names Cash App as the way to buy
-  and card checkout as "being switched on".
+  and offers no card checkout. **Card checkout was closed by the
+  owner's decision on 2026-11-12 ("Let's just keep Cash App")** — the
+  Stripe keys were removed (GitHub secrets deleted, host `.env` lines
+  cleared), and Cash App is the standing payment method.
 - **Purchase pages** (`/members/buy/ccce`, `/members/buy/emspr`,
   public): stable per-product buy pages showing the price, the
   cashtag, the note guidance (put your account email in the Cash App
@@ -44,14 +50,19 @@ host port 18109, loopback only; the gateway is the public entry point).
 - **Keys are environment-only** (host `/home/deploy/live-servers/.env`,
   passed through docker-compose): `STRIPE_SECRET_KEY`,
   `STRIPE_WEBHOOK_SECRET`, `BTC_RECEIVE_ADDRESS`. Never hardcoded, never
-  committed. Without the Stripe secret key, the site runs normally and
-  card checkout shows as "being switched on". **Stripe go-live**
-  (Taylor, 2026-11-12 — "Add them via Stripe": Google Pay / Apple Pay
-  through Stripe Checkout, Cash App stays the no-fee path): when the
-  GitHub Actions secrets `STRIPE_SECRET_KEY` and
-  `STRIPE_WEBHOOK_SECRET` are configured, the members deploy workflow
-  delivers them into the host `.env` at deploy time; full checklist in
-  `STRIPE_GO_LIVE.md` in this directory.
+  committed. Without the Stripe secret key, the site runs normally
+  with Cash App as the only payment path presented. **Stripe go-live
+  history**: on 2026-11-12 Taylor first directed "Add them via
+  Stripe" (Google Pay / Apple Pay through Stripe Checkout, Cash App
+  staying the no-fee path) and the checklist in `STRIPE_GO_LIVE.md`
+  was prepared — when the GitHub Actions secrets `STRIPE_SECRET_KEY`
+  and `STRIPE_WEBHOOK_SECRET` were configured, the members deploy
+  workflow delivered them into the host `.env` at deploy time. Later
+  the same day Taylor closed the go-live — "Let's just keep Cash
+  App" — the GitHub secrets were deleted and the host `.env` Stripe
+  lines cleared, so no keys are delivered at deploy and the site runs
+  Cash App only. `STRIPE_GO_LIVE.md` is retained as the historical
+  record.
 - **Course contents**: served only to signed-in members with access, from
   `/data/content/` on the `members-data` volume — never a public URL.
 - **Course-file upload** (`/members/admin/upload`, owner session only,
