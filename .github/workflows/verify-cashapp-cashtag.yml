@@ -1,0 +1,44 @@
+name: Verify Cash App cashtag on live pages (one-off)
+
+# One-off, manually dispatched, read-only. Curls the public member-site
+# pages from the runner (no crawl cache) and reports, per page: HTTP
+# status, occurrences of the NEW payment cashtag ($taylorsprecher, not
+# followed by another digit/letter), and occurrences of the OLD one
+# ($taylorsprecher2026). Fails if any page is not 200, any page still
+# shows the old cashtag, or a buy/home/preview page lacks the new one.
+# Verifies the 2026-11-12 retarget: "Switch course payments to
+# $taylorsprecher (Business)".
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-cashapp-cashtag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe live pages
+        run: |
+          fail=0
+          check() {
+            url="$1"; want_cashtag="$2"
+            body="$(mktemp)"
+            code="$(curl -s -o "${body}" -w '%{http_code}' "${url}")"
+            old="$(grep -o 'taylorsprecher2026' "${body}" | wc -l)"
+            new="$(grep -oE '\$taylorsprecher([^0-9A-Za-z]|$)' "${body}" | wc -l)"
+            echo "${url} -> HTTP ${code}, new_cashtag=${new}, old_cashtag=${old}"
+            [ "${code}" = "200" ] || fail=1
+            [ "${old}" = "0" ] || fail=1
+            if [ "${want_cashtag}" = "yes" ] && [ "${new}" -lt 1 ]; then fail=1; fi
+            rm -f "${body}"
+          }
+          check "https://members.911transedu.net/members/buy/ccce" yes
+          check "https://members.911transedu.net/members/buy/emspr" yes
+          check "https://members.911transedu.net/members/" yes
+          check "https://members.911transedu.net/members/preview" yes
+          check "https://members.911transedu.net/portal/" no
+          if [ "${fail}" != "0" ]; then
+            echo "VERDICT: FAIL"
+            exit 1
+          fi
+          echo "VERDICT: OK — all pages 200, new cashtag present where expected, old cashtag absent everywhere."
