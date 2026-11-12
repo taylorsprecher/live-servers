@@ -351,15 +351,15 @@ class CopyTest(unittest.TestCase):
     def test_no_key_copy_unchanged(self):
         app.STRIPE_SECRET_KEY = ""
         buy = app.buy_page(app.COURSE_BY_KEY["ccce"], None)
-        self.assertIn("$taylorsprecher", buy)
+        self.assertIn("$taylorsprecher2026", buy)
         self.assertNotIn("being switched on", buy)
         self.assertNotIn("not live yet", buy)
         self.assertNotIn("Google Pay", buy)
         self.assertNotIn("/checkout", buy)
         preview = app.preview_page()
         home = app.home_page()
-        self.assertIn("$taylorsprecher", preview)
-        self.assertIn("$taylorsprecher", home)
+        self.assertIn("$taylorsprecher2026", preview)
+        self.assertIn("$taylorsprecher2026", home)
         for phrase in ("being switched on", "not live yet",
                        "check back shortly"):
             self.assertNotIn(phrase, preview)
@@ -375,7 +375,7 @@ class CopyTest(unittest.TestCase):
         self.assertIn("Or pay by card, Google Pay or Apple Pay", buy_member)
         self.assertIn('action="/members/checkout"', buy_member)
         self.assertIn("unlocks automatically", buy_member)
-        self.assertIn("$taylorsprecher", buy_member)  # Cash App stays
+        self.assertIn("$taylorsprecher2026", buy_member)  # Cash App stays
         self.assertNotIn("not live yet", buy_member)
         buy_anon = app.buy_page(app.COURSE_BY_KEY["emspr"], None)
         self.assertIn("pay by card, Google Pay or Apple Pay at Stripe Checkout", buy_anon)
@@ -405,7 +405,7 @@ class PagesSmokeTest(ServerFixture):
             code, body = self.get(path)
             self.assertEqual(code, 200, path)
             if "buy" in path:
-                self.assertIn("$taylorsprecher", body)
+                self.assertIn("$taylorsprecher2026", body)
                 self.assertNotIn("not live yet", body)
                 self.assertNotIn("being switched on", body)
 
