@@ -1,0 +1,37 @@
+name: Clear Stripe keys from host .env (one-off)
+
+# One-off, manually dispatched. Counterpart to the Stripe key delivery
+# step in deploy-members.yml: copies ops/clear-stripe-keys.sh to the
+# host and runs it, removing STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET
+# from /home/deploy/live-servers/.env so the member site returns to
+# Cash App only (Taylor, 2026-11-12: "Let's just keep Cash App").
+# Run the members deploy afterwards to recreate the members container
+# without the keys.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  clear-stripe-keys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy clear script to host
+        run: |
+          scp -i ~/.ssh/id_deploy ops/clear-stripe-keys.sh \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/clear-stripe-keys.sh"
+
+      - name: Run clear script on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/clear-stripe-keys.sh'
