@@ -1,0 +1,70 @@
+name: Verify Bitcoin offered alongside Cash App (one-off)
+
+# One-off, manually dispatched, read-only. Curls the public member-site
+# pages from the runner (cache-busting query, no crawl cache) and
+# verifies Taylor's 2026-11-12 instruction "Offer bitcoin alongside":
+# both buy pages present Cash App cash AND Bitcoin — Bitcoin paid
+# INSIDE Cash App to $taylorsprecher2026 at a live-quoted BTC amount,
+# with no on-chain address rendered anywhere (Cash App shows Taylor
+# no deposit address) and no "Bitcoin is not yet available" anywhere.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-bitcoin-alongside:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe live pages
+        run: |
+          fail=0
+          bust="v=${{ github.run_id }}"
+          check_buy() {
+            url="$1"
+            ok=0
+            for attempt in 1 2 3; do
+              body="$(mktemp)"
+              code="$(curl -s -o "${body}" -w '%{http_code}' "${url}?${bust}=${attempt}")"
+              btc_amt="$(grep -oE '[0-9]+\.[0-9]{8} BTC' "${body}" | head -1)"
+              has_btc_section="$(grep -c 'pay with Bitcoin' "${body}")"
+              has_inside="$(grep -c 'inside Cash App' "${body}")"
+              has_tag="$(grep -c 'taylorsprecher2026' "${body}")"
+              notavail="$(grep -c 'Bitcoin is not yet available' "${body}")"
+              bc1="$(grep -oE 'bc1[a-z0-9]{20,}' "${body}" | wc -l)"
+              base58="$(grep -oE '\b[13][a-km-zA-HJ-NP-Z1-9]{25,34}\b' "${body}" | wc -l)"
+              echo "attempt ${attempt}: ${url} -> HTTP ${code}, btc_amount='${btc_amt}', btc_section=${has_btc_section}, inside_cashapp=${has_inside}, cashtag=${has_tag}, not_available=${notavail}, bc1=${bc1}, base58=${base58}"
+              if [ "${code}" = "200" ] && [ -n "${btc_amt}" ] && [ "${has_btc_section}" -ge 1 ] \
+                 && [ "${has_inside}" -ge 1 ] && [ "${has_tag}" -ge 1 ] && [ "${notavail}" = "0" ] \
+                 && [ "${bc1}" = "0" ] && [ "${base58}" = "0" ]; then
+                ok=1
+                rm -f "${body}"
+                break
+              fi
+              rm -f "${body}"
+              sleep 5
+            done
+            [ "${ok}" = "1" ] || fail=1
+          }
+          check_plain() {
+            url="$1"; want_tag="$2"
+            body="$(mktemp)"
+            code="$(curl -s -o "${body}" -w '%{http_code}' "${url}?${bust}")"
+            has_tag="$(grep -c 'taylorsprecher2026' "${body}")"
+            notavail="$(grep -c 'not yet available' "${body}")"
+            echo "${url} -> HTTP ${code}, cashtag=${has_tag}, not_available=${notavail}"
+            [ "${code}" = "200" ] || fail=1
+            [ "${notavail}" = "0" ] || fail=1
+            if [ "${want_tag}" = "yes" ] && [ "${has_tag}" -lt 1 ]; then fail=1; fi
+            rm -f "${body}"
+          }
+          check_buy "https://members.911transedu.net/members/buy/ccce"
+          check_buy "https://members.911transedu.net/members/buy/emspr"
+          check_plain "https://members.911transedu.net/members/" yes
+          check_plain "https://members.911transedu.net/members/preview" yes
+          check_plain "https://members.911transedu.net/portal/" no
+          if [ "${fail}" != "0" ]; then
+            echo "VERDICT: FAIL"
+            exit 1
+          fi
+          echo "VERDICT: OK — buy pages show Cash App + Bitcoin (inside Cash App, quoted BTC amount, cashtag), no 'not yet available', no on-chain address rendered; home/preview/portal 200."
