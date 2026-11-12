@@ -1,0 +1,37 @@
+name: Delete smoke-test member accounts (one-off)
+
+# One-off, manually dispatched. Removes the two throwaway Stripe
+# smoke-test accounts from the member site's roster, server-side, at
+# the owner's direction (Taylor, 2026-11-12: "Delete both smoke-test
+# accounts for me"). The roster UI has grant/revoke only, so this runs
+# ops/delete-smoke-test-accounts.py inside the live-members container
+# (its guard rails abort on any unexpected state). Data-only: no
+# service is rebuilt, restarted, or redeployed.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  delete-smoke-test-accounts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy delete scripts to host
+        run: |
+          scp -i ~/.ssh/id_deploy ops/delete-smoke-test-accounts.py ops/delete-smoke-test-accounts.sh \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/"
+
+      - name: Run delete script in the members container
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/delete-smoke-test-accounts.sh'
