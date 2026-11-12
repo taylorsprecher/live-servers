@@ -20,6 +20,11 @@ Covers what the 2026-11-12 Stripe decision depends on:
     while a key exists, buy pages and the desk present paying by
     card, Google Pay or Apple Pay via Stripe Checkout, with Cash App
     still offered.
+  * Bitcoin alongside Cash App (2026-11-12): paid INSIDE Cash App to
+    the cashtag — there is no on-chain deposit address and none is
+    ever rendered. Buy pages show the live-quoted BTC amount and the
+    cashtag; a signed-in member can record a Bitcoin order, it sits
+    pending in the roster, and owner confirmation unlocks the product.
 No real Stripe key is used anywhere in this file.
 """
 import hashlib
@@ -43,6 +48,9 @@ os.environ["UPLOADS_DIR"] = os.path.join(_TMP, "uploads")
 os.environ["PUBLIC_BASE_URL"] = "https://members.911transedu.net"
 os.environ.pop("STRIPE_SECRET_KEY", None)
 os.environ.pop("STRIPE_WEBHOOK_SECRET", None)
+# Bitcoin no longer reads any address env var (it is paid inside Cash
+# App to the cashtag); popped anyway so a stray host value can never
+# leak into these tests.
 os.environ.pop("BTC_RECEIVE_ADDRESS", None)
 
 _spec = importlib.util.spec_from_file_location(
@@ -343,10 +351,14 @@ class WebhookHTTPTest(ServerFixture):
 class CopyTest(unittest.TestCase):
     def setUp(self):
         self._key = app.STRIPE_SECRET_KEY
+        self._quote = app.btc_quote
+        # Deterministic quote: no network in copy tests.
+        app.btc_quote = lambda cents: ("0.00025000", 60000.0)
         self.member = make_member(f"copy-{time.time_ns()}@example.com")
 
     def tearDown(self):
         app.STRIPE_SECRET_KEY = self._key
+        app.btc_quote = self._quote
 
     def test_no_key_copy_unchanged(self):
         app.STRIPE_SECRET_KEY = ""
@@ -386,6 +398,41 @@ class CopyTest(unittest.TestCase):
         self.assertIn("Buy by card", desk)
         self.assertIn("Pay with Cash App", desk)  # alternative remains
 
+    def test_bitcoin_offered_alongside_cashapp(self):
+        # No address is configured anywhere (the env var is gone from
+        # the app): Bitcoin is available because it is paid inside
+        # Cash App to the cashtag.
+        app.STRIPE_SECRET_KEY = ""
+        self.assertFalse(hasattr(app, "BTC_RECEIVE_ADDRESS"))
+        for key in ("ccce", "emspr"):
+            buy = app.buy_page(app.COURSE_BY_KEY[key], None)
+            self.assertIn("Or pay with Bitcoin — inside Cash App", buy)
+            self.assertIn("0.00025000 BTC", buy)  # quoted amount shown
+            self.assertIn("$taylorsprecher2026", buy)
+            self.assertIn("your account email", buy)
+            self.assertNotIn("Bitcoin is not yet available", buy)
+        buy_member = app.buy_page(app.COURSE_BY_KEY["ccce"], self.member)
+        self.assertIn('action="/members/bitcoin/order"', buy_member)
+        self.assertIn("Record my Bitcoin order", buy_member)
+        home = app.home_page()
+        preview = app.preview_page()
+        self.assertIn("Bitcoin inside Cash App", home)
+        self.assertIn("Bitcoin inside Cash", preview)
+        desk = app.desk_page(self.member)
+        self.assertIn("Buy with Bitcoin", desk)
+        self.assertIn('action="/members/bitcoin/order"', desk)
+        for page in (home, preview, desk):
+            self.assertNotIn("not yet available", page)
+
+    def test_bitcoin_quote_unavailable_still_offered(self):
+        app.STRIPE_SECRET_KEY = ""
+        app.btc_quote = lambda cents: (None, None)
+        buy = app.buy_page(app.COURSE_BY_KEY["ccce"], None)
+        self.assertIn("Or pay with Bitcoin — inside Cash App", buy)
+        self.assertIn("Bitcoin rate is unavailable", buy)
+        self.assertNotIn("Bitcoin is not yet available", buy)
+        self.assertIn("$taylorsprecher2026", buy)  # Cash App unaffected
+
 
 class PagesSmokeTest(ServerFixture):
     @classmethod
@@ -393,10 +440,13 @@ class PagesSmokeTest(ServerFixture):
         super().setUpClass()
         cls._key = app.STRIPE_SECRET_KEY
         app.STRIPE_SECRET_KEY = ""
+        cls._quote = app.btc_quote
+        app.btc_quote = lambda cents: ("0.00025000", 60000.0)
 
     @classmethod
     def tearDownClass(cls):
         app.STRIPE_SECRET_KEY = cls._key
+        app.btc_quote = cls._quote
         super().tearDownClass()
 
     def test_pages_200_and_cashapp_operative(self):
@@ -408,6 +458,104 @@ class PagesSmokeTest(ServerFixture):
                 self.assertIn("$taylorsprecher2026", body)
                 self.assertNotIn("not live yet", body)
                 self.assertNotIn("being switched on", body)
+                # Bitcoin alongside Cash App, via the cashtag.
+                self.assertIn("Or pay with Bitcoin — inside Cash App", body)
+                self.assertIn("0.00025000 BTC", body)
+                self.assertNotIn("Bitcoin is not yet available", body)
+
+
+class BitcoinOrderFlowTest(ServerFixture):
+    """End to end over HTTP: member records a Bitcoin order, it sits
+    pending on the desk and in the owner roster, and the owner's
+    confirmation unlocks the product."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._key = app.STRIPE_SECRET_KEY
+        app.STRIPE_SECRET_KEY = ""
+        cls._quote = app.btc_quote
+        app.btc_quote = lambda cents: ("0.00025000", 60000.0)
+
+    @classmethod
+    def tearDownClass(cls):
+        app.STRIPE_SECRET_KEY = cls._key
+        app.btc_quote = cls._quote
+        super().tearDownClass()
+
+    def post_form(self, path, data, token=None):
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        if token:
+            headers["Cookie"] = f"members_session={token}"
+        req = urllib.request.Request(
+            self.url(path),
+            data=urllib.parse.urlencode(data).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        opener = urllib.request.build_opener(NoRedirect())
+        try:
+            with opener.open(req, timeout=10) as resp:
+                return resp.status, resp.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode("utf-8")
+
+    def get_auth(self, path, token):
+        req = urllib.request.Request(
+            self.url(path), headers={"Cookie": f"members_session={token}"}
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                return resp.status, resp.read().decode("utf-8")
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode("utf-8")
+
+    def test_bitcoin_order_pending_then_owner_confirm_unlocks(self):
+        buyer = make_member(f"btc-buyer-{time.time_ns()}@example.com")
+        token = app.create_session(buyer["id"])
+        code, body = self.post_form(
+            "/members/bitcoin/order", {"course_key": "ccce"}, token
+        )
+        self.assertEqual(code, 200)
+        self.assertIn("Bitcoin order created: send 0.00025000 BTC to", body)
+        self.assertIn("$taylorsprecher2026", body)
+        self.assertIn("inside Cash App", body)
+        with app._lock:
+            rows = app._db.execute(
+                "SELECT * FROM manual_orders WHERE member_id = ? "
+                "AND method = 'bitcoin'",
+                (buyer["id"],),
+            ).fetchall()
+        self.assertEqual(len(rows), 1)
+        order = rows[0]
+        self.assertEqual(order["status"], "pending")
+        self.assertEqual(order["amount_text"], "0.00025000 BTC")
+        self.assertNotIn("ccce", app.member_access(buyer["id"]))
+        # The pending order shows on the buyer's desk with cashtag
+        # instructions (no address anywhere).
+        code, desk = self.get_auth("/members/desk", token)
+        self.assertEqual(code, 200)
+        self.assertIn(f"Bitcoin order #{order['id']} pending", desk)
+        self.assertIn("inside Cash App", desk)
+        self.assertNotIn("not yet available", desk)
+        # Owner sees it in the roster's pending manual-payment orders.
+        owner = make_member(app.OWNER_EMAIL)
+        otoken = app.create_session(owner["id"])
+        code, odesk = self.get_auth("/members/desk", otoken)
+        self.assertEqual(code, 200)
+        self.assertIn("Pending manual-payment orders (Bitcoin / Cash App)", odesk)
+        self.assertIn("0.00025000 BTC", odesk)
+        # Owner confirms receipt -> access unlocks.
+        code, _ = self.post_form(
+            "/members/manual/confirm", {"order_id": str(order["id"])}, otoken
+        )
+        self.assertEqual(code, 303)
+        self.assertIn("ccce", app.member_access(buyer["id"]))
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 if __name__ == "__main__":

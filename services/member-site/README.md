@@ -24,11 +24,14 @@ host port 18109, loopback only; the gateway is the public entry point).
   **Status (2026-11-12): closed by the owner's decision** — no Stripe
   keys are configured, so this path is never offered to buyers; the
   code path is retained only. Cash App (below) is the payment method.
-- **Bitcoin**: separate path (Stripe does not process BTC). The app quotes
-  BTC from the USD price (CoinGecko), creates a pending order showing the
-  receive address, and the owner confirms receipt in the roster to unlock.
-  Receive address comes from the host env (`BTC_RECEIVE_ADDRESS`); while
-  unset, Bitcoin shows as "not yet available".
+- **Bitcoin**: separate path (Stripe does not process BTC), offered
+  alongside Cash App cash. The app quotes BTC from the USD price
+  (CoinGecko), creates a pending order, and instructs the buyer to send
+  that BTC amount to Taylor's cashtag `$taylorsprecher2026` INSIDE Cash
+  App with their account email in the payment note; the owner confirms
+  receipt in the roster to unlock. There is NO on-chain deposit address
+  — Taylor confirmed 2026-11-12 that Cash App shows none ("There isn't
+  one") — so no address env var exists and none is ever displayed.
 - **Cash App — the operative purchase path (2026-11-12)**: same manual
   pattern — a pending order shows the USD amount and Taylor's cashtag
   `$taylorsprecher2026` (public receive handle; override via
@@ -49,9 +52,9 @@ host port 18109, loopback only; the gateway is the public entry point).
   buttons point at these URLs (2026-11-12 sales decision).
 - **Keys are environment-only** (host `/home/deploy/live-servers/.env`,
   passed through docker-compose): `STRIPE_SECRET_KEY`,
-  `STRIPE_WEBHOOK_SECRET`, `BTC_RECEIVE_ADDRESS`. Never hardcoded, never
+  `STRIPE_WEBHOOK_SECRET`. Never hardcoded, never
   committed. Without the Stripe secret key, the site runs normally
-  with Cash App as the only payment path presented. **Stripe go-live
+  with Cash App (cash and Bitcoin) as the payment paths presented. **Stripe go-live
   history**: on 2026-11-12 Taylor first directed "Add them via
   Stripe" (Google Pay / Apple Pay through Stripe Checkout, Cash App
   staying the no-fee path) and the checklist in `STRIPE_GO_LIVE.md`

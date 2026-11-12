@@ -144,7 +144,6 @@ services:
       # STRIPE_GO_LIVE.md).
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
-      BTC_RECEIVE_ADDRESS: ${BTC_RECEIVE_ADDRESS:-}
       CASHAPP_CASHTAG: ${CASHAPP_CASHTAG:-}
     volumes:
       - members-data:/data

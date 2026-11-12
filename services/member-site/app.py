@@ -16,9 +16,14 @@ Payments (on-site; no GoDaddy in this app):
     product to the paying member.
   * Bitcoin (separate path — Stripe does not process BTC): the app quotes
     BTC from the USD price (CoinGecko rate), creates a PENDING order, and
-    shows Taylor's receive address (BTC_RECEIVE_ADDRESS, host env). The
-    owner confirms receipt in the roster; confirmation unlocks the product.
-    While the address is unset, Bitcoin shows as "not yet available".
+    instructs the buyer to send that BTC amount to Taylor's cashtag
+    (CASHAPP_CASHTAG) INSIDE Cash App, with the buyer's account email in
+    the payment note — the same manual pattern as Cash App cash. The
+    owner confirms receipt in the roster; confirmation unlocks the
+    product. There is NO on-chain deposit address: Taylor confirmed
+    2026-11-12 that Cash App shows none ("There isn't one"), so Bitcoin
+    is received through Cash App's own Bitcoin send to the cashtag and
+    no address is ever displayed.
   * Cash App (same manual pattern as Bitcoin): the app creates a PENDING
     order showing the USD amount and Taylor's cashtag (CASHAPP_CASHTAG,
     default $taylorsprecher2026 — a public receive handle). The owner
@@ -129,7 +134,9 @@ PBKDF2_ROUNDS = 200_000
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
-BTC_RECEIVE_ADDRESS = os.environ.get("BTC_RECEIVE_ADDRESS", "")
+# Bitcoin is received INSIDE Cash App at the cashtag below — there is no
+# on-chain deposit address (Taylor, 2026-11-12: "There isn't one"), so no
+# BTC address env var exists or is ever rendered.
 CASHAPP_CASHTAG = os.environ.get("CASHAPP_CASHTAG") or "$taylorsprecher2026"
 BTC_RATE_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
 BTC_RATE_SOURCE = "CoinGecko (api.coingecko.com simple/price, USD)"
@@ -668,12 +675,16 @@ def home_page(message="", ok=False):
     if STRIPE_SECRET_KEY:
         pay_note = (
             "Or pay by card, Google Pay or Apple Pay at checkout — "
-            "card access unlocks automatically when payment completes."
+            "card access unlocks automatically when payment completes. "
+            "You can also pay with Bitcoin inside Cash App — each "
+            "course's buy page shows the Bitcoin amount to send."
         )
-        if not BTC_RECEIVE_ADDRESS:
-            pay_note += " Bitcoin is not yet available."
     else:
-        pay_note = "Bitcoin is not yet available."
+        pay_note = (
+            "Or pay with Bitcoin inside Cash App — each course's buy "
+            "page shows the exact Bitcoin amount to send to the same "
+            "cashtag, with the same email note and owner confirmation."
+        )
     body = f"""
 <h1>Training Site — Member Sign-In</h1>
 <p class="small">Taylor's Transgender Patient Awareness, LLC · 911transedu.net</p>
@@ -751,6 +762,10 @@ note — that is how your payment is matched to your account.</li>
 <li>Access unlocks as soon as the owner confirms receipt — your
 download then appears on your Member Desk.</li>
 </ol>
+<p class="small">You can also pay with <strong>Bitcoin inside Cash
+App</strong>: each product's buy page shows the exact Bitcoin amount
+to send to the same cashtag, with the same account-email note and
+owner confirmation.</p>
 <p class="small">{card_line}</p></div>
 <p><a class="btn" href="{BASE}/">Sign in / Create account</a></p>
 """
@@ -763,6 +778,9 @@ def buy_page(course, member=None, message="", ok=False):
     Cash App is the operative way to buy (2026-11-12 sales decision).
     The page always shows the price, the cashtag, the note guidance
     (the buyer's account email), and the owner-confirmation unlock.
+    Bitcoin is offered alongside Cash App cash (Taylor, 2026-11-12):
+    sent inside Cash App to the same cashtag at the live-quoted BTC
+    amount — no on-chain address exists or is shown.
     While STRIPE_SECRET_KEY is unset — the standing state since
     Taylor closed the Stripe go-live on 2026-11-12 ("Let's just keep
     Cash App") and the keys were removed — card checkout is never
@@ -828,14 +846,10 @@ def buy_page(course, member=None, message="", ok=False):
     # or Apple Pay via Stripe Checkout, with Cash App remaining the
     # alternative above; signed-in members without access get the
     # checkout button itself.
-    btc_note = (
-        "" if BTC_RECEIVE_ADDRESS
-        else " Bitcoin is not yet available."
-    )
     if not STRIPE_SECRET_KEY:
-        card_note = f'<p class="small">{esc(btc_note.strip())}</p>' if btc_note else ""
+        card_note = ""
     elif member is not None and course["key"] in member_access(member["id"]):
-        card_note = f'<p class="small">{esc(btc_note.strip())}</p>' if btc_note else ""
+        card_note = ""
     elif member is not None:
         card_note = (
             "<h2>Or pay by card, Google Pay or Apple Pay</h2>"
@@ -848,15 +862,81 @@ def buy_page(course, member=None, message="", ok=False):
             f'<button type="submit">Pay by card / Google Pay / Apple Pay '
             f"— {amount}</button></form>"
         )
-        if btc_note:
-            card_note += f'<p class="small">{esc(btc_note.strip())}</p>'
     else:
         card_note = (
             '<p class="small">You can also pay by card, Google Pay or '
             "Apple Pay at Stripe Checkout once you sign in — card "
-            "access unlocks automatically when payment completes."
-            f"{btc_note}</p>"
+            "access unlocks automatically when payment completes.</p>"
         )
+    # Bitcoin alongside Cash App cash (Taylor, 2026-11-12: "Offer
+    # bitcoin alongside"): paid INSIDE Cash App to the cashtag — Cash
+    # App shows Taylor no on-chain deposit address ("There isn't
+    # one"), so no address is shown or implied; the buyer sends the
+    # quoted BTC amount to the cashtag with their account email in
+    # the note and records the order here, exactly like a Cash App
+    # cash order. The quote is live from CoinGecko; if the rate is
+    # unreachable the option stays named with a check-back note
+    # rather than a wrong amount.
+    btc_section = ""
+    if member is None or course["key"] not in member_access(member["id"]):
+        btc_amount, _rate = btc_quote(course["cents"])
+        if btc_amount is None:
+            btc_section = (
+                '<div class="card"><h2>Or pay with Bitcoin — inside '
+                "Cash App</h2>"
+                '<p class="small">The Bitcoin rate is unavailable right '
+                "now — please check back shortly. Cash App cash above "
+                "works as usual.</p></div>"
+            )
+        else:
+            if member is not None:
+                with _lock:
+                    btc_pending = _db.execute(
+                        "SELECT * FROM manual_orders WHERE member_id = ? AND "
+                        "course_key = ? AND method = 'bitcoin' AND "
+                        "status = 'pending' ORDER BY created_at",
+                        (member["id"], course["key"]),
+                    ).fetchall()
+                if btc_pending:
+                    o = btc_pending[-1]
+                    btc_action = (
+                        f'<p>Your Bitcoin order #{o["id"]} is recorded: send '
+                        f"<strong>{esc(o['amount_text'])}</strong> to "
+                        f"<code>{esc(CASHAPP_CASHTAG)}</code> inside Cash App "
+                        "with your account email in the payment note. Access "
+                        "unlocks as soon as the owner confirms receipt.</p>"
+                    )
+                else:
+                    btc_action = (
+                        f'<form method="post" action="{BASE}/bitcoin/order">'
+                        f'<input type="hidden" name="course_key" value="{course["key"]}">'
+                        f'<button class="secondary" type="submit">Record my '
+                        f"Bitcoin order — {btc_amount} BTC</button></form>"
+                        '<p class="small">Record the order when you send the '
+                        "payment — it is what the owner confirms against.</p>"
+                    )
+            else:
+                btc_action = (
+                    f'<p><a class="btn secondary" href="{BASE}/">Sign in / '
+                    "Create your free account</a></p>"
+                    '<p class="small">Your account comes first — the email '
+                    "on it is what you put in the Cash App note.</p>"
+                )
+            btc_section = f"""
+<div class="card"><h2>Or pay with Bitcoin — inside Cash App</h2>
+<ol>
+<li>In Cash App, send exactly <strong>{btc_amount} BTC</strong>
+(the Bitcoin amount for {amount} at the current rate) to
+<strong><code>{esc(CASHAPP_CASHTAG)}</code></strong> using Cash App's
+Bitcoin send to the cashtag — there is no separate wallet address.</li>
+<li>In the Cash App payment note, put
+<strong>your account email</strong> — that is how your payment is
+matched to your account.</li>
+<li>Access unlocks as soon as the owner confirms receipt. Your
+download then appears on your Member Desk.</li>
+</ol>
+{btc_action}
+</div>"""
     body = f"""
 <h1>Buy — {esc(course["name"])}</h1>
 <p class="small">Taylor's Transgender Patient Awareness, LLC · sold only on this site</p>
@@ -879,6 +959,7 @@ download then appears on your Member Desk.</li>
 {action}
 </div>
 {card_note}
+{btc_section}
 <p><a class="btn secondary" href="{BASE}/preview">Preview the courses</a>
 <a class="btn secondary" href="{BASE}/desk">Member Desk</a></p>
 """
@@ -1047,8 +1128,10 @@ def desk_page(member, message="", ok=False):
                     parts.append(
                         f'<p class="small">Bitcoin order #{o["id"]} pending: send '
                         f'<strong>{esc(o["amount_text"])}</strong> to '
-                        f'<code>{esc(BTC_RECEIVE_ADDRESS)}</code><br>'
-                        "Access unlocks when the owner confirms receipt.</p>"
+                        f'<code>{esc(CASHAPP_CASHTAG)}</code> inside Cash App — '
+                        "put your account email in the payment note so it can "
+                        "be matched.<br>Access unlocks when the owner confirms "
+                        "receipt.</p>"
                     )
                 else:
                     parts.append(
@@ -1076,14 +1159,22 @@ def desk_page(member, message="", ok=False):
                 '<p class="small">Access unlocks when the owner confirms '
                 "receipt.</p>"
             )
-            if BTC_RECEIVE_ADDRESS:
-                parts.append(
-                    f'<form class="inline" method="post" action="{BASE}/bitcoin/order">'
-                    f'<input type="hidden" name="course_key" value="{c["key"]}">'
-                    f'<button class="secondary" type="submit">Pay with Bitcoin</button></form> '
-                )
-            else:
-                parts.append('<p class="small">Bitcoin: not yet available.</p>')
+            # Bitcoin alongside Cash App (Taylor, 2026-11-12): sent
+            # inside Cash App to the cashtag; the order records the
+            # live-quoted BTC amount and the owner confirms receipt,
+            # exactly like a Cash App cash order.
+            parts.append(
+                '<p><strong>Buy with Bitcoin:</strong> send the Bitcoin '
+                "amount quoted on the course buy page to "
+                f"<code>{esc(CASHAPP_CASHTAG)}</code> inside Cash App "
+                "and put your account email in the payment note, then "
+                "record your order:</p>"
+                f'<form class="inline" method="post" action="{BASE}/bitcoin/order">'
+                f'<input type="hidden" name="course_key" value="{c["key"]}">'
+                f'<button class="secondary" type="submit">Pay with Bitcoin</button></form> '
+                '<p class="small">Access unlocks when the owner confirms '
+                "receipt.</p>"
+            )
             manual = "".join(parts)
             if STRIPE_SECRET_KEY:
                 status = (
@@ -1763,8 +1854,6 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
             course = COURSE_BY_KEY.get(form.get("course_key", ""))
             if course is None:
                 return self.send_html("<h1>Bad request</h1>", status=400)
-            if not BTC_RECEIVE_ADDRESS:
-                return self.send_html(desk_page(member, "Bitcoin is not yet available."))
             if course["key"] in member_access(member["id"]):
                 return self.send_html(desk_page(member, "You already have access to this.", ok=True))
             btc_amount, _rate = btc_quote(course["cents"])
@@ -1778,14 +1867,17 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
                     "usd_cents, amount_text, detail, created_at) "
                     "VALUES (?, ?, 'bitcoin', ?, ?, ?, ?)",
                     (member["id"], course["key"], course["cents"],
-                     f"{btc_amount} BTC", BTC_RATE_SOURCE, int(time.time())),
+                     f"{btc_amount} BTC",
+                     f"Cash App {CASHAPP_CASHTAG} · {BTC_RATE_SOURCE}",
+                     int(time.time())),
                 )
             return self.send_html(
                 desk_page(
                     member,
                     f"Bitcoin order created: send {btc_amount} BTC to "
-                    f"{BTC_RECEIVE_ADDRESS}. Access unlocks when the owner "
-                    "confirms receipt.",
+                    f"{CASHAPP_CASHTAG} inside Cash App — put your account "
+                    "email in the payment note. Access unlocks when the "
+                    "owner confirms receipt.",
                     ok=True,
                 )
             )
