@@ -1,9 +1,10 @@
 name: Deploy files library (service + staged bytes)
 
 # Targeted deploy for the Files Library. Fetches the staged file-bytes
-# archive from a short-lived capability URL (repo secrets
-# FILESLIB_STAGE_URL / FILESLIB_STAGE_SHA256, set only for this staging
-# and removed afterwards — the bytes are never committed to git),
+# archive (split into parts under the storage size cap) from
+# short-lived capability URLs (repo secrets FILESLIB_STAGE_URLS /
+# FILESLIB_STAGE_SHA256, set only for this staging and removed
+# afterwards — the bytes are never committed to git), reassembles it,
 # verifies its SHA-256, rsyncs the repo, delivers the archive to the
 # host over SSH, and runs ops/deploy-files-library.sh, which stages the
 # bytes into the fileslib-data volume, builds/recreates ONLY fileslib
@@ -30,13 +31,21 @@ jobs:
           chmod 600 ~/.ssh/id_deploy
           ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Fetch staged bytes archive and verify checksum
+      - name: Fetch staged bytes archive parts and verify checksum
         env:
-          FILESLIB_STAGE_URL: ${{ secrets.FILESLIB_STAGE_URL }}
+          FILESLIB_STAGE_URLS: ${{ secrets.FILESLIB_STAGE_URLS }}
           FILESLIB_STAGE_SHA256: ${{ secrets.FILESLIB_STAGE_SHA256 }}
         run: |
-          [ -n "${FILESLIB_STAGE_URL}" ] || { echo "FILESLIB_STAGE_URL secret not set"; exit 1; }
-          curl -fsSL "${FILESLIB_STAGE_URL}" -o /tmp/fileslib-data.tar
+          [ -n "${FILESLIB_STAGE_URLS}" ] || { echo "FILESLIB_STAGE_URLS secret not set"; exit 1; }
+          i=0
+          for url in ${FILESLIB_STAGE_URLS}; do
+            printf -v part "/tmp/fileslib-part-%02d" "${i}"
+            curl -fsSL "${url}" -o "${part}"
+            i=$((i+1))
+          done
+          echo "downloaded ${i} parts"
+          cat /tmp/fileslib-part-* > /tmp/fileslib-data.tar
+          rm -f /tmp/fileslib-part-*
           echo "${FILESLIB_STAGE_SHA256}  /tmp/fileslib-data.tar" | sha256sum -c -
 
       - name: Rsync repo to host
