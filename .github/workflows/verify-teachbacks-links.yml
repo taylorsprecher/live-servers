@@ -1,0 +1,82 @@
+name: Verify Teachbacks links on company portals (one-off)
+
+# One-off, manually dispatched, read-only. Curls the public portal pages
+# from the runner (no crawl cache) and reports, per page: HTTP status
+# plus content checks. Fails if /portal/woodburn, /portal/monitor or
+# /portal/oha is not 200 or lacks exactly one Teachbacks heading and the
+# new "All Teachbacks" card linking the bare training-site URL; if
+# /portal/hillsboro or /portal/maine is not 200, lost its existing
+# company teach-back card, or gained a second Teachbacks heading; if
+# the /portal/ index is not 200 or its Teachbacks section (20
+# training-site teach-back cards) is not intact; or if /members/ or
+# /files/ is not 200. Verifies Taylor's 2026-11-13 direction: "Add
+# teachbacks links also" — Hillsboro and Maine already carried
+# company-specific teach-back cards; the other three company portals
+# had no Teachbacks block. The generic card links the bare
+# training-site URL because the training site has no umbrella
+# teach-backs anchor: its teach-back articles are individual sections,
+# and its #teach-back section heads the single Teach-Back technique
+# article, not the collection.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-teachbacks-links:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe live pages
+        run: |
+          fail=0
+          TS='https://muse.ai/s/911transedu-net-website-xkk6xaxm0ib1ak/-hQ_ySKdwECtNsqmEyusrdqJDfrhiRX9-5oxqk2dnI4'
+          fetch() {
+            body="$(mktemp)"
+            code="$(curl -s -H 'Cache-Control: no-cache' -o "${body}" -w '%{http_code}' "$1")"
+            echo "$1 -> HTTP ${code}"
+            [ "${code}" = "200" ] || fail=1
+          }
+          count() { grep -o "$1" "${body}" | wc -l; }
+          want_ge() { n="$(count "$2")"; echo "  $1 x${n} (want >=$3)"; [ "${n}" -ge "$3" ] || fail=1; }
+          want_eq() { n="$(count "$2")"; echo "  $1 x${n} (want =$3)"; [ "${n}" -eq "$3" ] || fail=1; }
+
+          check_generic() {
+            fetch "https://members.911transedu.net/portal/$1"
+            want_eq 'Teachbacks heading' '<h2>Teachbacks</h2>' 1
+            want_eq "'All Teachbacks' label" '<span>All Teachbacks</span>' 1
+            want_ge 'bare training-site href' "href=\"${TS}\"" 1
+            want_ge "'Every teach-back' tag" 'Every teach-back' 1
+            rm -f "${body}"
+          }
+
+          check_generic woodburn
+          check_generic monitor
+          check_generic oha
+
+          fetch "https://members.911transedu.net/portal/hillsboro"
+          want_eq 'Teachbacks heading' '<h2>Teachbacks</h2>' 1
+          want_ge 'Hillsboro teach-back href' '#hillsboro-fire-teachback' 1
+          want_ge "'Hillsboro Fire Teach-Back' label" 'Hillsboro Fire Teach-Back' 1
+          want_eq "'All Teachbacks' label (must stay 0)" '<span>All Teachbacks</span>' 0
+          rm -f "${body}"
+
+          fetch "https://members.911transedu.net/portal/maine"
+          want_eq 'Teachbacks heading' '<h2>Teachbacks</h2>' 1
+          want_ge 'Maine teach-back href' '#kptv-city-of-bend-teachback' 1
+          want_ge "'Maine s.14 Teach-Back' label" 'Maine &sect;14 Teach-Back' 1
+          want_eq "'All Teachbacks' label (must stay 0)" '<span>All Teachbacks</span>' 0
+          rm -f "${body}"
+
+          fetch "https://members.911transedu.net/portal/"
+          want_ge 'index Teachbacks heading' '<h2>Teachbacks</h2>' 1
+          want_ge 'index training-site teach-back links' '911transedu-net-website' 20
+          rm -f "${body}"
+
+          fetch "https://members.911transedu.net/members/"; rm -f "${body}"
+          fetch "https://members.911transedu.net/files/"; rm -f "${body}"
+
+          if [ "${fail}" != "0" ]; then
+            echo "VERDICT: FAIL"
+            exit 1
+          fi
+          echo "VERDICT: OK — woodburn, monitor and oha each carry one Teachbacks block with the All Teachbacks card to the training site; hillsboro and maine unchanged with their own teach-back cards; portal index Teachbacks section intact; /members/ and /files/ 200."

@@ -20,7 +20,14 @@ Hillsboro Fire Teach-Back on the training site (added 2026-11-12 at
 Taylor's direction, completing the "Add ALL Teachback" pass and the
 company separation), and Maine has one for the State of Maine
 Expansion Section (§14, which lives inside the training site's KPTV
-to City of Bend Teachback section). A company page can also carry an
+to City of Bend Teachback section). Woodburn, Monitor RFPD, and
+OHA EMS have no company-specific teachback on record, so theirs is a
+generic "All Teachbacks" block linking the training site itself
+(added 2026-11-13 at Taylor's direction, "Add teachbacks links
+also"); it links the bare training-site URL because the training
+site has no umbrella teach-backs anchor — its teach-back articles
+are individual sections, and its #teach-back section heads the
+single Teach-Back technique article, not the collection. A company page can also carry an
 optional intro block (COMPANY_INTRO_SECTIONS below, substituted for
 __INTRO_SECTION__ in the template); only Maine has one (added
 2026-11-13 at Taylor's direction, with the State of Maine portal:
@@ -74,9 +81,12 @@ COMPANY_INTRO_SECTIONS = {
     ),
 }
 
-# slug -> optional Teachbacks block (HTML, no trailing newline; empty for
-# companies with no company-specific teachback on record). Substituted
-# for __TEACHBACK_SECTION__ in company.html, followed by a newline.
+# slug -> optional Teachbacks block (HTML, no trailing newline).
+# Companies with a company-specific teachback link that article;
+# companies without one carry a generic "All Teachbacks" block linking
+# the training site itself (the training site has no umbrella
+# teach-backs anchor to link instead). Substituted for
+# __TEACHBACK_SECTION__ in company.html, followed by a newline.
 COMPANY_TEACHBACK_SECTIONS = {
     "hillsboro": (
         '    <h2>Teachbacks</h2>\n'
@@ -95,6 +105,30 @@ COMPANY_TEACHBACK_SECTIONS = {
         '<span class="tag">The State of Maine Expansion Section '
         '(&sect;14) on the training site, inside the KPTV to City of '
         'Bend Teachback</span></a>\n'
+        '    </div>\n'
+    ),
+    "woodburn": (
+        '    <h2>Teachbacks</h2>\n'
+        '    <div class="grid">\n'
+        f'      <a class="card" href="{_TRAINING_SITE}">'
+        '<div class="card-top"><span>All Teachbacks</span></div>'
+        '<span class="tag">Every teach-back — on the training site</span></a>\n'
+        '    </div>\n'
+    ),
+    "monitor": (
+        '    <h2>Teachbacks</h2>\n'
+        '    <div class="grid">\n'
+        f'      <a class="card" href="{_TRAINING_SITE}">'
+        '<div class="card-top"><span>All Teachbacks</span></div>'
+        '<span class="tag">Every teach-back — on the training site</span></a>\n'
+        '    </div>\n'
+    ),
+    "oha": (
+        '    <h2>Teachbacks</h2>\n'
+        '    <div class="grid">\n'
+        f'      <a class="card" href="{_TRAINING_SITE}">'
+        '<div class="card-top"><span>All Teachbacks</span></div>'
+        '<span class="tag">Every teach-back — on the training site</span></a>\n'
         '    </div>\n'
     ),
 }
