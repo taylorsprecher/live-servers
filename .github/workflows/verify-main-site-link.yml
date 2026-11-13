@@ -1,0 +1,57 @@
+name: Verify Main Site link on company portals (one-off)
+
+# One-off, manually dispatched, read-only. Curls the public portal pages
+# from the runner (no crawl cache) and reports, per page: HTTP status
+# plus content checks. Fails if any company route is not 200 or lacks
+# the new Main Site card (href https://911transedu.net/ labelled
+# "Main Site"); if the /portal/ index is not 200 or lost its own
+# pre-existing Main Site card; or if /members/ or /files/ is not 200.
+# Verifies Taylor's 2026-11-13 direction: "Add link to main website to
+# website portal" — the index already carried the link; the company
+# portal template did not.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-main-site-link:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe live pages
+        run: |
+          fail=0
+          fetch() {
+            body="$(mktemp)"
+            code="$(curl -s -H 'Cache-Control: no-cache' -o "${body}" -w '%{http_code}' "$1")"
+            echo "$1 -> HTTP ${code}"
+            [ "${code}" = "200" ] || fail=1
+          }
+          count() { grep -o "$1" "${body}" | wc -l; }
+          check_company() {
+            fetch "https://members.911transedu.net/portal/$1"
+            n="$(count 'href="https://911transedu.net/"')"; echo "  Main Site href x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+            n="$(count '<span>Main Site</span>')"; echo "  'Main Site' label x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+            rm -f "${body}"
+          }
+
+          check_company hillsboro
+          check_company woodburn
+          check_company monitor
+          check_company oha
+          check_company maine
+
+          fetch "https://members.911transedu.net/portal/"
+          n="$(count 'href="https://911transedu.net/"')"; echo "  index Main Site href x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          n="$(count '<span>Main Site</span>')"; echo "  index 'Main Site' label x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          n="$(count 'Root Domain')"; echo "  index 'Root Domain' tag x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          rm -f "${body}"
+
+          fetch "https://members.911transedu.net/members/"; rm -f "${body}"
+          fetch "https://members.911transedu.net/files/"; rm -f "${body}"
+
+          if [ "${fail}" != "0" ]; then
+            echo "VERDICT: FAIL"
+            exit 1
+          fi
+          echo "VERDICT: OK — all five company portals carry the Main Site link to https://911transedu.net/; portal index unchanged with its Main Site card; /members/ and /files/ 200."
