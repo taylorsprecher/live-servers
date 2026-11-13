@@ -1,0 +1,62 @@
+name: Verify All Teachbacks anchor on company portals (one-off)
+
+# One-off, manually dispatched, read-only. Curls the public portal and
+# member pages from the runner (no crawl cache) and reports, per page:
+# HTTP status plus content checks. Fails if any of /portal/woodburn,
+# /portal/monitor or /portal/oha is not 200 or does not carry the
+# "All Teachbacks" card pointing at the training site's #all-teachbacks
+# section; if /portal/hillsboro or /portal/maine changed (their own
+# teach-back cards must remain and no generic #all-teachbacks href may
+# appear); or if the /portal/ index loses its teach-back links or any
+# checked route is not 200.
+# Verifies Taylor's 2026-11-13 direction: "Create the all teachbacks"
+# (the training site gained #all-teachbacks; the three generic cards
+# now point at it).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-all-teachbacks-anchor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe live pages
+        run: |
+          fail=0
+          body="$(mktemp)"
+          fetch() {
+            code="$(curl -s -o "${body}" -w '%{http_code}' "$1")"
+            echo "$1 -> HTTP ${code}"
+            [ "${code}" = "200" ] || fail=1
+          }
+          count() { grep -o "$1" "${body}" | wc -l; }
+          TRAINING='https://muse.ai/s/911transedu-net-website-xkk6xaxm0ib1ak/-hQ_ySKdwECtNsqmEyusrdqJDfrhiRX9-5oxqk2dnI4'
+
+          for slug in woodburn monitor oha; do
+            fetch "https://members.911transedu.net/portal/${slug}"
+            n="$(count 'Teachbacks')"; echo "  ${slug} 'Teachbacks' x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+            n="$(count "${TRAINING}#all-teachbacks")"; echo "  ${slug} #all-teachbacks href x${n} (want 1)"; [ "${n}" -eq 1 ] || fail=1
+            n="$(count 'All Teachbacks')"; echo "  ${slug} 'All Teachbacks' label x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          done
+
+          fetch "https://members.911transedu.net/portal/hillsboro"
+          n="$(count '#hillsboro-fire-teachback')"; echo "  hillsboro own card href x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          n="$(count '#all-teachbacks')"; echo "  hillsboro generic #all-teachbacks href x${n} (want 0)"; [ "${n}" -eq 0 ] || fail=1
+
+          fetch "https://members.911transedu.net/portal/maine"
+          n="$(count '#kptv-city-of-bend-teachback')"; echo "  maine own card href x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          n="$(count '#all-teachbacks')"; echo "  maine generic #all-teachbacks href x${n} (want 0)"; [ "${n}" -eq 0 ] || fail=1
+
+          fetch "https://members.911transedu.net/portal/"
+          n="$(count "${TRAINING}#")"; echo "  index training-site teach-back links x${n} (want >=20)"; [ "${n}" -ge 20 ] || fail=1
+
+          fetch "https://members.911transedu.net/members/"
+          fetch "https://members.911transedu.net/files/"
+          rm -f "${body}"
+
+          if [ "${fail}" != "0" ]; then
+            echo "VERDICT: FAIL"
+            exit 1
+          fi
+          echo "VERDICT: OK — woodburn/monitor/oha carry the All Teachbacks card at #all-teachbacks; hillsboro/maine unchanged; index teach-back links intact; /members/ and /files/ 200."
