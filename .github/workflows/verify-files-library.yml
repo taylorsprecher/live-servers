@@ -1,0 +1,84 @@
+name: Verify Files Library on live pages (one-off)
+
+# One-off, manually dispatched, read-only. Curls the public Files
+# Library from the runner (no crawl cache) and checks: /files/ is 200
+# with exactly 1,088 listed entries, 767 download links, 255
+# "On file — available on request" tags and the "Held — ask Taylor"
+# group; /files/health reports 747 downloadable files; three downloads
+# byte-match their source SHA-256; a held filename is listed but the
+# download-link total proves it has no link (held entries carry no
+# download id by construction); and /members/, /portal/ with all five
+# company routes, and /syncflow/ are still 200.
+# Verifies Taylor's 2026-11-13 direction: "Put the Files library on my
+# member server instead."
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-files-library:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Probe live pages
+        run: |
+          fail=0
+          fetch() {
+            body="$(mktemp)"
+            code="$(curl -s -o "${body}" -w '%{http_code}' "$1")"
+            echo "$1 -> HTTP ${code}"
+            [ "${code}" = "200" ] || fail=1
+          }
+          count() { grep -o "$1" "${body}" | wc -l; }
+
+          fetch "https://members.911transedu.net/files/"
+          n="$(count 'class="file-row"')"; echo "  listed entries x${n} (want 1088)"; [ "${n}" = "1088" ] || fail=1
+          n="$(count '/files/dl/f')"; echo "  download links x${n} (want 767)"; [ "${n}" = "767" ] || fail=1
+          n="$(count 'On file — available on request')"; echo "  on-request tags x${n} (want 255)"; [ "${n}" = "255" ] || fail=1
+          n="$(count 'Held — ask Taylor')"; echo "  held group x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          n="$(count '2025_FEDERAL_RETURN_2026-05-23_033340.pdf')"; echo "  held tax return listed by name x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          n="$(count 'Files Library')"; echo "  'Files Library' x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          rm -f "${body}"
+
+          fetch "https://members.911transedu.net/files/health"
+          grep -q '"downloadable_files": 747' "${body}" && echo "  health downloadable_files 747 OK" || { echo "  health downloadable_files MISMATCH"; fail=1; }
+          grep -q '"held": 66' "${body}" && echo "  health held 66 OK" || { echo "  health held MISMATCH"; fail=1; }
+          rm -f "${body}"
+
+          check_dl() {
+            tmp="$(mktemp)"
+            code="$(curl -s -o "${tmp}" -w '%{http_code}' "https://members.911transedu.net/files/dl/$1")"
+            got="$(sha256sum "${tmp}" | awk '{print $1}')"
+            if [ "${code}" = "200" ] && [ "${got}" = "$2" ]; then
+              echo "  download $1 byte-match OK ($(stat -c%s "${tmp}") bytes)"
+            else
+              echo "  download $1 MISMATCH (http ${code}, sha ${got})"
+              fail=1
+            fi
+            rm -f "${tmp}"
+          }
+          check_dl f0001 24d14243b5334c2c4c7f9a4d5128596448f6f3090f8349c72bcb9e52d99c2f3e
+          check_dl f0685 8313868fb35f9ac741bd2c640443e8d6a022defc1ba161f977c8cd02f55af046
+          check_dl f0492 ff9641f34ea9a0fecd5b0a958d3fa44785d5a426edb69a335f9505479e9c2cbd
+
+          # A held file has no download id; a guessed id must 404.
+          code="$(curl -s -o /dev/null -w '%{http_code}' "https://members.911transedu.net/files/dl/f9999")"
+          echo "  guessed id f9999 -> HTTP ${code} (want 404)"; [ "${code}" = "404" ] || fail=1
+
+          fetch "https://members.911transedu.net/portal/"
+          n="$(count 'Files Library')"; echo "  portal Files Library card x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          rm -f "${body}"
+
+          fetch "https://members.911transedu.net/members/"; rm -f "${body}"
+          fetch "https://members.911transedu.net/portal/hillsboro"; rm -f "${body}"
+          fetch "https://members.911transedu.net/portal/woodburn"; rm -f "${body}"
+          fetch "https://members.911transedu.net/portal/monitor"; rm -f "${body}"
+          fetch "https://members.911transedu.net/portal/oha"; rm -f "${body}"
+          fetch "https://members.911transedu.net/portal/maine"; rm -f "${body}"
+          fetch "https://members.911transedu.net/syncflow/"; rm -f "${body}"
+
+          if [ "${fail}" != "0" ]; then
+            echo "VERDICT: FAIL"
+            exit 1
+          fi
+          echo "VERDICT: OK — /files/ live with 1088 entries, 767 download links (747 files), 255 on-request, 66 held name-only; 3 downloads byte-match; all other routes 200."

@@ -186,6 +186,20 @@ services:
     ports:
       - "127.0.0.1:18112:8000"
 
+  fileslib:
+    build:
+      context: ./services/files-library
+    container_name: live-fileslib
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      BASE_PATH: /files
+      FILESLIB_DATA_DIR: /data
+    volumes:
+      - fileslib-data:/data
+    ports:
+      - "127.0.0.1:18113:8000"
+
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -213,6 +227,7 @@ services:
       - specmatrix
       - portal
       - syncflow
+      - fileslib
 
 volumes:
   maclan-data:
@@ -220,3 +235,4 @@ volumes:
   celltower-data:
   members-data:
   syncflow-data:
+  fileslib-data:

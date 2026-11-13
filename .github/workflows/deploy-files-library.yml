@@ -1,0 +1,68 @@
+name: Deploy files library (service + staged bytes)
+
+# Targeted deploy for the Files Library. Fetches the staged file-bytes
+# archive from a short-lived capability URL (repo secrets
+# FILESLIB_STAGE_URL / FILESLIB_STAGE_SHA256, set only for this staging
+# and removed afterwards — the bytes are never committed to git),
+# verifies its SHA-256, rsyncs the repo, delivers the archive to the
+# host over SSH, and runs ops/deploy-files-library.sh, which stages the
+# bytes into the fileslib-data volume, builds/recreates ONLY fileslib
+# and portal, and force-recreates the gateway for the /files route.
+# The archive contains ONLY non-held files (747 files, named by
+# download id); held files' bytes never leave Taylor's machine.
+# deploy.sh and its RAM gate are untouched.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-files-library:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Fetch staged bytes archive and verify checksum
+        env:
+          FILESLIB_STAGE_URL: ${{ secrets.FILESLIB_STAGE_URL }}
+          FILESLIB_STAGE_SHA256: ${{ secrets.FILESLIB_STAGE_SHA256 }}
+        run: |
+          [ -n "${FILESLIB_STAGE_URL}" ] || { echo "FILESLIB_STAGE_URL secret not set"; exit 1; }
+          curl -fsSL "${FILESLIB_STAGE_URL}" -o /tmp/fileslib-data.tar
+          echo "${FILESLIB_STAGE_SHA256}  /tmp/fileslib-data.tar" | sha256sum -c -
+
+      - name: Rsync repo to host
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'secrets/' \
+            --exclude 'tls-state/' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Deliver bytes archive to host
+        run: |
+          scp -i ~/.ssh/id_deploy /tmp/fileslib-data.tar \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/fileslib-data.tar"
+          rm -f /tmp/fileslib-data.tar
+
+      - name: Stage bytes + build + up fileslib on host
+        env:
+          FILESLIB_STAGE_SHA256: ${{ secrets.FILESLIB_STAGE_SHA256 }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "FILESLIB_SHA256=${FILESLIB_STAGE_SHA256} bash /home/deploy/live-servers/ops/deploy-files-library.sh"
