@@ -1,0 +1,54 @@
+name: Verify State of Maine portal on live pages (one-off)
+
+# One-off, manually dispatched, read-only. Curls the public portal and
+# member pages from the runner (no crawl cache) and reports, per page:
+# HTTP status plus content checks. Fails if /portal/maine is not 200 or
+# lacks the "State of Maine" title, the Maine EMS intro, the protocols
+# coverage note, or the teach-back link to the training site's KPTV to
+# City of Bend Teachback section (which holds the State of Maine
+# Expansion Section, §14); if the /portal/ index lacks the Maine card;
+# or if any pre-existing company route or /members/ is not 200.
+# Verifies Taylor's 2026-11-13 direction: "Can you add State of Maine."
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-maine-portal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Probe live pages
+        run: |
+          fail=0
+          fetch() {
+            body="$(mktemp)"
+            code="$(curl -s -o "${body}" -w '%{http_code}' "$1")"
+            echo "$1 -> HTTP ${code}"
+            [ "${code}" = "200" ] || fail=1
+          }
+          count() { grep -o "$1" "${body}" | wc -l; }
+
+          fetch "https://members.911transedu.net/portal/maine"
+          n="$(count 'State of Maine')"; echo "  'State of Maine' x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          n="$(count 'For Maine EMS Providers')"; echo "  intro heading x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          n="$(count 'counties or hospitals to pay for')"; echo "  protocols note x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          n="$(count '#kptv-city-of-bend-teachback')"; echo "  teach-back link x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          rm -f "${body}"
+
+          fetch "https://members.911transedu.net/portal/"
+          n="$(count 'href="maine"')"; echo "  Maine card link x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          n="$(count '/portal/maine')"; echo "  Maine card tag x${n} (want >=1)"; [ "${n}" -ge 1 ] || fail=1
+          rm -f "${body}"
+
+          fetch "https://members.911transedu.net/portal/hillsboro"; rm -f "${body}"
+          fetch "https://members.911transedu.net/portal/woodburn"; rm -f "${body}"
+          fetch "https://members.911transedu.net/portal/monitor"; rm -f "${body}"
+          fetch "https://members.911transedu.net/portal/oha"; rm -f "${body}"
+          fetch "https://members.911transedu.net/members/"; rm -f "${body}"
+
+          if [ "${fail}" != "0" ]; then
+            echo "VERDICT: FAIL"
+            exit 1
+          fi
+          echo "VERDICT: OK — /portal/maine live with State of Maine title, intro, protocols note and teach-back link; index carries the Maine card; all other routes 200."
