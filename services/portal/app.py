@@ -24,10 +24,14 @@ to City of Bend Teachback section). Woodburn, Monitor RFPD, and
 OHA EMS have no company-specific teachback on record, so theirs is a
 generic "All Teachbacks" block linking the training site itself
 (added 2026-11-13 at Taylor's direction, "Add teachbacks links
-also"); it links the bare training-site URL because the training
-site has no umbrella teach-backs anchor — its teach-back articles
-are individual sections, and its #teach-back section heads the
-single Teach-Back technique article, not the collection. A company page can also carry an
+also"); it first linked the bare training-site URL because the
+training site then had no umbrella teach-backs anchor — its
+teach-back articles are individual sections, and its #teach-back
+section heads the single Teach-Back technique article, not the
+collection. The training site has since gained an "All Teachbacks"
+collection section (#all-teachbacks, added 2026-11-13 at Taylor's
+direction, "Create the all teachbacks"), and the three generic
+cards now link that anchor. A company page can also carry an
 optional intro block (COMPANY_INTRO_SECTIONS below, substituted for
 __INTRO_SECTION__ in the template); only Maine has one (added
 2026-11-13 at Taylor's direction, with the State of Maine portal:
@@ -84,8 +88,10 @@ COMPANY_INTRO_SECTIONS = {
 # slug -> optional Teachbacks block (HTML, no trailing newline).
 # Companies with a company-specific teachback link that article;
 # companies without one carry a generic "All Teachbacks" block linking
-# the training site itself (the training site has no umbrella
-# teach-backs anchor to link instead). Substituted for
+# the training site's #all-teachbacks collection section (the umbrella
+# anchor was created on the training site 2026-11-13 at Taylor's
+# direction, "Create the all teachbacks"; before that the cards linked
+# the bare training-site URL). Substituted for
 # __TEACHBACK_SECTION__ in company.html, followed by a newline.
 COMPANY_TEACHBACK_SECTIONS = {
     "hillsboro": (
@@ -110,7 +116,7 @@ COMPANY_TEACHBACK_SECTIONS = {
     "woodburn": (
         '    <h2>Teachbacks</h2>\n'
         '    <div class="grid">\n'
-        f'      <a class="card" href="{_TRAINING_SITE}">'
+        f'      <a class="card" href="{_TRAINING_SITE}#all-teachbacks">'
         '<div class="card-top"><span>All Teachbacks</span></div>'
         '<span class="tag">Every teach-back — on the training site</span></a>\n'
         '    </div>\n'
@@ -118,7 +124,7 @@ COMPANY_TEACHBACK_SECTIONS = {
     "monitor": (
         '    <h2>Teachbacks</h2>\n'
         '    <div class="grid">\n'
-        f'      <a class="card" href="{_TRAINING_SITE}">'
+        f'      <a class="card" href="{_TRAINING_SITE}#all-teachbacks">'
         '<div class="card-top"><span>All Teachbacks</span></div>'
         '<span class="tag">Every teach-back — on the training site</span></a>\n'
         '    </div>\n'
@@ -126,7 +132,7 @@ COMPANY_TEACHBACK_SECTIONS = {
     "oha": (
         '    <h2>Teachbacks</h2>\n'
         '    <div class="grid">\n'
-        f'      <a class="card" href="{_TRAINING_SITE}">'
+        f'      <a class="card" href="{_TRAINING_SITE}#all-teachbacks">'
         '<div class="card-top"><span>All Teachbacks</span></div>'
         '<span class="tag">Every teach-back — on the training site</span></a>\n'
         '    </div>\n'
