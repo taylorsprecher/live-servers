@@ -15,10 +15,17 @@ at Taylor's direction ("Per company routes"); each carries the company
 name and public platform links only — no individual names, emails, or
 phone numbers. A company page also carries an optional per-company
 Teachbacks block (COMPANY_TEACHBACK_SECTIONS below, substituted for
-__TEACHBACK_SECTION__ in the template); only Hillsboro has one, for the
+__TEACHBACK_SECTION__ in the template); Hillsboro has one, for the
 Hillsboro Fire Teach-Back on the training site (added 2026-11-12 at
 Taylor's direction, completing the "Add ALL Teachback" pass and the
-company separation).
+company separation), and Maine has one for the State of Maine
+Expansion Section (§14, which lives inside the training site's KPTV
+to City of Bend Teachback section). A company page can also carry an
+optional intro block (COMPANY_INTRO_SECTIONS below, substituted for
+__INTRO_SECTION__ in the template); only Maine has one (added
+2026-11-13 at Taylor's direction, with the State of Maine portal:
+who the portal is for, the member-site registration link, and the
+protocols coverage note).
 
 Stateless: nothing is stored; the probes run in the visitor's browser.
 """
@@ -38,12 +45,34 @@ COMPANIES = {
     "woodburn": "Woodburn Ambulance",
     "monitor": "Monitor RFPD",
     "oha": "OHA EMS",
+    "maine": "State of Maine",
 }
 
 _TRAINING_SITE = (
     "https://muse.ai/s/911transedu-net-website-xkk6xaxm0ib1ak/"
     "-hQ_ySKdwECtNsqmEyusrdqJDfrhiRX9-5oxqk2dnI4"
 )
+
+# slug -> optional intro block (HTML, no trailing newline; empty for
+# companies with no intro on record). Substituted for
+# __INTRO_SECTION__ in company.html, followed by a newline.
+COMPANY_INTRO_SECTIONS = {
+    "maine": (
+        '    <h2>For Maine EMS Providers &amp; Agencies</h2>\n'
+        '    <div class="grid">\n'
+        '      <a class="card" href="https://members.911transedu.net/members/">'
+        '<div class="card-top"><span>Register on the Member Site</span></div>'
+        '<span class="tag">This portal is for Maine EMS providers and '
+        'agencies — register with your agency email and access is '
+        'granted from the owner roster</span></a>\n'
+        '      <a class="card" href="https://members.911transedu.net/members/buy/emspr">'
+        '<div class="card-top"><span>EMSPR Protocols — $6,000</span></div>'
+        '<span class="tag">The protocols are covered with every provider, '
+        'and it&rsquo;s on the counties or hospitals to pay for '
+        'them</span></a>\n'
+        '    </div>\n'
+    ),
+}
 
 # slug -> optional Teachbacks block (HTML, no trailing newline; empty for
 # companies with no company-specific teachback on record). Substituted
@@ -58,11 +87,23 @@ COMPANY_TEACHBACK_SECTIONS = {
         'Hillsboro Fire training session and delivery record</span></a>\n'
         '    </div>\n'
     ),
+    "maine": (
+        '    <h2>Teachbacks</h2>\n'
+        '    <div class="grid">\n'
+        f'      <a class="card" href="{_TRAINING_SITE}#kptv-city-of-bend-teachback">'
+        '<div class="card-top"><span>Maine &sect;14 Teach-Back</span></div>'
+        '<span class="tag">The State of Maine Expansion Section '
+        '(&sect;14) on the training site, inside the KPTV to City of '
+        'Bend Teachback</span></a>\n'
+        '    </div>\n'
+    ),
 }
 
 
 def _company_page(slug):
     page = _COMPANY_TEMPLATE.replace("__COMPANY_NAME__", COMPANIES[slug])
+    intro = COMPANY_INTRO_SECTIONS.get(slug, "")
+    page = page.replace("__INTRO_SECTION__", intro)
     section = COMPANY_TEACHBACK_SECTIONS.get(slug, "")
     return page.replace("__TEACHBACK_SECTION__", section).encode()
 

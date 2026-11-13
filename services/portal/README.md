@@ -26,10 +26,16 @@ subdomains.
 - Company routes (added 2026-11-12, Taylor: "Per company routes"):
   `/portal/hillsboro` (Hillsboro Fire & Rescue), `/portal/woodburn`
   (Woodburn Ambulance), `/portal/monitor` (Monitor RFPD), `/portal/oha`
-  (OHA EMS). Each is rendered from `company.html` with the company name
-  substituted; pages carry the company name and public platform links
-  only — no individual names, emails, or phone numbers. The index page
-  links them in its "Company Routes" section.
+  (OHA EMS), `/portal/maine` (State of Maine, added 2026-11-13). Each
+  is rendered from `company.html` with the company name substituted;
+  pages carry the company name and public platform links only — no
+  individual names, emails, or phone numbers. The index page links
+  them in its "Company Routes" section. Optional per-company blocks:
+  Hillsboro and Maine carry a Teachbacks block (Maine's links the
+  training site's KPTV to City of Bend Teachback section, which holds
+  the State of Maine Expansion Section, §14), and Maine carries an
+  intro block (who the portal is for, the member-site registration
+  link, and the protocols coverage note).
 - Targeted deploy: `.github/workflows/deploy-portal.yml` rsyncs the
   repo and runs `ops/deploy-portal.sh`, which builds/recreates ONLY
   the portal container, then force-recreates the gateway so it loads
