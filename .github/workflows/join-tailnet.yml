@@ -1,0 +1,98 @@
+name: Join tailnet (audited host)
+
+# DRAFT — prepared 2026-11-14, not yet pushed. Destination when
+# approved: .github/workflows/join-tailnet.yml, with the companion
+# script at ops/join-tailnet.sh.
+#
+# Manually dispatched only. Joins the audited host to Taylor's
+# Tailscale tailnet as hostname "audited-host", so the two AWS hosts
+# and the assistant VM share one private network (100.x addresses).
+# Three modes, chosen at dispatch:
+#   probe   read-only pre-flight (OS, passwordless sudo, RAM, disk,
+#           Docker, existing Tailscale) — run this first; it changes
+#           nothing and its full output answers whether the install
+#           can proceed at all.
+#   join    installs Tailscale (official installer) if missing and
+#           runs `tailscale up`. The auth key comes from the
+#           TAILSCALE_AUTH_KEY Actions secret and is piped over SSH
+#           stdin into the host script — never a command-line
+#           argument, never echoed; GitHub also masks secret values
+#           in logs. When the secret is absent the join step fails
+#           loudly rather than half-joining.
+#   verify  read-only: full `tailscale status` plus pings to the
+#           assistant VM (100.87.134.23) and, if given, the
+#           connectable-pathways host's tailnet address. Run this
+#           after device approval (see RUNBOOK.md).
+#
+# This workflow never runs deploy.sh, so deploy.sh's 700 MB RAM gate
+# is untouched; the host script mirrors the same 700 MB threshold as
+# its own pre-join check. Nothing here touches Docker, the nginx 443
+# gateway, TLS, or any service.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "probe (read-only), join (install + tailscale up), or verify (status + pings)"
+        type: choice
+        options:
+          - probe
+          - join
+          - verify
+        default: probe
+        required: true
+      peer_ip:
+        description: "Optional: connectable-pathways tailnet address (100.x) for verify pings"
+        type: string
+        default: ""
+        required: false
+
+jobs:
+  join-tailnet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy join script to host
+        run: |
+          scp -i ~/.ssh/id_deploy ops/join-tailnet.sh \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/join-tailnet.sh"
+
+      - name: Probe host (read-only)
+        if: inputs.action == 'probe'
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/join-tailnet.sh probe'
+
+      # Key delivery: the secret travels on SSH stdin only, as one
+      # TAILSCALE_AUTH_KEY=value line, exactly like deploy-proxy.yml
+      # delivers the proxy password. The host script reads it from
+      # stdin, writes it to a root-only file under /run, joins with
+      # --auth-key=file:, and deletes the file in the same run.
+      - name: Join tailnet
+        if: inputs.action == 'join'
+        env:
+          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        run: |
+          if [ -z "${TAILSCALE_AUTH_KEY}" ]; then
+            echo "TAILSCALE_AUTH_KEY secret is not configured — refusing to join without it."
+            exit 1
+          fi
+          printf 'TAILSCALE_AUTH_KEY=%s\n' "${TAILSCALE_AUTH_KEY}" \
+            | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/join-tailnet.sh join'
+
+      - name: Verify tailnet
+        if: inputs.action == 'verify'
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "bash /home/deploy/join-tailnet.sh verify '${{ inputs.peer_ip }}'"
