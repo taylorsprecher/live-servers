@@ -24,19 +24,22 @@ jobs:
         run: |
           fail=0
 
+          # A successful upgrade leaves the socket open, so curl
+          # exits 28 (timeout) after printing 101; `|| true` keeps
+          # bash -e from aborting on that — the code is the verdict.
           ws_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
             -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
             -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
-            https://specmatrix.911transedu.net/proxy)"
+            https://specmatrix.911transedu.net/proxy || true)"
           echo "WS upgrade https://specmatrix.911transedu.net/proxy -> HTTP ${ws_code} (want 101)"
           [ "${ws_code}" = "101" ] || fail=1
 
-          get_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://specmatrix.911transedu.net/proxy)"
+          get_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://specmatrix.911transedu.net/proxy || true)"
           echo "plain GET https://specmatrix.911transedu.net/proxy -> HTTP ${get_code} (want 400)"
           [ "${get_code}" = "400" ] || fail=1
 
           fetch() {
-            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1")"
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1" || true)"
             echo "$1 -> HTTP ${code} (want 200)"
             [ "${code}" = "200" ] || fail=1
           }
