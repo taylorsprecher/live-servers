@@ -1,0 +1,67 @@
+name: Deploy proxy service only
+
+# Targeted deploy: rsync the repo (same as deploy.yml), deliver the
+# Shadowsocks password from the PROXY_SS_PASSWORD secret into the
+# host .env, then build and recreate ONLY the proxy service on the
+# host and force-recreate the gateway so it loads the /proxy
+# WebSocket route from gateway/nginx.conf. Used instead of the full
+# deploy.sh so deploy.sh's RAM gate is not in play for a one-service
+# change; see ops/deploy-proxy.sh and services/proxy/README.md.
+# TLS config, DNS, all other routes and services are untouched.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-proxy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync repo to host
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'secrets/' \
+            --exclude 'tls-state/' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      # Password delivery: pipe the secret over SSH stdin into the
+      # host .env (compose reads it at `up` time) before the proxy
+      # build. The value travels on stdin only — never in argv, never
+      # echoed; GitHub also masks secret values in logs. When the
+      # secret is absent this step fails loudly: the proxy must never
+      # start with an empty or fallback password.
+      # See ops/set-proxy-password.sh.
+      - name: Deliver proxy password to host .env
+        env:
+          PROXY_SS_PASSWORD: ${{ secrets.PROXY_SS_PASSWORD }}
+        run: |
+          if [ -z "${PROXY_SS_PASSWORD}" ]; then
+            echo "PROXY_SS_PASSWORD secret is not configured — refusing to deploy a passwordless proxy."
+            exit 1
+          fi
+          printf 'PROXY_SS_PASSWORD=%s\n' "${PROXY_SS_PASSWORD}" \
+            | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/live-servers/ops/set-proxy-password.sh'
+
+      - name: Build + up proxy only on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/ops/deploy-proxy.sh'

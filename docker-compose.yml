@@ -200,6 +200,22 @@ services:
     ports:
       - "127.0.0.1:18113:8000"
 
+  proxy:
+    build:
+      context: ./services/proxy
+    container_name: live-proxy
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      # Taylor's personal Shadowsocks proxy (services/proxy). The
+      # password lives ONLY in the host .env (never in git); the
+      # proxy deploy workflow delivers the PROXY_SS_PASSWORD GitHub
+      # secret there (see ops/set-proxy-password.sh). The container
+      # refuses to start when it is unset.
+      PROXY_SS_PASSWORD: ${PROXY_SS_PASSWORD:-}
+    ports:
+      - "127.0.0.1:18114:8388"
+
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -228,6 +244,7 @@ services:
       - portal
       - syncflow
       - fileslib
+      - proxy
 
 volumes:
   maclan-data:

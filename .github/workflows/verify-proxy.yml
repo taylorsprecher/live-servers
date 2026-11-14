@@ -1,0 +1,54 @@
+name: Verify proxy service on live endpoints (one-off)
+
+# One-off, manually dispatched, read-only. Probes the personal proxy
+# from the runner: the WebSocket endpoint on
+# https://specmatrix.911transedu.net/proxy must answer a WebSocket
+# upgrade with 101 (and a plain GET with 400 — the backend speaks
+# WebSocket or nothing); the audited app's public /login and the
+# members / portal / files / syncflow HTTPS routes must still be 200.
+# The full end-to-end check (a real Shadowsocks client fetching an
+# IP-echo page through the tunnel and seeing the host's own address)
+# is run separately from the operator's machine after deployment —
+# a GitHub runner cannot hold the proxy password.
+# See services/proxy/README.md.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-proxy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Probe live endpoints
+        run: |
+          fail=0
+
+          ws_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+            -H 'Connection: Upgrade' -H 'Upgrade: websocket' \
+            -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==' \
+            https://specmatrix.911transedu.net/proxy)"
+          echo "WS upgrade https://specmatrix.911transedu.net/proxy -> HTTP ${ws_code} (want 101)"
+          [ "${ws_code}" = "101" ] || fail=1
+
+          get_code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://specmatrix.911transedu.net/proxy)"
+          echo "plain GET https://specmatrix.911transedu.net/proxy -> HTTP ${get_code} (want 400)"
+          [ "${get_code}" = "400" ] || fail=1
+
+          fetch() {
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$1")"
+            echo "$1 -> HTTP ${code} (want 200)"
+            [ "${code}" = "200" ] || fail=1
+          }
+          fetch "https://members.911transedu.net/members/"
+          fetch "https://members.911transedu.net/portal/"
+          fetch "https://members.911transedu.net/files/"
+          fetch "https://members.911transedu.net/syncflow/"
+          fetch "https://specmatrix.911transedu.net/specmatrix/health"
+          fetch "http://52.41.84.116/login"
+
+          if [ "${fail}" != "0" ]; then
+            echo "VERDICT: FAIL"
+            exit 1
+          fi
+          echo "VERDICT: OK — proxy WebSocket endpoint live on specmatrix.911transedu.net/proxy (101 on upgrade, 400 on plain GET); members, portal, files, syncflow, specmatrix and the audited app all still 200."
