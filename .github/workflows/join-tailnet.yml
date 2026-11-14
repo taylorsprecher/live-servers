@@ -81,7 +81,7 @@ jobs:
       - name: Join tailnet
         if: inputs.action == 'join'
         env:
-          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_LEY }}
         run: |
           if [ -z "${TAILSCALE_AUTH_KEY}" ]; then
             echo "TAILSCALE_AUTH_KEY secret is not configured — refusing to join without it."
