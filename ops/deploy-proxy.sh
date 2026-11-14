@@ -31,15 +31,17 @@ docker compose up -d --force-recreate gateway
 WS_HEADERS=(-H 'Connection: Upgrade' -H 'Upgrade: websocket' -H 'Sec-WebSocket-Version: 13' -H 'Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==')
 
 echo "=== WAIT FOR proxy WebSocket (direct loopback :18114) ==="
-# 45 attempts, not the usual 15: on this host, recreating the proxy
-# container leaves its published port blackholing SYNs for ~4-5
-# minutes (the docker-proxy lag observed 2026-11-13 on both a cold
-# build and a warm recreate) even though the container process is up
-# and listening within seconds and answers 101 the moment the window
-# passes. Every probe inside the window times out; none is refused.
+# 60 attempts, not the usual 15: on this host, recreating the proxy
+# container leaves its published port unreachable for minutes
+# afterwards (observed 2026-11-13 on three consecutive recreates:
+# the port answered somewhere between ~4 and ~8 minutes after each
+# recreate) even though the container process is up and listening
+# within seconds and answers 101 once the window passes. Every probe
+# inside the window times out; none is refused. The mechanism was
+# not identified; the wait simply outlasts the longest window seen.
 # The assertion stays strict — only the patience is longer.
 code="000"
-for i in $(seq 1 45); do
+for i in $(seq 1 60); do
   code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "${WS_HEADERS[@]}" http://127.0.0.1:18114/proxy)" || code="000"
   [ "${code}" = "101" ] && break
   sleep 4

@@ -74,6 +74,12 @@ targeted deploy exactly as deploy.sh itself does.
   RAM gate). It checks: WebSocket 101 direct on :18114 and through
   the gateway under the specmatrix SNI, the gateway regression
   battery, the audited app, and the container's memory footprint.
+  **Host quirk (observed 2026-11-13):** after the proxy container
+  is recreated, its published port stays unreachable for roughly
+  4–8 minutes even though the process is up and listening within
+  seconds; probes then answer 101 and stay up. The deploy script's
+  readiness wait (60 attempts) is sized to outlast that window —
+  do not read an early timeout as a failed deploy.
 - Probe: GitHub Actions → **Verify proxy service on live endpoints**
   (public, read-only: 101 on upgrade, 400 on plain GET, the other
   sites still 200). A runner cannot do the full client test — it
