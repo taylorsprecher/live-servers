@@ -1,0 +1,49 @@
+name: WAN join audited host (pause celltower)
+
+# Manually dispatched only. Runs ops/wan-join-pause.sh on the
+# audited host: stops live-celltower (and live-cport if available
+# RAM is still under the join's 700 MB gate), runs the Tailscale
+# join via ops/join-tailnet.sh, then restarts the containers on
+# every exit path. Taylor approved this sequence on 2026-11-14
+# after the probe showed 578-598 MB available of 1,905 MB total.
+#
+# The auth key comes from the TAILSCALE_AUTH_KEY Actions secret
+# and is piped over SSH stdin into the host script — never a
+# command-line argument, never echoed; GitHub also masks secret
+# values in logs. When the secret is absent the run fails loudly
+# before anything is stopped.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  wan-join-pause:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy join scripts to host
+        run: |
+          scp -i ~/.ssh/id_deploy ops/join-tailnet.sh ops/wan-join-pause.sh \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/"
+
+      - name: Pause containers, join tailnet, restart containers
+        env:
+          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        run: |
+          if [ -z "${TAILSCALE_AUTH_KEY}" ]; then
+            echo "TAILSCALE_AUTH_KEY secret is not configured — refusing to run without it."
+            exit 1
+          fi
+          printf 'TAILSCALE_AUTH_KEY=%s\n' "${TAILSCALE_AUTH_KEY}" \
+            | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/wan-join-pause.sh'
