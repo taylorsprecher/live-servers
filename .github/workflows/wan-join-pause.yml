@@ -1,11 +1,11 @@
 name: WAN join audited host (pause celltower)
 
 # Manually dispatched only. Runs ops/wan-join-pause.sh on the
-# audited host: stops live-celltower (and live-cport if available
-# RAM is still under the join's 700 MB gate), runs the Tailscale
-# join via ops/join-tailnet.sh, then restarts the containers on
-# every exit path. Taylor approved this sequence on 2026-11-14
-# after the probe showed 578-598 MB available of 1,905 MB total.
+# audited host: stops live-celltower and live-cport (both paused
+# at Taylor's direction), runs the Tailscale join via
+# ops/join-tailnet.sh, then restarts the containers on every exit
+# path. Taylor approved this sequence on 2026-11-14 after the
+# probe showed 578-598 MB available of 1,905 MB total.
 #
 # The auth key comes from the TAILSCALE_AUTH_KEY Actions secret
 # and is piped over SSH stdin into the host script — never a
