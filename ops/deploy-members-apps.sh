@@ -52,6 +52,11 @@ code="$(wait_code http://127.0.0.1:18109/members/apps/data 200 30)"
 echo "CHECK apps-data direct ${code} (want 200)"
 [ "$code" = "200" ]
 
+echo "=== OWNER STRIPE PAGE GATE (loopback, must refuse anonymous) ==="
+code="$(wait_code http://127.0.0.1:18109/members/owner/stripe 403 30)"
+echo "CHECK owner-stripe gated ${code} (want 403)"
+[ "$code" = "403" ]
+
 echo "=== APPS HUB VIA GATEWAY (:443) ==="
 # Port 443 is the HTTPS gateway: a plain-HTTP request gets a 301 to
 # HTTPS (that is what failed run 43754246350 on 2026-11-15 — the
