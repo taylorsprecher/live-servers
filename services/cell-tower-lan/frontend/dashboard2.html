@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cell Tower LAN & Site Infrastructure Dashboard</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Custom scrollbar for dark tech aesthetic */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+        .glow-blue { box-shadow: 0 0 20px rgba(59, 130, 246, 0.15); }
+        .glow-emerald { box-shadow: 0 0 20px rgba(16, 185, 129, 0.15); }
+        .pulse-dot {
+            animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-ring {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.4; transform: scale(1.1); }
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-cyan-500 selection:text-slate-950">
+
+    <header class="bg-slate-900/80 backdrop-blur-md border-b border-slate-800 sticky top-0 z-50 px-4 lg:px-8 py-3.5 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="bg-cyan-500/10 border border-cyan-500/30 p-2 rounded-xl text-cyan-400">
+                <i data-lucide="tower-control" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <div class="flex items-center space-x-2">
+                    <h1 class="font-bold text-lg tracking-tight bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">SITE-LAN OAM v4.8</h1>
+                    <span class="bg-emerald-500/10 text-emerald-400 text-xs font-medium px-2 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> SYNC LOCKED
+                    </span>
+                </div>
+                <p class="text-xs text-slate-400">Cell Tower Site #TX-9042 (Alpha Sector Hub)</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <button onclick="triggerAlarmTest()" class="hidden sm:flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg border border-slate-700 transition">
+                <i data-lucide="bell" class="w-3.5 h-3.5 text-amber-400"></i>
+                <span>Simulate Fault</span>
+            </button>
+            <button onclick="toggleGlobalSync()" id="sync-btn" class="flex items-center space-x-1.5 px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-semibold rounded-lg shadow-lg shadow-cyan-500/20 transition">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                <span>Live Refresh: ON</span>
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full space-y-6">
+        
+        <!-- Live Telemetry Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- PTP Jitter Card -->
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-slate-700 transition">
+                <div class="flex items-center justify-between text-slate-400 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider">PTP Timing Jitter</span>
+                    <i data-lucide="clock" class="w-4 h-4 text-cyan-400"></i>
+                </div>
+                <div class="flex items-baseline space-x-2">
+                    <span id="metric-ptp" class="text-2xl font-bold font-mono text-cyan-400">18 ns</span>
+                    <span class="text-xs text-emerald-400 font-medium">±2 ns variance</span>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-800/80 flex justify-between text-[11px] text-slate-400">
+                    <span>IEEE 1588v2 Grandmaster</span>
+                    <span class="text-emerald-400">Locked (PRTC-A)</span>
+                </div>
+            </div>
+
+            <!-- PoE Power Draw Card -->
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-slate-700 transition">
+                <div class="flex items-center justify-between text-slate-400 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider">PoE++ Power Plant</span>
+                    <i data-lucide="zap" class="w-4 h-4 text-amber-400"></i>
+                </div>
+                <div class="flex items-baseline space-x-2">
+                    <span id="metric-poe" class="text-2xl font-bold font-mono text-amber-400">342 W</span>
+                    <span class="text-xs text-slate-400">/ 600W Max</span>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-800/80 flex justify-between text-[11px] text-slate-400">
+                    <span>Rectifier DC Bus</span>
+                    <span class="text-cyan-400">-48.2V DC (Normal)</span>
+                </div>
+            </div>
+
+            <!-- Backhaul Throughput Card -->
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-slate-700 transition">
+                <div class="flex items-center justify-between text-slate-400 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider">Backhaul Transport</span>
+                    <i data-lucide="wifi" class="w-4 h-4 text-emerald-400"></i>
+                </div>
+                <div class="flex items-baseline space-x-2">
+                    <span id="metric-bw" class="text-2xl font-bold font-mono text-emerald-400">1.82 Gbps</span>
+                    <span class="text-xs text-emerald-400">91% capacity</span>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-800/80 flex justify-between text-[11px] text-slate-400">
+                    <span>Fiber SFP+ / 10G Uplink</span>
+                    <span class="text-emerald-400">0.001% Packet Loss</span>
+                </div>
+            </div>
+
+            <!-- Cabinet Thermal Card -->
+            <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:border-slate-700 transition">
+                <div class="flex items-center justify-between text-slate-400 mb-2">
+                    <span class="text-xs font-semibold uppercase tracking-wider">Enclosure Climate</span>
+                    <i data-lucide="thermometer" class="w-4 h-4 text-rose-400"></i>
+                </div>
+                <div class="flex items-baseline space-x-2">
+                    <span id="metric-temp" class="text-2xl font-bold font-mono text-rose-400">34.5 °C</span>
+                    <span class="text-xs text-slate-400">Ambient</span>
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-800/80 flex justify-between text-[11px] text-slate-400">
+                    <span>HVAC Fans</span>
+                    <span class="text-emerald-400">Stage 1 Active (45%)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard Split: Topology & Configuration Tool -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Topology Map & VLAN Architecture (Left 7 cols) -->
+            <div class="lg:col-span-7 flex flex-col space-y-6">
+                
+                <!-- Visual Topology Diagram -->
+                <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex flex-col">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="network" class="w-5 h-5 text-cyan-400"></i>
+                            <h2 class="font-bold text-base">Site LAN Topology & Architecture</h2>
+                        </div>
+                        <span class="text-xs text-slate-400 font-mono">Interactive Node View</span>
+                    </div>
+
+                    <!-- Topology Canvas Box -->
+                    <div class="bg-slate-950/80 border border-slate-800/80 rounded-xl p-5 relative overflow-hidden flex flex-col items-center space-y-6">
+                        
+                        <!-- Backhaul Router Layer -->
+                        <div onclick="selectNode('backhaul')" class="w-full max-w-sm bg-slate-900 border border-cyan-500/40 hover:border-cyan-400 rounded-xl p-3 flex items-center justify-between cursor-pointer transition glow-blue">
+                            <div class="flex items-center space-x-3">
+                                <div class="bg-cyan-500/10 p-2 rounded-lg text-cyan-400">
+                                    <i data-lucide="router" class="w-5 h-5"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-bold text-slate-200">Core Backhaul Router (CR-01)</h4>
+                                    <p class="text-[11px] text-slate-400">MPLS / IPsec Gateway (10G SFP+)</p>
+                                </div>
+                            </div>
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 pulse-dot"></span>
+                        </div>
+
+                        <!-- Connecting Fiber Line -->
+                        <div class="h-6 w-0.5 bg-gradient-to-b from-cyan-500 to-blue-600 relative">
+                            <span class="absolute -left-12 top-1 text-[10px] font-mono text-cyan-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">Trunk 10G</span>
+                        </div>
+
+                        <!-- Aggregation Managed Switch (The LAN Hub) -->
+                        <div onclick="selectNode('switch')" class="w-full max-w-md bg-slate-900 border-2 border-blue-500/60 hover:border-blue-400 rounded-xl p-3.5 flex items-center justify-between cursor-pointer transition shadow-xl">
+                            <div class="flex items-center space-x-3">
+                                <div class="bg-blue-500/10 p-2.5 rounded-lg text-blue-400">
+                                    <i data-lucide="server" class="w-6 h-6"></i>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-bold text-slate-100">Industrial Managed Switch (ISW-800)</h4>
+                                    <p class="text-[11px] text-slate-400">Layer 2/3 Aggregation Hub (8-Port PoE++)</p>
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end">
+                                <span class="bg-blue-500/10 text-blue-400 text-[10px] font-semibold px-2 py-0.5 rounded border border-blue-500/20">VLAN 10,20,30</span>
+                                <span class="text-[10px] text-emerald-400 mt-1">Active</span>
+                            </div>
+                        </div>
+
+                        <!-- Fan-out Links to RAN Devices -->
+                        <div class="w-full grid grid-cols-3 gap-2 pt-2">
+                            
+                            <!-- Node 1: Baseband Unit gNodeB 1 -->
+                            <div onclick="selectNode('bbu1')" class="bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl p-2.5 text-center cursor-pointer transition flex flex-col items-center">
+                                <div class="w-2 h-2 rounded-full bg-emerald-400 mb-1.5"></div>
+                                <i data-lucide="cpu" class="w-4 h-4 text-purple-400 mb-1"></i>
+                                <span class="text-xs font-semibold text-slate-300">BBU Alpha (DU)</span>
+                                <span class="text-[10px] text-slate-400 font-mono mt-0.5">VLAN 20 (UP)</span>
+                            </div>
+
+                            <!-- Node 2: GPS Grandmaster / Sync -->
+                            <div onclick="selectNode('ptp')" class="bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl p-2.5 text-center cursor-pointer transition flex flex-col items-center">
+                                <div class="w-2 h-2 rounded-full bg-emerald-400 mb-1.5"></div>
+                                <i data-lucide="navigation" class="w-4 h-4 text-cyan-400 mb-1"></i>
+                                <span class="text-xs font-semibold text-slate-300">GPS / PTP Ant</span>
+                                <span class="text-[10px] text-slate-400 font-mono mt-0.5">VLAN 30 (Sync)</span>
+                            </div>
+
+                            <!-- Node 3: Site O&M & Rectifier -->
+                            <div onclick="selectNode('om')" class="bg-slate-900/90 border border-slate-800 hover:border-slate-700 rounded-xl p-2.5 text-center cursor-pointer transition flex flex-col items-center">
+                                <div class="w-2 h-2 rounded-full bg-emerald-400 mb-1.5"></div>
+                                <i data-lucide="shield" class="w-4 h-4 text-amber-400 mb-1"></i>
+                                <span class="text-xs font-semibold text-slate-300">DC Power / O&M</span>
+                                <span class="text-[10px] text-slate-400 font-mono mt-0.5">VLAN 10 (Mgmt)</span>
+                            </div>
+
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- VLAN Allocation Table -->
+                <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="layers" class="w-5 h-5 text-blue-400"></i>
+                            <h2 class="font-bold text-base">VLAN Segmentation Matrix</h2>
+                        </div>
+                        <span class="text-xs text-slate-400">802.1Q Tagged</span>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-slate-950 text-slate-400 uppercase tracking-wider border-b border-slate-800">
+                                <tr>
+                                    <th class="p-3 rounded-l-lg">VLAN ID</th>
+                                    <th class="p-3">Network Zone</th>
+                                    <th class="p-3">Priority / QoS</th>
+                                    <th class="p-3">Subnet</th>
+                                    <th class="p-3 rounded-r-lg">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-800/60 font-mono text-slate-300">
+                                <tr class="hover:bg-slate-800/30 transition">
+                                    <td class="p-3 font-bold text-cyan-400">VLAN 10</td>
+                                    <td class="p-3 font-sans font-medium text-slate-200">Management & O&M</td>
+     <td class="p-3">DSCP 32 (CS4)</td>
+                                    <td class="p-3 text-slate-400">10.190.42.0/24</td>
+                                    <td class="p-3"><span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-[10px]">Active</span></td>
+                                </tr>
+                                <tr class="hover:bg-slate-800/30 transition">
+                                    <td class="p-3 font-bold text-purple-400">VLAN 20</td>
+                                    <td class="p-3 font-sans font-medium text-slate-200">User Plane (GTP-U)</td>
+                                    <td class="p-3">DSCP 46 (EF)</td>
+                                    <td class="p-3 text-slate-400">10.190.44.0/22</td>
+                                    <td class="p-3"><span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-[10px]">Active</span></td>
+                                </tr>
+                                <tr class="hover:bg-slate-800/30 transition">
+                                    <td class="p-3 font-bold text-amber-400">VLAN 30</td>
+                                    <td class="p-3 font-sans font-medium text-slate-200">Precision Timing (PTP)</td>
+                                    <td class="p-3">DSCP 56 (NC)</td>
+                                    <td class="p-3 text-slate-400">10.190.48.0/29</td>
+                                    <td class="p-3"><span class="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 rounded text-[10px]">Active</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Configuration Tool & Port Inspector (Right 5 cols) -->
+            <div class="lg:col-span-5 flex flex-col space-y-6">
+                
+                <!-- Interactive Switch Port Configurator -->
+                <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center space-x-2">
+                                <i data-lucide="sliders" class="w-5 h-5 text-amber-400"></i>
+                                <h2 class="font-bold text-base">Switch Port Configurator</h2>
+                            </div>
+                            <span id="selected-port-badge" class="text-xs bg-slate-800 text-cyan-400 px-2.5 py-1 rounded-lg border border-slate-700 font-mono">Port 1 (BBU A)</span>
+                        </div>
+
+                        <!-- Port Select Buttons -->
+                        <div class="grid grid-cols-4 gap-2 mb-5">
+                            <button onclick="setPort(1)" id="port-btn-1" class="p-2.5 rounded-xl border border-cyan-500 bg-cyan-500/10 text-cyan-300 text-xs font-semibold flex flex-col items-center transition">
+                                <span>Port 1</span>
+                                <span class="text-[10px] text-slate-400 mt-0.5">BBU A</span>
+                            </button>
+                            <button onclick="setPort(2)" id="port-btn-2" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs font-semibold flex flex-col items-center hover:border-slate-700 transition">
+                                <span>Port 2</span>
+                                <span class="text-[10px] text-slate-400 mt-0.5">BBU B</span>
+                            </button>
+                            <button onclick="setPort(3)" id="port-btn-3" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs font-semibold flex flex-col items-center hover:border-slate-700 transition">
+                                <span>Port 3</span>
+                                <span class="text-[10px] text-slate-400 mt-0.5">GPS Sync</span>
+                            </button>
+                            <button onclick="setPort(4)" id="port-btn-4" class="p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs font-semibold flex flex-col items-center hover:border-slate-700 transition">
+                                <span>Port 8</span>
+                                <span class="text-[10px] text-slate-400 mt-0.5">Uplink</span>
+                            </button>
+                        </div>
+
+                        <!-- Configuration Form -->
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Assigned VLAN Mode</label>
+                                <select id="config-vlan-mode" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+                                    <option value="trunk">802.1Q Trunk (VLANs 10, 20, 30)</option>
+                                    <option value="access20">Access Port (VLAN 20 - User Plane)</option>
+                                    <option value="access10">Access Port (VLAN 10 - Management)</option>
+                                    <option value="access30">Access Port (VLAN 30 - Timing PTP)</option>
+                                </select>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">PoE Power Delivery</label>
+                                    <select id="config-poe" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+                                        <option value="90w">PoE++ (IEEE 802.3bt - 90W)</option>
+                                        <option value="60w">PoE+ (IEEE 802.3at - 60W)</option>
+                                        <option value="disabled">Disabled (External DC)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">QoS Priority Profile</label>
+                                    <select id="config-qos" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 font-mono">
+                                        <option value="strict">Strict Priority (VoLTE/Sync)</option>
+                                        <option value="wfq">Weighted Fair Queuing</option>
+                                        <option value="besteffort">Best Effort</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between">
+                        <span id="config-status-msg" class="text-xs text-slate-400">Port status: Link Up (10G SFP+)</span>
+                        <button onclick="applyPortConfig()" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 text-xs font-bold rounded-xl shadow-lg shadow-cyan-500/20 transition">
+                            Apply Config
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Simulated Traffic Prioritizer & PTP Health Log -->
+                <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 flex flex-col">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="activity" class="w-5 h-5 text-emerald-400"></i>
+                            <h2 class="font-bold text-base">Live PTP & Traffic Log</h2>
+                        </div>
+                        <span class="text-xs text-emerald-400 font-mono animate-pulse">Streaming...</span>
+                    </div>
+
+                    <!-- Log console window -->
+                    <div id="log-console" class="bg-slate-950 border border-slate-800/80 rounded-xl p-3 h-44 overflow-y-auto font-mono text-[11px] space-y-2 text-slate-300">
+                        <div class="flex items-start space-x-2 text-slate-400">
+                            <span class="text-cyan-400">[18:24:00]</span>
+                            <span>PTP Master sync packet received. Offset: +12ns. Phase lock stable.</span>
+                        </div>
+                        <div class="flex items-start space-x-2 text-slate-400">
+                            <span class="text-blue-400">[18:24:05]</span>
+                            <span>BBU Alpha GTP-U tunnel traffic rate: 1.25 Gbps. DSCP EF verified.</span>
+                        </div>
+                        <div class="flex items-start space-x-2 text-slate-400">
+                            <span class="text-amber-400">[18:24:10]</span>
+                            <span>Rectifier power telemetry queried: -48.2V DC, 342W total draw.</span>
+                        </div>
+                        <div class="flex items-start space-x-2 text-slate-400">
+                            <span class="text-emerald-400">[18:24:15]</span>
+                            <span>Switch port 1-8 health check OK. No CRC errors or dropped packets.</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+
+        // State variables
+        let liveRefreshActive = true;
+        let currentSelectedPort = 1;
+
+        // Simulated periodic updates
+        setInterval(() => {
+            if (!liveRefreshActive) return;
+
+            // Randomize jitter slightly
+            const jitterVal = Math.floor(16 + Math.random() * 6);
+            document.getElementById('metric-ptp').innerText = jitterVal + ' ns';
+
+            // Randomize power draw slightly
+            const powerVal = Math.floor(340 + Math.random() * 8);
+            document.getElementById('metric-poe').innerText = powerVal + ' W';
+
+            // Randomize bandwidth
+            const bwVal = (1.75 + Math.random() * 0.15).toFixed(2);
+            document.getElementById('metric-bw').innerText = bwVal + ' Gbps';
+
+        }, 3000);
+
+        function toggleGlobalSync() {
+            liveRefreshActive = !liveRefreshActive;
+            const btn = document.getElementById('sync-btn');
+            if (liveRefreshActive) {
+                btn.innerHTML = '<i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i><span>Live Refresh: ON</span>';
+                btn.className = "flex items-center space-x-1.5 px-3.5 py-1.5 bg-cyan-500 hover:bg-cyan-400 text-slate-950 text-xs font-semibold rounded-lg shadow-lg shadow-cyan-500/20 transition";
+            } else {
+                btn.innerHTML = '<i data-lucide="pause" class="w-3.5 h-3.5"></i><span>Live Refresh: PAUSED</span>';
+                btn.className = "flex items-center space-x-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-lg border border-slate-700 transition";
+            }
+            lucide.createIcons();
+        }
+
+        function setPort(portNum) {
+            currentSelectedPort = portNum;
+            
+            // Reset buttons
+            for (let i = 1; i <= 4; i++) {
+                const btnId = i === 4 ? 'port-btn-4' : `port-btn-${i}`;
+                const btn = document.getElementById(btnId);
+                btn.className = "p-2.5 rounded-xl border border-slate-800 bg-slate-950 text-slate-400 text-xs font-semibold flex flex-col items-center hover:border-slate-700 transition";
+            }
+
+            // Highlight active button
+            const activeId = portNum === 8 ? 'port-btn-4' : `port-btn-${portNum}`;
+            document.getElementById(activeId).className = "p-2.5 rounded-xl border border-cyan-500 bg-cyan-500/10 text-cyan-300 text-xs font-semibold flex flex-col items-center transition";
+
+            const names = { 1: "Port 1 (BBU A)", 2: "Port 2 (BBU B)", 3: "Port 3 (GPS Sync)", 8: "Port 8 (Uplink)" };
+            document.getElementById('selected-port-badge').innerText = names[portNum] || `Port ${portNum}`;
+            
+            appendLog(`Switched port focus to Port ${portNum === 8 ? '8 (Uplink)' : portNum}. Config loaded.`);
+        }
+
+        function applyPortConfig() {
+            const vlanMode = document.getElementById('config-vlan-mode').value;
+            const poeMode = document.getElementById('config-poe').value;
+            const qosMode = document.getElementById('config-qos').value;
+
+            document.getElementById('config-status-msg').innerText = `Config applied successfully! Port synced.`;
+            document.getElementById('config-status-msg').className = "text-xs text-emerald-400 font-medium";
+
+            appendLog(`CONFIG UPDATE: Port ${currentSelectedPort} updated -> Mode: ${vlanMode}, PoE: ${poeMode}, QoS: ${qosMode}. Applied to ISW-800 switch.`);
+
+            setTimeout(() => {
+                document.getElementById('config-status-msg').innerText = "Port status: Link Up (10G SFP+)";
+                document.getElementById('config-status-msg').className = "text-xs text-slate-400";
+            }, 4000);
+        }
+
+        function triggerAlarmTest() {
+            appendLog(`WARNING: Simulated PTP packet loss spike on Trunk uplink. Automatic holdover mode engaged for 120ms.`);
+            
+            const ptpEl = document.getElementById('metric-ptp');
+            ptpEl.innerText = "142 ns (HOLD)";
+            ptpEl.className = "text-2xl font-bold font-mono text-amber-400";
+
+            setTimeout(() => {
+                ptpEl.innerText = "19 ns";
+                ptpEl.className = "text-2xl font-bold font-mono text-cyan-400";
+                appendLog(`INFO: PTP master clock re-locked. Jitter restored to nominal state (19 ns).`);
+            }, 5000);
+        }
+
+        function appendLog(text) {
+            const consoleBox = document.getElementById('log-console');
+            const timeStr = new Date().toTimeString().split(' ')[0];
+            
+            const div = document.createElement('div');
+            div.className = "flex items-start space-x-2 text-slate-300 animate-fadeIn";
+            div.innerHTML = `<span class="text-cyan-400">[${timeStr}]</span><span>${text}</span>`;
+            
+            consoleBox.appendChild(div);
+            consoleBox.scrollTop = consoleBox.scrollHeight;
+        }
+    </script>
+</body>
+</html>
