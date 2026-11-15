@@ -792,6 +792,193 @@ def apps_page():
         )
 
 
+# ---------------------------------------------------------------------------
+# Websites data feed — GET /members/apps/data
+#
+# Taylor (2026-11-15): "make all websites information available in the
+# app. All fields pullable." This feed is the pull: one JSON document
+# carrying every field this server states about Taylor's three
+# websites — the recorded fields (names, addresses, roles, platforms,
+# what is on each site) plus a live reachability check of the two
+# sites hosted elsewhere, run from this server at pull time and
+# cached for two minutes. Nothing is summarized away and nothing is
+# stated that is not on record; the Apps Hub renders every field the
+# feed carries. No keys, secrets, or member data are ever fields.
+# ---------------------------------------------------------------------------
+
+APPS_DATA_CACHE = {"at": 0.0, "data": None}
+APPS_DATA_LOCK = threading.Lock()
+APPS_DATA_TTL = 120  # seconds
+
+
+def _live_check(url):
+    """One honest reachability check: status, timing, page title."""
+    started = time.time()
+    out = {
+        "checked_url": url,
+        "reachable": False,
+        "http_status": None,
+        "response_ms": None,
+        "page_title": None,
+        "error": None,
+    }
+    try:
+        req = urllib.request.Request(
+            url, headers={"User-Agent": "911transedu-apps-feed/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            out["http_status"] = resp.status
+            out["reachable"] = 200 <= resp.status < 400
+            body = resp.read(65536)
+        match = re.search(rb"<title[^>]*>(.*?)</title>", body, re.I | re.S)
+        if match:
+            out["page_title"] = (
+                match.group(1).decode("utf-8", "replace").strip()[:200]
+            )
+    except Exception as exc:  # surfaced in the feed, never hidden
+        out["error"] = "%s: %s" % (type(exc).__name__, exc)
+    out["response_ms"] = int((time.time() - started) * 1000)
+    return out
+
+
+def websites_data():
+    """All three websites, every field, as one JSON-ready record."""
+    main_site = {
+        "key": "main-site",
+        "name": "911transedu.net — Main Site",
+        "url": "https://911transedu.net",
+        "domain": "911transedu.net",
+        "role": "Main public website for Taylor's Transgender Patient Awareness, LLC",
+        "platform": "GoDaddy Website Builder; GoDaddy is also the registrar and DNS host",
+        "live_check": _live_check("https://911transedu.net"),
+        "on_the_site": [
+            "The company's main public website, built with GoDaddy's builder",
+            "Kept as-is — owner decision 2026-11-13",
+        ],
+        "notes": "One of Taylor's three websites (owner record, 2026-11-13).",
+    }
+    training_site = {
+        "key": "training-site",
+        "name": "EMS Training Website",
+        "url": "https://ems.911transedu.net",
+        "public_link": "https://muse.ai/s/911transedu-net-website-xkk6xaxm0ib1ak/-hQ_ySKdwECtNsqmEyusrdqJDfrhiRX9-5oxqk2dnI4",
+        "domain": "ems.911transedu.net",
+        "role": "EMS training website — teach-backs, the Medical Wing, course information",
+        "platform": "Muse web app, published at the public link; built and versioned by Jasmine",
+        "version": "v251 (2026-11-15) — Medical Wing expansion",
+        "sections_count": 233,
+        "live_check": _live_check("https://ems.911transedu.net"),
+        "on_the_site": [
+            "The Medical Wing — hub gathering 47 medical sections in 5 rooms",
+            "All Teachbacks — 20 teach-backs, 16 groups, 42 links",
+            "Amazon Hub teach-back (Flex tag)",
+            "TTY Dictionary — connection terms & how data flows, per app",
+            "OHA CCCE approval letter — Transgender Emergency Medicine, approved through August 5, 2029",
+            "2019 Field Reference Guide sections",
+            "Buy buttons point at the member site: CCCE course $15, EMSPR protocols $6,000",
+        ],
+        "notes": "New versions are published automatically (owner rule, 2026-11-08). The ems.911transedu.net address can lag the public link right after an update.",
+    }
+    member_server = {
+        "key": "member-server",
+        "name": "Member Server",
+        "url": "https://members.911transedu.net",
+        "domain": "members.911transedu.net",
+        "role": "Member accounts, course sales, company portals, files library, apps hub, and the live-server gateway",
+        "platform": "Taylor's own server — AWS EC2 host running the live-servers suite behind an nginx gateway on port 443",
+        "live_check": {
+            "source": "self — this server is answering the pull",
+            "reachable": True,
+            "http_status": 200,
+        },
+        "on_the_site": [
+            "Member Desk — accounts, courses, owner roster",
+            "Buy pages — CCCE course and EMSPR protocols (Cash App)",
+            "Department upload page",
+            "Five company portals",
+            "Files library",
+            "Member & Server Apps hub (this app)",
+            "SyncFlow demo",
+        ],
+        "products": [
+            {
+                "name": "Transgender Emergency Medicine — CCCE Course",
+                "price": "$15",
+                "buy_url": "https://members.911transedu.net/members/buy/ccce",
+                "payment": "Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster",
+                "includes": "CCCE_Course_Files.zip",
+            },
+            {
+                "name": "EMSPR Protocols",
+                "price": "$6,000",
+                "buy_url": "https://members.911transedu.net/members/buy/emspr",
+                "payment": "Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster",
+                "includes": "The full EMS protocol package; CCCE course files included",
+            },
+        ],
+        "portals": [
+            {"name": "Hillsboro Fire & Rescue", "url": "https://members.911transedu.net/portal/hillsboro"},
+            {"name": "Woodburn Ambulance", "url": "https://members.911transedu.net/portal/woodburn"},
+            {"name": "Monitor RFPD", "url": "https://members.911transedu.net/portal/monitor"},
+            {"name": "OHA EMS", "url": "https://members.911transedu.net/portal/oha"},
+            {"name": "State of Maine", "url": "https://members.911transedu.net/portal/maine"},
+        ],
+        "files_library": {
+            "url": "https://members.911transedu.net/files/",
+            "entries_listed": 1088,
+            "downloadable_files": 747,
+            "downloadable_size": "214.4 MB",
+            "on_file_available_on_request": 255,
+            "held_name_only_no_download": 66,
+            "counts_as_of": "2026-11-13",
+            "held_note": "Held entries are paid course material, credential/SENSITIVE items, and other people's private records — listed by name only, never downloadable",
+        },
+        "apps_hub": {
+            "url": "https://members.911transedu.net/members/apps",
+            "data_feed": "https://members.911transedu.net/members/apps/data",
+        },
+        "notes": "Sales run on this server only (owner decision, 2026-11-12). Stripe card checkout is closed; Cash App is the operative payment path.",
+    }
+    live_servers = [
+        {"name": "MacLAN", "url": "https://maclan.911transedu.net", "gateway_path": "/maclan/", "purpose": "Dashboard for the Macs and the home network", "access": "Public page"},
+        {"name": "Xbox Cloud Saves", "url": "https://xbox.911transedu.net", "gateway_path": "/xbox/", "purpose": "Back up and restore Xbox save files through the cloud", "access": "Public page"},
+        {"name": "Wyze Bridge", "url": "https://wyze.911transedu.net", "gateway_path": "/wyze/", "purpose": "Camera bridge status page — a status/dashboard demo; the real bridge needs a home-LAN host", "access": "Public page"},
+        {"name": "USB-SOVEREIGN", "url": "https://usb.911transedu.net", "gateway_path": "/usb/", "purpose": "Serial bridge control for USB devices, Python-powered", "access": "Public page"},
+        {"name": "AirCore", "url": "https://aircore.911transedu.net", "gateway_path": "/aircore/", "purpose": "The BlackBerry LAN bridge", "access": "Public page"},
+        {"name": "FMP-1.0", "url": "https://fmp.911transedu.net", "gateway_path": "/fmp/", "purpose": "Forensic Motion Protocol — motion capture and review", "access": "Public page"},
+        {"name": "Cell Tower LAN", "url": "https://celltower.911transedu.net", "gateway_path": "/celltower/", "purpose": "Cell tower and LAN signal watch; Dashboard 2 at /celltower/dashboard2.html", "access": "Public page"},
+        {"name": "Spec Matrix", "url": "https://specmatrix.911transedu.net", "gateway_path": "/specmatrix/", "purpose": "Every live server's spec sheet, side by side", "access": "Public page"},
+        {"name": "SyncFlow", "url": "https://members.911transedu.net/syncflow/", "gateway_path": "/syncflow/", "purpose": "SyncFlow demo", "access": "Public page — demo data only"},
+        {"name": "Personal proxy", "url": None, "gateway_path": "/proxy (via the specmatrix vhost)", "purpose": "Shadowsocks proxy; clients exit with the server's address", "access": "Private — share link held by the owner only, never published"},
+        {"name": "WireGuard VPN", "url": None, "endpoint": "52.41.84.116, UDP 51820 (published directly on the host)", "purpose": "Phone VPN — full tunnel; peers: taylor (owner's phone) and phone2–phone5, reserved for 911app downloaders, one config each", "access": "Config issued per person by the owner; key material is never a field in this feed"},
+    ]
+    return {
+        "feed": "911transedu websites — all fields",
+        "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "owner_local_timezone": "America/Los_Angeles",
+        "websites": [main_site, training_site, member_server],
+        "live_servers": live_servers,
+        "pull": {
+            "this_feed_json": "https://members.911transedu.net/members/apps/data",
+            "apps_hub": "https://members.911transedu.net/members/apps",
+        },
+    }
+
+
+def apps_data():
+    """The websites feed, cached briefly so pulls stay cheap."""
+    now = time.time()
+    with APPS_DATA_LOCK:
+        cached = APPS_DATA_CACHE["data"]
+        if cached is not None and now - APPS_DATA_CACHE["at"] < APPS_DATA_TTL:
+            return cached
+    data = websites_data()
+    with APPS_DATA_LOCK:
+        APPS_DATA_CACHE["at"] = time.time()
+        APPS_DATA_CACHE["data"] = data
+    return data
+
+
 def buy_page(course, member=None, message="", ok=False):
     """Stable public purchase page for one product: /members/buy/<key>.
 
@@ -1386,6 +1573,14 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def send_json(self, obj, status=200):
+        data = json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
     def redirect(self, path, extra_headers=None):
         headers = [("Location", path)] + (extra_headers or [])
         self.send_html("", status=303, extra_headers=headers)
@@ -1437,6 +1632,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_html(preview_page())
         if path == BASE + "/apps":
             return self.send_html(apps_page())
+        if path == BASE + "/apps/data":
+            return self.send_json(apps_data())
         if path.startswith(BASE + "/buy/"):
             course = COURSE_BY_KEY.get(path[len(BASE + "/buy/"):])
             if course is None:
