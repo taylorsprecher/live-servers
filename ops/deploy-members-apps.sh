@@ -47,6 +47,11 @@ code="$(wait_code http://127.0.0.1:18109/members/apps 200 30)"
 echo "CHECK apps direct ${code} (want 200)"
 [ "$code" = "200" ]
 
+echo "=== APPS DATA FEED DIRECT (loopback) ==="
+code="$(wait_code http://127.0.0.1:18109/members/apps/data 200 30)"
+echo "CHECK apps-data direct ${code} (want 200)"
+[ "$code" = "200" ]
+
 echo "=== APPS HUB VIA GATEWAY (:443) ==="
 # Port 443 is the HTTPS gateway: a plain-HTTP request gets a 301 to
 # HTTPS (that is what failed run 43754246350 on 2026-11-15 — the
