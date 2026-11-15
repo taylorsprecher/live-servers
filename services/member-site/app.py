@@ -817,23 +817,115 @@ owner confirmation.</p>
     return PAGE.format(title="Course Preview", body=body)
 
 
-def apps_page():
+def apps_account_card(member):
+    """User accounts on the Apps Hub (Taylor, 2026-11-15: "User
+    accounts needs to be on the app" / "They need to be able to sign
+    into their own profile on app"). Signed-out visitors get the
+    sign-in and create-account forms (the site's existing endpoints);
+    signed-in members get their own profile: name, email, course
+    access, pending orders, and links to their desk and uploads."""
+    if member is None:
+        return f"""
+      <section class="acct" aria-labelledby="acct-h">
+        <div class="acct-card">
+          <h2 id="acct-h">Your Account</h2>
+          <p class="acct-note">Sign in to your own profile — your courses,
+          downloads and orders — right here on the app.</p>
+          <form method="post" action="{BASE}/signin">
+            <label>Email</label>
+            <input type="email" name="email" required autocomplete="email">
+            <label>Password</label>
+            <input type="password" name="password" required autocomplete="current-password">
+            <button type="submit">Sign in</button>
+          </form>
+          <details>
+            <summary>New here? Create your account</summary>
+            <form method="post" action="{BASE}/signup">
+              <label>Full name</label>
+              <input type="text" name="name" required autocomplete="name">
+              <label>Email</label>
+              <input type="email" name="email" required autocomplete="email">
+              <label>Password (8+ characters)</label>
+              <input type="password" name="password" minlength="8" required autocomplete="new-password">
+              <button type="submit">Create account</button>
+            </form>
+            <p class="acct-note">Account setup standard: when you create an
+            account, this app asks for Cellular, Wi-Fi (Local Network) and
+            Bluetooth up front — please allow all three when your phone asks.</p>
+          </details>
+        </div>
+      </section>
+"""
+    granted = member_access(member["id"])
+    with _lock:
+        pending = _db.execute(
+            "SELECT COUNT(*) AS n FROM manual_orders WHERE member_id = ? "
+            "AND status = 'pending'",
+            (member["id"],),
+        ).fetchone()["n"]
+    rows = ""
+    for c in COURSES:
+        if c["key"] in granted:
+            if content_available(c):
+                right = f'<a href="{BASE}/content/{c["key"]}">Download</a>'
+            else:
+                right = "<strong>Access granted</strong>"
+        else:
+            right = f'<a href="{BASE}/buy/{c["key"]}">Buy — {esc(c["price"])}</a>'
+        rows += (
+            f'<li><span>{esc(c["short"])}</span>{right}</li>'
+        )
+    pending_note = (
+        f'<p class="acct-note">{pending} payment(s) pending owner '
+        "confirmation.</p>"
+        if pending
+        else ""
+    )
+    owner_link = (
+        f'<a class="acct-btn ghost" href="{BASE}/owner/stripe">Stripe keys</a>'
+        if member["email"].lower() == OWNER_EMAIL
+        else ""
+    )
+    return f"""
+      <section class="acct" aria-labelledby="acct-h">
+        <div class="acct-card">
+          <h2 id="acct-h">Your Profile</h2>
+          <p class="acct-note">Signed in as <strong>{esc(member["name"])}</strong>
+          · {esc(member["email"])}</p>
+          <ul class="acct-courses">{rows}</ul>
+          {pending_note}
+          <div class="acct-actions">
+            <a class="acct-btn" href="{BASE}/desk">Open my Member Desk</a>
+            <a class="acct-btn ghost" href="{BASE}/upload">My uploads</a>
+            {owner_link}
+            <form method="post" action="{BASE}/signout">
+              <button type="submit" class="ghost">Sign out</button>
+            </form>
+          </div>
+        </div>
+      </section>
+"""
+
+
+def apps_page(member=None):
     """Member & Server Apps hub — a standalone page (its own design;
     its live service checks run in the visitor's browser against the
     public service subdomains). Served from apps.html beside this
     file so the markup stays out of the code; the Dockerfile copies
-    it into the image next to app.py."""
+    it into the image next to app.py. The ACCOUNT-CARD marker in the
+    markup is replaced with the visitor's account/profile card."""
     try:
         with open(
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "apps.html"),
             encoding="utf-8",
         ) as fh:
-            return fh.read()
+            page = fh.read()
     except OSError:
         return (
             "<h1>Apps hub unavailable</h1>"
             "<p>The apps page is missing on the server.</p>"
         )
+    return page.replace("<!-- ACCOUNT-CARD -->", apps_account_card(member))
 
 
 # ---------------------------------------------------------------------------
@@ -1746,7 +1838,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == BASE + "/preview":
             return self.send_html(preview_page())
         if path == BASE + "/apps":
-            return self.send_html(apps_page())
+            member, _ = self.current_member()
+            return self.send_html(apps_page(member))
         if path == BASE + "/apps/data":
             return self.send_json(apps_data())
         if path.startswith(BASE + "/buy/"):
