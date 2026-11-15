@@ -1,24 +1,30 @@
 # Stripe go-live — card, Google Pay, Apple Pay on the member site
 
-> **STATUS — CLOSED (2026-11-12).** Taylor's decision: *"Let's just
-> keep Cash App."* Card checkout is **not** going live. The GitHub
-> Actions secrets were deleted and the Stripe lines were cleared
-> from the host `.env`; the member site presents Cash App as its
-> only payment method. This document is kept as the historical
-> record of the Stripe setup that was prepared and briefly
-> attempted — nothing in it is a pending step.
+> **STATUS — REOPENED (2026-11-15).** Taylor reversed the
+> 2026-11-12 closure (*"Allow Apple Pay and Google pay through the
+> app"* → *"Yes — reopen Stripe for cards, Apple Pay & Google
+> Pay"*; later the same day: *"Make a new script that does take
+> stripe to add those payment types"*). The operative delivery path
+> is now the **owner Stripe keys page** on the member site itself —
+> `https://members.911transedu.net/members/owner/stripe` (owner
+> sign-in required). The owner pastes the two keys there; they are
+> stored in the site's settings table, take effect immediately, and
+> card checkout turns on. Cash App remains alongside as the no-fee
+> option. The GitHub Actions secrets path documented below still
+> works as an alternative; an owner-saved key wins over an
+> environment key.
 
 Decision history (Taylor, 2026-11-12): first *"Add them via Stripe"*
 — Google Pay and Apple Pay were to be added through Stripe Checkout,
 alongside the existing Cash App path, with Cash App remaining the
 no-fee option. Later the same day Taylor superseded it: *"Let's just
-keep Cash App."* That decision stands.
+keep Cash App."* That decision stood until 2026-11-15, when Taylor
+reopened Stripe (see STATUS above).
 
 The site side remains as prepared (automatic payment methods in
 Checkout, HTTPS return URLs, signature-verified webhook, wallet copy
-that renders only while a key exists), but no key is configured, so
-none of it is offered to buyers. **No key is ever committed to git,
-pasted into chat, or printed in a log.**
+that renders only while a key exists). **No key is ever committed
+to git, pasted into chat, or printed in a log.**
 
 ## The two GitHub Actions secrets (exact names)
 

@@ -119,7 +119,7 @@ import urllib.request
 import urllib.error
 import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse, urlencode
+from urllib.parse import parse_qs, quote, urlparse, urlencode
 
 BASE = os.environ.get("BASE_PATH", "/members").rstrip("/")
 DB_PATH = os.environ.get("MEMBERS_DB_PATH", "/data/members.db")
@@ -134,6 +134,45 @@ PBKDF2_ROUNDS = 200_000
 
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+def _setting(key):
+    """One row of the settings table (owner-saved site configuration)."""
+    try:
+        with _lock:
+            row = _db.execute(
+                "SELECT value FROM settings WHERE key = ?", (key,)
+            ).fetchone()
+        return row["value"] if row else ""
+    except Exception:
+        return ""
+
+
+def _set_setting(key, value):
+    with _lock, _db:
+        if value:
+            _db.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+        else:
+            _db.execute("DELETE FROM settings WHERE key = ?", (key,))
+
+
+def stripe_secret_key():
+    """Stripe secret key in force: the owner-saved key (Stripe keys
+    page) wins; otherwise the host environment value above."""
+    return _setting("stripe_secret_key") or STRIPE_SECRET_KEY
+
+
+def stripe_webhook_secret():
+    """Webhook signing secret in force: owner-saved wins, else env."""
+    return _setting("stripe_webhook_secret") or STRIPE_WEBHOOK_SECRET
+
+
+def stripe_configured():
+    return bool(stripe_secret_key())
+
+
 # Bitcoin is received INSIDE Cash App at the cashtag below — there is no
 # on-chain deposit address (Taylor, 2026-11-12: "There isn't one"), so no
 # BTC address env var exists or is ever rendered.
@@ -281,6 +320,10 @@ def init_db():
                 stored_name TEXT NOT NULL,
                 bytes INTEGER NOT NULL,
                 created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
             );
             """
         )
@@ -503,7 +546,8 @@ def parse_multipart(body, content_type):
 # ---------------------------------------------------------------- Stripe --
 def stripe_create_checkout(member, course):
     """Create a Stripe Checkout Session. Returns (url, None) or (None, err)."""
-    if not STRIPE_SECRET_KEY:
+    key = stripe_secret_key()
+    if not key:
         return None, "not_configured"
     params = {
         "mode": "payment",
@@ -524,7 +568,7 @@ def stripe_create_checkout(member, course):
         "https://api.stripe.com/v1/checkout/sessions",
         data=urlencode(params).encode("utf-8"),
         headers={
-            "Authorization": f"Bearer {STRIPE_SECRET_KEY}",
+            "Authorization": f"Bearer {key}",
             "Content-Type": "application/x-www-form-urlencoded",
             "Idempotency-Key": secrets.token_hex(16),
         },
@@ -672,7 +716,7 @@ accessories</td></tr>
 
 def home_page(message="", ok=False):
     msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
-    if STRIPE_SECRET_KEY:
+    if stripe_configured():
         pay_note = (
             "Or pay by card, Google Pay or Apple Pay at checkout — "
             "card access unlocks automatically when payment completes. "
@@ -713,7 +757,7 @@ payment note — access unlocks once the owner confirms receipt.
 
 
 def preview_page():
-    if STRIPE_SECRET_KEY:
+    if stripe_configured():
         card_line = (
             "You can also pay by card, Google Pay or Apple Pay on each "
             "product's buy page — card access unlocks automatically "
@@ -905,14 +949,14 @@ def websites_data():
                 "name": "Transgender Emergency Medicine — CCCE Course",
                 "price": "$15",
                 "buy_url": "https://members.911transedu.net/members/buy/ccce",
-                "payment": "Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster",
+                "payment": "Card / Apple Pay / Google Pay via Stripe Checkout (automatic unlock) when the owner has saved the Stripe keys on the owner Stripe keys page, or Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster",
                 "includes": "CCCE_Course_Files.zip",
             },
             {
                 "name": "EMSPR Protocols",
                 "price": "$6,000",
                 "buy_url": "https://members.911transedu.net/members/buy/emspr",
-                "payment": "Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster",
+                "payment": "Card / Apple Pay / Google Pay via Stripe Checkout (automatic unlock) when the owner has saved the Stripe keys on the owner Stripe keys page, or Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster",
                 "includes": "The full EMS protocol package; CCCE course files included",
             },
         ],
@@ -937,7 +981,7 @@ def websites_data():
             "url": "https://members.911transedu.net/members/apps",
             "data_feed": "https://members.911transedu.net/members/apps/data",
         },
-        "notes": "Sales run on this server only (owner decision, 2026-11-12). Stripe card checkout is closed; Cash App is the operative payment path.",
+        "notes": "Sales run on this server only (owner decision, 2026-11-12). Stripe reopened 2026-11-15: card, Apple Pay and Google Pay run through Stripe Checkout once the owner saves the Stripe keys on the site's owner Stripe keys page; Cash App to $taylorsprecher2026 remains the no-fee option.",
     }
     live_servers = [
         {"name": "MacLAN", "url": "https://maclan.911transedu.net", "gateway_path": "/maclan/", "purpose": "Dashboard for the Macs and the home network", "access": "Public page"},
@@ -1047,13 +1091,13 @@ def buy_page(course, member=None, message="", ok=False):
         else ""
     )
     # Card / wallet option (Taylor, 2026-11-12: "Add them via Stripe").
-    # While STRIPE_SECRET_KEY is unset the note stays exactly as before
+    # While no Stripe key is configured the note stays exactly as before
     # — card is never presented as live and Cash App is the way to buy.
     # When the key exists, the page presents paying by card, Google Pay
     # or Apple Pay via Stripe Checkout, with Cash App remaining the
     # alternative above; signed-in members without access get the
     # checkout button itself.
-    if not STRIPE_SECRET_KEY:
+    if not stripe_configured():
         card_note = ""
     elif member is not None and course["key"] in member_access(member["id"]):
         card_note = ""
@@ -1299,6 +1343,72 @@ see them, and they are never public.</p>
     return PAGE.format(title="Upload Documents", body=body)
 
 
+def owner_stripe_page(member, message="", ok=False):
+    """Owner-only Stripe keys page (Taylor, 2026-11-15: "Make a new
+    script that does take stripe to add those payment types"). The
+    owner pastes the two Stripe keys here, on the site itself; they
+    are stored in the settings table and take effect immediately —
+    no GitHub secrets, no redeploy. Values are never rendered back:
+    the page shows only whether a key is saved and its last 4."""
+    msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
+    saved_sk = _setting("stripe_secret_key")
+    saved_wh = _setting("stripe_webhook_secret")
+
+    def state(saved, env_value):
+        if saved:
+            return f"Saved on this page — ends in ••••{esc(saved[-4:])}"
+        if env_value:
+            return "Set in the server environment"
+        return "Not set"
+
+    sk_state = state(saved_sk, STRIPE_SECRET_KEY)
+    wh_state = state(saved_wh, STRIPE_WEBHOOK_SECRET)
+    live = (
+        "<strong>Card checkout is ON.</strong> Buy pages offer card, "
+        "Google Pay and Apple Pay through Stripe Checkout; Cash App "
+        "stays available as the no-fee option."
+        if stripe_configured()
+        else "<strong>Card checkout is OFF.</strong> Cash App is the "
+        "only payment path until both keys are saved."
+    )
+    body = f"""
+<h1>Stripe Keys — Card, Apple Pay &amp; Google Pay</h1>
+<p class="small">Owner only. Paste the two keys from your Stripe
+Dashboard and card checkout turns on right away — nothing else to
+deploy. The keys live only in this site's database on the server;
+this page never shows them again, only their last 4 characters.</p>
+{msg}
+<div class="card"><h2>Status</h2>
+<p>{live}</p>
+<p class="small">Stripe secret key: {sk_state}<br>
+Webhook signing secret: {wh_state}</p></div>
+<div class="card"><h2>Save the keys</h2>
+<form method="post" action="{BASE}/owner/stripe">
+<label>Stripe secret key (starts sk_live_)</label>
+<p class="small">Stripe Dashboard → Developers → API keys → Secret key.</p>
+<input type="password" name="stripe_secret_key" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="sk_live_…" required>
+<label>Webhook signing secret (starts whsec_)</label>
+<p class="small">Stripe Dashboard → Developers → Webhooks → the endpoint
+for https://members.911transedu.net/members/stripe/webhook (event:
+checkout.session.completed) → Signing secret. If the endpoint is not
+listed, add it with that URL and event, then copy its secret.</p>
+<input type="password" name="stripe_webhook_secret" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="whsec_…" required>
+<button type="submit">Save keys and turn card checkout on</button></form>
+<p class="small">Apple Pay and Google Pay ride on Stripe Checkout and
+were switched on in the Stripe account on 2026-11-12 — saving the keys
+here is what lets buyers actually use them.</p></div>
+<div class="card"><h2>Turn card checkout off</h2>
+<p class="small">Clears the keys saved on this page. Cash App becomes
+the only payment path again. (Keys delivered through the server
+environment, if any, are not changed.)</p>
+<form method="post" action="{BASE}/owner/stripe">
+<input type="hidden" name="action" value="clear">
+<button type="submit" class="secondary">Clear saved keys</button></form></div>
+<p><a class="btn secondary" href="{BASE}/desk">Back to Member Desk</a></p>
+"""
+    return PAGE.format(title="Stripe Keys — Owner", body=body)
+
+
 def desk_page(member, message="", ok=False):
     is_owner = member["email"].lower() == OWNER_EMAIL
     granted = member_access(member["id"])
@@ -1487,6 +1597,11 @@ def desk_page(member, message="", ok=False):
 <div class="card"><h2>Course files</h2>
 <p class="small">Stage or replace the protected course bundles.</p>
 <a class="btn secondary" href="{BASE}/admin/upload">Open the upload page</a></div>
+<div class="card"><h2>Stripe keys</h2>
+<p class="small">Card, Apple Pay and Google Pay checkout: save or clear
+the Stripe keys. Card checkout is currently
+<strong>{"ON" if stripe_configured() else "OFF"}</strong>.</p>
+<a class="btn secondary" href="{BASE}/owner/stripe">Open the Stripe keys page</a></div>
 <div class="card"><h2>Member uploads received</h2>
 <p class="small">Documents members sent from the upload page, grouped by
 member. Only you can see other members' uploads.</p>
@@ -1685,6 +1800,16 @@ class Handler(BaseHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             message = qs.get("msg", [""])[0]
             return self.send_html(upload_page(member, message, ok=bool(message)))
+        if path == BASE + "/owner/stripe":
+            member, _ = self.current_member()
+            # Fail closed: the Stripe keys page exists only for the owner.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            qs = parse_qs(parsed.query)
+            message = qs.get("msg", [""])[0]
+            return self.send_html(
+                owner_stripe_page(member, message, ok=bool(message))
+            )
         if path.startswith(BASE + "/content/"):
             rest = path[len(BASE + "/content/"):]
             key, _, sub = rest.partition("/")
@@ -2011,6 +2136,42 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
         if path == BASE + "/upload":
             return self.member_upload()
         form = self.form()
+        if path == BASE + "/owner/stripe":
+            member, _ = self.current_member()
+            # Fail closed: only the owner can save or clear Stripe keys.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            if form.get("action", "") == "clear":
+                _set_setting("stripe_secret_key", "")
+                _set_setting("stripe_webhook_secret", "")
+                return self.redirect(
+                    BASE + "/owner/stripe?msg=" + quote(
+                        "Saved Stripe keys cleared — card checkout is off. "
+                        "Cash App is the only payment path."
+                    )
+                )
+            sk = form.get("stripe_secret_key", "").strip()
+            wh = form.get("stripe_webhook_secret", "").strip()
+            if not sk.startswith(("sk_live_", "sk_test_", "rk_live_")):
+                return self.send_html(owner_stripe_page(
+                    member,
+                    "That secret key doesn't look right — it should start "
+                    "with sk_live_. Nothing was saved.",
+                ))
+            if not wh.startswith("whsec_"):
+                return self.send_html(owner_stripe_page(
+                    member,
+                    "That webhook secret doesn't look right — it should "
+                    "start with whsec_. Nothing was saved.",
+                ))
+            _set_setting("stripe_secret_key", sk)
+            _set_setting("stripe_webhook_secret", wh)
+            return self.redirect(
+                BASE + "/owner/stripe?msg=" + quote(
+                    "Stripe keys saved — card, Apple Pay and Google Pay "
+                    "checkout is ON."
+                )
+            )
         if path == BASE + "/signup":
             name = form.get("name", "").strip()
             email = form.get("email", "").strip()
@@ -2202,9 +2363,8 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
     def stripe_webhook(self):
         payload = self.raw_body()
         sig = self.headers.get("Stripe-Signature", "")
-        if not STRIPE_WEBHOOK_SECRET or not stripe_verify_signature(
-            payload, sig, STRIPE_WEBHOOK_SECRET
-        ):
+        whsec = stripe_webhook_secret()
+        if not whsec or not stripe_verify_signature(payload, sig, whsec):
             return self.send_html("<h1>Bad signature</h1>", status=400)
         try:
             event = json.loads(payload.decode("utf-8"))
