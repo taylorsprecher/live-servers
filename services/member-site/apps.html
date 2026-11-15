@@ -235,6 +235,43 @@
       .fval a { color: var(--accent-ink); }
       .feedfoot { margin-top: 10px; color: var(--ink-3); font-size: 0.82rem; }
 
+      /* ---------- Account / profile ---------- */
+      .acct { margin-top: 22px; }
+      .acct-card {
+        background: var(--bg-tile); border: 1px solid var(--line);
+        border-radius: var(--radius); padding: 18px;
+      }
+      .acct-card h2 { margin: 0; font-size: 1.2rem; font-weight: 800; }
+      .acct-note { color: var(--ink-2); font-size: 0.92rem; margin: 8px 0 0; line-height: 1.4; }
+      .acct-note strong { color: var(--ink); }
+      .acct form { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+      .acct label { font-size: 0.85rem; font-weight: 700; color: var(--ink-2); }
+      .acct input {
+        width: 100%; background: var(--bg-raise); border: 1px solid var(--line);
+        border-radius: 12px; color: var(--ink); font: inherit; padding: 12px 14px; min-height: 48px;
+      }
+      .acct button {
+        appearance: none; border: 1px solid var(--line); background: var(--accent-chip);
+        color: var(--accent-ink); border-radius: 999px; padding: 12px 16px;
+        font: inherit; font-weight: 800; min-height: 48px;
+      }
+      .acct button:active { background: var(--bg-tile-press); }
+      .acct details { margin-top: 14px; }
+      .acct summary { font-weight: 800; color: var(--accent-ink); padding: 8px 0; }
+      .acct-courses { list-style: none; margin: 12px 0 0; padding: 0; }
+      .acct-courses li {
+        padding: 9px 0; border-top: 1px solid var(--line);
+        display: flex; justify-content: space-between; gap: 10px; align-items: baseline;
+      }
+      .acct-courses a { color: var(--accent-ink); font-weight: 700; text-decoration: none; white-space: nowrap; }
+      .acct-actions { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+      .acct-actions form { margin: 0; }
+      a.acct-btn {
+        border: 1px solid var(--line); background: var(--accent-chip); color: var(--accent-ink);
+        border-radius: 999px; padding: 11px 15px; font-weight: 800; text-decoration: none;
+      }
+      a.acct-btn.ghost, .acct button.ghost { background: transparent; color: var(--ink-2); }
+
       /* ---------- Footer cards ---------- */
       .card {
         margin-top: 30px;
@@ -270,6 +307,8 @@
           <button class="recheck" id="recheckBtn" type="button">Re-check</button>
         </div>
       </header>
+
+      <!-- ACCOUNT-CARD -->
 
       <!-- ============ MEMBER SITE ============ -->
       <section aria-labelledby="member-h">
