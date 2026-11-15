@@ -25,7 +25,14 @@ join Taylor's private 10.8.0.0/24 VPN subnet.
   container log. Nothing about the keys is in git.
 - **Peers:** `taylor, phone2, phone3, phone4, phone5` (10.8.0.2–.6),
   full tunnel (`ALLOWEDIPS=0.0.0.0/0`), DNS via the server
-  (`PEERDNS=auto`).
+  (`PEERDNS=auto`). Peer `taylor` (10.8.0.2) is Taylor's own phone,
+  connected 2026-11-15. The other four peers (phone2–phone5,
+  10.8.0.3–.6) are **reserved for people who download the 911transedu
+  app** — Taylor decided 2026-11-15 they are not for additional
+  personal phones. When a downloader is added, export that peer's
+  config through the encrypted path below and deliver it to them;
+  each downloader gets their own peer, so access can be revoked
+  individually without touching anyone else.
 
 ## Getting a peer config onto a phone (encrypted export)
 
