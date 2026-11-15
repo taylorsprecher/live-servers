@@ -216,6 +216,41 @@ services:
     ports:
       - "127.0.0.1:18114:8388"
 
+  vpn:
+    image: lscr.io/linuxserver/wireguard:latest
+    container_name: live-vpn
+    restart: unless-stopped
+    mem_limit: 128m
+    cap_add:
+      - NET_ADMIN
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    environment:
+      # Taylor's personal WireGuard VPN (services/vpn/README.md).
+      # Unlike every other service here it does NOT sit behind the
+      # gateway: phones connect to it directly on UDP 51820 — the
+      # nginx gateway carries HTTP/WebSocket only and cannot forward
+      # WireGuard. The AWS security group must allow inbound UDP
+      # 51820. Server and peer keys are generated inside the container
+      # on first start and live ONLY in the vpn-data volume, never in
+      # git; LOG_CONFS=false keeps peer configs (and their private
+      # keys) out of the container log. Peer configs leave the host
+      # only through the encrypted export (ops/export-vpn-peer.sh).
+      PUID: "1000"
+      PGID: "1000"
+      TZ: America/Los_Angeles
+      SERVERURL: 52.41.84.116
+      SERVERPORT: "51820"
+      PEERS: taylor,phone2,phone3,phone4,phone5
+      PEERDNS: auto
+      INTERNAL_SUBNET: 10.8.0.0
+      ALLOWEDIPS: 0.0.0.0/0
+      LOG_CONFS: "false"
+    volumes:
+      - vpn-data:/config
+    ports:
+      - "51820:51820/udp"
+
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -253,3 +288,4 @@ volumes:
   members-data:
   syncflow-data:
   fileslib-data:
+  vpn-data:
