@@ -315,7 +315,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // Static frontend
-    if (req.method === 'GET' && (p === '/' || p.startsWith('/app') || p.endsWith('.css'))) {
+    if (req.method === 'GET' && (p === '/' || p.startsWith('/app') || p.endsWith('.css') || p.endsWith('.html'))) {
       const file = p === '/' ? 'index.html' : p.slice(1);
       const full = path.join(FRONTEND_DIR, file);
       if (!full.startsWith(FRONTEND_DIR) || !fs.existsSync(full)) {
