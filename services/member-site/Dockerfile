@@ -3,7 +3,7 @@
 FROM python:3.12-slim
 
 WORKDIR /app
-COPY app.py README.md ./
+COPY app.py README.md apps.html ./
 
 ENV PYTHONUNBUFFERED=1 \
     BASE_PATH=/members \
