@@ -1,0 +1,45 @@
+name: Verify VPN status
+
+# Read-only: runs ops/verify-vpn.sh on the host, which prints the
+# WireGuard status (peers, latest handshakes, transfer counters) from
+# the live-vpn container. A "latest handshake" line for a peer proves
+# that phone connected end-to-end (and that the security group passes
+# UDP 51820). Nothing is changed on the host.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify-vpn:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync repo to host
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'secrets/' \
+            --exclude 'tls-state/' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Show VPN status on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/ops/verify-vpn.sh'

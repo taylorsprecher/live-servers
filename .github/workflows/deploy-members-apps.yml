@@ -1,0 +1,50 @@
+name: Deploy member apps hub
+
+# Targeted deploy: rsync the repo (same as deploy.yml), then build and
+# recreate ONLY the members service on the host so it picks up the
+# /members/apps hub page (services/member-site/apps.html), the app.py
+# route + links, and the Dockerfile change that copies apps.html into
+# the image. Used instead of the full deploy.sh so deploy.sh's RAM
+# gate is not in play for a one-service change; see
+# ops/deploy-members-apps.sh. No secrets are delivered or changed by
+# this workflow (the Stripe-key delivery in deploy-members.yml is a
+# separate path and is untouched). Gateway config, TLS, DNS, all
+# other services and the audited production stack are untouched.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy-members-apps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync repo to host
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'secrets/' \
+            --exclude 'tls-state/' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Build + up members only on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/ops/deploy-members-apps.sh'
