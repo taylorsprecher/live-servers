@@ -1,0 +1,42 @@
+name: Export VPN peer config
+
+# Reads ONE WireGuard peer config from the running live-vpn container
+# on the host and prints it in the run log ENCRYPTED (AES-256 with an
+# RSA-wrapped key — see ops/export-vpn-peer.sh). The plaintext never
+# appears in the log; only the holder of the matching private key
+# (kept off-host, never in git) can decrypt the export. Safe to run
+# in this public repo.
+
+on:
+  workflow_dispatch:
+    inputs:
+      peer:
+        description: "Peer name to export"
+        required: true
+        type: choice
+        options:
+          - taylor
+          - phone2
+          - phone3
+          - phone4
+          - phone5
+
+jobs:
+  export-vpn-peer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Export encrypted peer config from host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            "bash /home/deploy/live-servers/ops/export-vpn-peer.sh '${{ inputs.peer }}'"
