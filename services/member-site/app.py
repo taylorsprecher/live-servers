@@ -913,7 +913,12 @@ def apps_page(member=None):
     public service subdomains). Served from apps.html beside this
     file so the markup stays out of the code; the Dockerfile copies
     it into the image next to app.py. The ACCOUNT-CARD marker in the
-    markup is replaced with the visitor's account/profile card."""
+    markup is replaced with the visitor's account/profile card, and
+    the PAY-NOTE marker with the payment note for the Stripe key
+    state in force — the hub is built around the key (Taylor,
+    2026-11-15: "Build around the key"): the moment the owner saves
+    the keys, this note flips to card checkout being on, with no
+    redeploy."""
     try:
         with open(
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "apps.html"),
@@ -925,7 +930,19 @@ def apps_page(member=None):
             "<h1>Apps hub unavailable</h1>"
             "<p>The apps page is missing on the server.</p>"
         )
-    return page.replace("<!-- ACCOUNT-CARD -->", apps_account_card(member))
+    if stripe_configured():
+        pay_note = (
+            "Or pay by card, Apple Pay or Google Pay on the buy pages "
+            "— access unlocks automatically when payment completes."
+        )
+    else:
+        pay_note = (
+            "Card and wallet checkout on the buy pages is still being "
+            "switched on."
+        )
+    return page.replace(
+        "<!-- ACCOUNT-CARD -->", apps_account_card(member)
+    ).replace("<!-- PAY-NOTE -->", pay_note)
 
 
 # ---------------------------------------------------------------------------
