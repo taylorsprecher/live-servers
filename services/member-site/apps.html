@@ -202,6 +202,39 @@
       }
       a.app .chev { flex: none; color: var(--ink-3); font-size: 1.3rem; font-weight: 600; }
 
+      /* ---------- All-fields websites feed ---------- */
+      .feedtools { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
+      #fieldSearch {
+        width: 100%; appearance: none;
+        background: var(--bg-tile); border: 1px solid var(--line); border-radius: 14px;
+        color: var(--ink); font: inherit; font-size: 1rem; padding: 13px 15px; min-height: 48px;
+      }
+      #fieldSearch::placeholder { color: var(--ink-3); }
+      .rawlink {
+        display: inline-block; align-self: flex-start;
+        border: 1px solid var(--line); background: var(--bg-tile); color: var(--ink);
+        border-radius: 999px; padding: 9px 14px; font-size: 0.88rem; font-weight: 700; text-decoration: none;
+      }
+      .rawlink:active { background: var(--bg-tile-press); }
+      .sitecard {
+        margin-top: 14px; background: var(--bg-tile); border: 1px solid var(--line);
+        border-radius: var(--radius); padding: 16px;
+      }
+      .sitecard h3 { margin: 0; font-size: 1.12rem; font-weight: 800; }
+      .sitecard .siteurl {
+        font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        font-size: 0.8rem; color: var(--ink-3); margin-top: 2px; overflow-wrap: anywhere;
+      }
+      ul.fields { list-style: none; margin: 10px 0 0; padding: 0; }
+      ul.fields li { padding: 7px 0; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
+      ul.fields > li:first-child { border-top: none; }
+      ul.fields ul.fields { margin: 4px 0 4px 14px; }
+      ul.fields ul.fields li { border-top: none; padding: 3px 0; }
+      .fname { color: var(--ink-3); font-size: 0.82rem; font-weight: 700; letter-spacing: 0.02em; }
+      .fval { color: var(--ink); }
+      .fval a { color: var(--accent-ink); }
+      .feedfoot { margin-top: 10px; color: var(--ink-3); font-size: 0.82rem; }
+
       /* ---------- Footer cards ---------- */
       .card {
         margin-top: 30px;
@@ -366,6 +399,20 @@
         </div>
       </section>
 
+      <!-- ============ ALL WEBSITES — EVERY FIELD ============ -->
+      <section aria-labelledby="webdata-h">
+        <div class="group-head">
+          <h2 id="webdata-h">All Websites — Every Field</h2>
+          <span class="group-addr">/members/apps/data</span>
+        </div>
+        <p class="group-note">Every field this server holds about your three websites, pulled into this page — nothing hidden, nothing summarized away. Search any word to pull just the fields that match, or open the raw feed and take the whole thing.</p>
+        <div class="feedtools">
+          <input id="fieldSearch" type="search" placeholder="Search fields — try: price, portal, vpn, status…" aria-label="Search all website fields" />
+          <a class="rawlink" href="/members/apps/data" target="_blank" rel="noopener">Open the raw JSON feed</a>
+        </div>
+        <div id="webdata"><p class="group-note">Pulling the feed&hellip;</p></div>
+      </section>
+
       <!-- ============ INSTALL ============ -->
       <div class="card">
         <h2>Put this suite on your Home Screen</h2>
@@ -449,6 +496,108 @@
 
         btn.addEventListener("click", runAll);
         runAll();
+      })();
+    </script>
+
+    <script>
+      (function () {
+        var box = document.getElementById("webdata");
+        var search = document.getElementById("fieldSearch");
+        var DATA = null;
+
+        function esc(s) {
+          return String(s).replace(/[&<>"']/g, function (c) {
+            return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+          });
+        }
+        function isUrl(v) { return typeof v === "string" && /^https?:\/\//.test(v); }
+        function valHtml(v) {
+          if (v === null || v === undefined) return '<span class="fval">&mdash;</span>';
+          if (typeof v === "boolean") return '<span class="fval">' + (v ? "yes" : "no") + "</span>";
+          if (isUrl(v)) return '<span class="fval"><a href="' + esc(v) + '" target="_blank" rel="noopener">' + esc(v) + "</a></span>";
+          return '<span class="fval">' + esc(v) + "</span>";
+        }
+        function fieldsHtml(obj) {
+          var out = '<ul class="fields">';
+          Object.keys(obj).forEach(function (k) {
+            var v = obj[k];
+            out += '<li><span class="fname">' + esc(k) + "</span> ";
+            if (v && typeof v === "object") {
+              if (Array.isArray(v)) {
+                if (v.length && typeof v[0] === "object" && v[0] !== null) {
+                  v.forEach(function (item, i) {
+                    out += '<div><span class="fname">' + (i + 1) + ".</span></div>" + fieldsHtml(item);
+                  });
+                } else {
+                  out += '<span class="fval">' + v.map(function (x) { return esc(x); }).join(" &middot; ") + "</span>";
+                }
+              } else {
+                out += fieldsHtml(v);
+              }
+            } else {
+              out += valHtml(v);
+            }
+            out += "</li>";
+          });
+          return out + "</ul>";
+        }
+        function matches(v, q) {
+          if (v === null || v === undefined) return false;
+          if (typeof v === "object") {
+            return Object.keys(v).some(function (k) {
+              return k.toLowerCase().indexOf(q) >= 0 || matches(v[k], q);
+            });
+          }
+          return String(v).toLowerCase().indexOf(q) >= 0;
+        }
+        function prune(obj, q) {
+          if (!q) return obj;
+          if (Array.isArray(obj)) {
+            return obj.filter(function (item) { return matches(item, q); })
+                      .map(function (item) { return prune(item, q); });
+          }
+          if (obj && typeof obj === "object") {
+            var out = {};
+            Object.keys(obj).forEach(function (k) {
+              if (k.toLowerCase().indexOf(q) >= 0 || matches(obj[k], q)) out[k] = prune(obj[k], q);
+            });
+            return out;
+          }
+          return obj;
+        }
+        function render() {
+          if (!DATA) return;
+          var q = (search.value || "").trim().toLowerCase();
+          var data = prune(JSON.parse(JSON.stringify(DATA)), q);
+          var html = "";
+          (data.websites || []).forEach(function (site) {
+            html += '<div class="sitecard"><h3>' + esc(site.name || site.key || "Website") + "</h3>";
+            if (site.url) html += '<div class="siteurl">' + esc(site.url) + "</div>";
+            var rest = {};
+            Object.keys(site).forEach(function (k) {
+              if (k !== "name" && k !== "url") rest[k] = site[k];
+            });
+            html += fieldsHtml(rest) + "</div>";
+          });
+          if (data.live_servers && data.live_servers.length) {
+            html += '<div class="sitecard"><h3>Live servers</h3>';
+            data.live_servers.forEach(function (s, i) {
+              html += '<div><span class="fname">' + (i + 1) + ".</span></div>" + fieldsHtml(s);
+            });
+            html += "</div>";
+          }
+          if (data.generated_at_utc) {
+            html += '<p class="feedfoot">Feed generated ' + esc(data.generated_at_utc) + " UTC &middot; every field above comes straight from the JSON feed.</p>";
+          }
+          box.innerHTML = html || '<p class="group-note">No fields match that search.</p>';
+        }
+        fetch("/members/apps/data", { cache: "no-store" })
+          .then(function (r) { return r.json(); })
+          .then(function (j) { DATA = j; render(); })
+          .catch(function () {
+            box.innerHTML = '<p class="group-note">The feed did not answer from here — open <a href="/members/apps/data">the raw JSON feed</a> directly.</p>';
+          });
+        search.addEventListener("input", render);
       })();
     </script>
   </body>
