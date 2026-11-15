@@ -703,6 +703,7 @@ def home_page(message="", ok=False):
 {connection_step_html()}
 <h2>Courses</h2>
 {catalog_cards()}
+<p><a class="btn secondary" href="{BASE}/apps">Member &amp; Server Apps — open the apps hub</a></p>
 <p class="small">Sold only on this site. Buy with Cash App: send the
 price to {esc(CASHAPP_CASHTAG)} and put your account email in the
 payment note — access unlocks once the owner confirms receipt.
@@ -770,6 +771,25 @@ owner confirmation.</p>
 <p><a class="btn" href="{BASE}/">Sign in / Create account</a></p>
 """
     return PAGE.format(title="Course Preview", body=body)
+
+
+def apps_page():
+    """Member & Server Apps hub — a standalone page (its own design;
+    its live service checks run in the visitor's browser against the
+    public service subdomains). Served from apps.html beside this
+    file so the markup stays out of the code; the Dockerfile copies
+    it into the image next to app.py."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)), "apps.html"),
+            encoding="utf-8",
+        ) as fh:
+            return fh.read()
+    except OSError:
+        return (
+            "<h1>Apps hub unavailable</h1>"
+            "<p>The apps page is missing on the server.</p>"
+        )
 
 
 def buy_page(course, member=None, message="", ok=False):
@@ -1335,6 +1355,10 @@ stay locked.</p></div>
 <span class="small">Send training-related documents for your
 department.</span><br>
 <a class="btn" href="{BASE}/upload">Open the upload page</a></div>
+<div class="card"><strong>Member &amp; Server Apps</strong><br>
+<span class="small">Every live server and phone app in one place,
+with a live check from your device.</span><br>
+<a class="btn" href="{BASE}/apps">Open the apps hub</a></div>
 {roster}
 <div class="card"><h2>Delete account</h2>
 <form method="post" action="{BASE}/delete-account">
@@ -1411,6 +1435,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.wfile.write(data)
         if path == BASE + "/preview":
             return self.send_html(preview_page())
+        if path == BASE + "/apps":
+            return self.send_html(apps_page())
         if path.startswith(BASE + "/buy/"):
             course = COURSE_BY_KEY.get(path[len(BASE + "/buy/"):])
             if course is None:
