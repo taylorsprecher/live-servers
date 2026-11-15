@@ -48,7 +48,11 @@ echo "CHECK apps direct ${code} (want 200)"
 [ "$code" = "200" ]
 
 echo "=== APPS HUB VIA GATEWAY (:443) ==="
-code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://127.0.0.1:443/members/apps)" || code="000"
+# Port 443 is the HTTPS gateway: a plain-HTTP request gets a 301 to
+# HTTPS (that is what failed run 43754246350 on 2026-11-15 — the
+# deploy itself had succeeded). Ask over HTTPS with the real vhost
+# name, resolved to loopback, and require a straight 200.
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --resolve members.911transedu.net:443:127.0.0.1 https://members.911transedu.net/members/apps)" || code="000"
 echo "CHECK apps gateway ${code} (want 200)"
 [ "$code" = "200" ]
 
