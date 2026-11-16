@@ -242,6 +242,37 @@ services:
     ports:
       - "51820:51820/udp"
 
+  paydb:
+    image: postgres:16-alpine
+    container_name: live-paydb
+    restart: unless-stopped
+    mem_limit: 256m
+    command: ["postgres", "-c", "shared_buffers=64MB", "-c", "max_connections=20"]
+    environment:
+      POSTGRES_DB: payledger
+      POSTGRES_USER: payledger
+      POSTGRES_PASSWORD: ${PAYLEDGER_DB_PASSWORD}
+    volumes:
+      - payledger-data:/var/lib/postgresql/data
+    # No published ports: reachable only from the payledger service on
+    # the compose network.
+
+  payledger:
+    build:
+      context: ./services/payment-ledger
+    container_name: live-payledger
+    restart: unless-stopped
+    mem_limit: 192m
+    environment:
+      BASE_PATH: /ledger
+      DATABASE_URL: postgresql://payledger:${PAYLEDGER_DB_PASSWORD}@paydb:5432/payledger
+      PAYLEDGER_ADMIN_TOKEN: ${PAYLEDGER_ADMIN_TOKEN:-}
+      PAYLEDGER_WEBHOOK_SECRET: ${PAYLEDGER_WEBHOOK_SECRET:-}
+    depends_on:
+      - paydb
+    ports:
+      - "127.0.0.1:18123:8000"
+
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -271,6 +302,7 @@ services:
       - syncflow
       - fileslib
       - proxy
+      - payledger
 
 volumes:
   maclan-data:
@@ -280,3 +312,4 @@ volumes:
   syncflow-data:
   fileslib-data:
   vpn-data:
+  payledger-data:
