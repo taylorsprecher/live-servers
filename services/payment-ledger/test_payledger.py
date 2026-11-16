@@ -34,6 +34,8 @@ for table in (
     "fee_rules", "merchant_contracts", "transaction_fee_estimates",
     "psps", "psp_health", "psp_approval_stats", "routing_rules",
     "routing_decisions", "pan_retry_tracker",
+    "network_stan_sequences", "iso8583_message_log", "clearing_batches",
+    "clearing_batch_items", "fbo_settlement_wires",
 ):
     check(f"schema has {table}", f"CREATE TABLE IF NOT EXISTS {table}" in schema)
 
@@ -56,6 +58,11 @@ for key_fmt in ("capture:{intent_id}", "settle:{psp}:{rrn}:{record_type}",
 check("worker uses SKIP LOCKED", "FOR UPDATE SKIP LOCKED" in app)
 check("DLQ quarantine status", "RECONCILIATION_EXCEPTION" in app)
 check("hard decline set present", "HARD_DECLINE_CODES" in app)
+check("iso codec present", "def iso_pack" in app and "def iso_unpack" in app)
+check("iso log trigger", "trg_immutable_iso_log" in schema)
+check("sandbox issuer present", "SANDBOX_ISSUER" in app)
+check("pan masking present", "def mask_pan" in app)
+check("clearing generator present", "def generate_clearing" in app)
 
 compose = open(os.path.join(REPO, "docker-compose.yml"), encoding="utf-8").read()
 check("compose has paydb", re.search(r"^  paydb:", compose, re.M) is not None)
