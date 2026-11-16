@@ -150,32 +150,41 @@ services:
     ports:
       - "127.0.0.1:18109:8000"
 
-  # Stripe subscriptions — FRESH SCRIPT (owner direction, 2026-11-15).
-  # Standalone service (services/stripe-subscriptions): Subscriptions
-  # API + Payment Element for card + ACH subscriptions. Shares the
-  # members-data volume so webhook-confirmed subscriptions can unlock
-  # access in members.db (matched by account email); its own state
-  # lives in /data/subs.db. Keys come from the host .env only
-  # (SUBS_STRIPE_*), delivered by the deploy-subs workflow from
+  # Braintree subscriptions — FRESH SCRIPT (owner direction,
+  # 2026-11-15: "remove Stripe completely"). Standalone service
+  # (services/braintree-subscriptions): Drop-in checkout (card,
+  # Apple Pay, Google Pay, ACH) + micro-deposit ACH verification +
+  # recurring billing on Braintree plans. Shares the members-data
+  # volume so webhook-confirmed subscriptions can unlock access in
+  # members.db (matched by account email); its own state lives in
+  # /data/btsubs.db. Credentials come from the host .env only
+  # (BT_BRAINTREE_*), delivered by the deploy-btsubs workflow from
   # GitHub Actions secrets; empty = the service runs unconfigured.
-  subs:
+  # This service REPLACES the Stripe subscriptions service, whose
+  # compose entry stood here until this edit; its container is
+  # removed by ops/deploy-btsubs.sh.
+  btsubs:
     build:
-      context: ./services/stripe-subscriptions
-    container_name: live-subs
+      context: ./services/braintree-subscriptions
+    container_name: live-btsubs
     restart: unless-stopped
-    mem_limit: 96m
+    mem_limit: 128m
     environment:
       BASE_PATH: /subs
-      SUBS_DB_PATH: /data/subs.db
+      BTSUBS_DB_PATH: /data/btsubs.db
       MEMBERS_DB_PATH: /data/members.db
       PUBLIC_BASE_URL: https://members.911transedu.net
-      STRIPE_SECRET_KEY: ${SUBS_STRIPE_SECRET_KEY:-}
-      STRIPE_WEBHOOK_SECRET: <redacted>
-      STRIPE_PUBLISHABLE_KEY: ${SUBS_STRIPE_PUBLISHABLE_KEY:-}
+      BRAINTREE_MERCHANT_ID: ${BT_BRAINTREE_MERCHANT_ID:-}
+      BRAINTREE_PUBLIC_KEY: ${BT_BRAINTREE_PUBLIC_KEY:-}
+      BRAINTREE_PRIVATE_KEY: ${BT_BRAINTREE_PRIVATE_KEY:-}
+      BRAINTREE_ENVIRONMENT: ${BT_BRAINTREE_ENVIRONMENT:-sandbox}
+      BRAINTREE_PLAN_CCCE: ${BT_BRAINTREE_PLAN_CCCE:-}
+      BRAINTREE_PLAN_EMSPR: ${BT_BRAINTREE_PLAN_EMSPR:-}
+      BRAINTREE_GOOGLE_MERCHANT_ID: ${BT_BRAINTREE_GOOGLE_MERCHANT_ID:-}
     volumes:
       - members-data:/data
     ports:
-      - "127.0.0.1:18121:8000"
+      - "127.0.0.1:18122:8000"
 
   specmatrix:
     build:
