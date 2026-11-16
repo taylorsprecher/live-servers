@@ -45,12 +45,27 @@ code="$(wait_code http://127.0.0.1:18121/subs/ 200 30)"
 echo "CHECK subs page direct ${code} (want 200)"
 [ "$code" = "200" ]
 
+wait_https() {
+  # $1 = path on the members vhost, $2 = want, $3 = attempts — the
+  # gateway was just force-recreated, so it needs the same patience
+  # as a recreated service port (run #1 on 2026-11-15 failed this
+  # check with 000 while the gateway container was still coming up;
+  # the service itself was already answering 200 on loopback).
+  local path="$1" want="$2" attempts="${3:-60}" code="000" i
+  for i in $(seq 1 "$attempts"); do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --resolve members.911transedu.net:443:127.0.0.1 "https://members.911transedu.net${path}")" || code="000"
+    [ "$code" = "$want" ] && break
+    sleep 5
+  done
+  echo "$code"
+}
+
 echo "=== SUBS VIA GATEWAY (:443) ==="
-code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --resolve members.911transedu.net:443:127.0.0.1 https://members.911transedu.net/subs/)" || code="000"
+code="$(wait_https /subs/ 200)"
 echo "CHECK subs gateway ${code} (want 200)"
 [ "$code" = "200" ]
 
-code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --resolve members.911transedu.net:443:127.0.0.1 https://members.911transedu.net/subs/health)" || code="000"
+code="$(wait_https /subs/health 200 30)"
 echo "CHECK subs-health gateway ${code} (want 200)"
 [ "$code" = "200" ]
 
