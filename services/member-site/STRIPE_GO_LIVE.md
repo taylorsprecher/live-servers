@@ -1,4 +1,4 @@
-# Stripe go-live — card, Google Pay, Apple Pay on the member site
+# Stripe go-live — cards and ACH bank transfer on the member site
 
 > **STATUS — REOPENED (2026-11-15).** Taylor reversed the
 > 2026-11-12 closure (*"Allow Apple Pay and Google pay through the
@@ -13,6 +13,18 @@
 > option. The GitHub Actions secrets path documented below still
 > works as an alternative; an owner-saved key wins over an
 > environment key.
+>
+> **Payment types (final, 2026-11-15):** credit & debit cards and
+> ACH bank transfer (*"Add ACH"*, *"And debit card"*). Google Pay
+> and Apple Pay are REMOVED (*"Remove Google and Apple"*) — they
+> are switched off in the Stripe Dashboard payment-method
+> settings, because Checkout offers whatever the account has
+> enabled. **Billing cadence:** subscription mode — EMSPR
+> protocols $6,000 **every year**; the CCCE course $15 **every
+> two years per provider**. The webhook endpoint must send
+> checkout.session.completed, checkout.session.async_payment_
+> succeeded (ACH unlock) and customer.subscription.deleted
+> (an ended subscription ends the member's access).
 
 Decision history (Taylor, 2026-11-12): first *"Add them via Stripe"*
 — Google Pay and Apple Pay were to be added through Stripe Checkout,
