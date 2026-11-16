@@ -1,0 +1,48 @@
+name: Remove btsubs service
+
+# One-off removal (owner direction, 2026-11-15: "PayPal can't be
+# used" — Braintree is PayPal). Rsyncs the repo (which no longer
+# defines the btsubs service, its files, or the gateway /subs/
+# route), then runs ops/remove-btsubs.sh on the host: removes the
+# live-btsubs container + image, rebuilds only the members service,
+# force-recreates the gateway, and verifies /subs/ is gone (404)
+# with all regressions green. No secrets are delivered or changed
+# by this workflow. deploy.sh and its RAM gate are untouched.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  remove-btsubs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync repo to host
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'secrets/' \
+            --exclude 'tls-state/' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Remove btsubs service on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/ops/remove-btsubs.sh'
