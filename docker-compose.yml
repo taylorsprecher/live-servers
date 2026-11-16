@@ -133,50 +133,13 @@ services:
       BASE_PATH: /members
       MEMBERS_DB_PATH: /data/members.db
       CONTENT_DIR: /data/content
-      # Public base for return URLs (Braintree subscription
-      # returns land on the desk through this domain).
+      # Public base for links and return URLs on this domain.
       PUBLIC_BASE_URL: https://members.911transedu.net
       CASHAPP_CASHTAG: ${CASHAPP_CASHTAG:-}
     volumes:
       - members-data:/data
     ports:
       - "127.0.0.1:18109:8000"
-
-  # Braintree subscriptions — FRESH SCRIPT (owner direction,
-  # 2026-11-15: "remove Stripe completely"). Standalone service
-  # (services/braintree-subscriptions): Drop-in checkout (card,
-  # Apple Pay, Google Pay, ACH) + micro-deposit ACH verification +
-  # recurring billing on Braintree plans. Shares the members-data
-  # volume so webhook-confirmed subscriptions can unlock access in
-  # members.db (matched by account email); its own state lives in
-  # /data/btsubs.db. Credentials come from the host .env only
-  # (BT_BRAINTREE_*), delivered by the deploy-btsubs workflow from
-  # GitHub Actions secrets; empty = the service runs unconfigured.
-  # This service REPLACES the Stripe subscriptions service, whose
-  # compose entry stood here until this edit; its container is
-  # removed by ops/deploy-btsubs.sh.
-  btsubs:
-    build:
-      context: ./services/braintree-subscriptions
-    container_name: live-btsubs
-    restart: unless-stopped
-    mem_limit: 128m
-    environment:
-      BASE_PATH: /subs
-      BTSUBS_DB_PATH: /data/btsubs.db
-      MEMBERS_DB_PATH: /data/members.db
-      PUBLIC_BASE_URL: https://members.911transedu.net
-      BRAINTREE_MERCHANT_ID: ${BT_BRAINTREE_MERCHANT_ID:-}
-      BRAINTREE_PUBLIC_KEY: ${BT_BRAINTREE_PUBLIC_KEY:-}
-      BRAINTREE_PRIVATE_KEY: ${BT_BRAINTREE_PRIVATE_KEY:-}
-      BRAINTREE_ENVIRONMENT: ${BT_BRAINTREE_ENVIRONMENT:-sandbox}
-      BRAINTREE_PLAN_CCCE: ${BT_BRAINTREE_PLAN_CCCE:-}
-      BRAINTREE_PLAN_EMSPR: ${BT_BRAINTREE_PLAN_EMSPR:-}
-      BRAINTREE_GOOGLE_MERCHANT_ID: ${BT_BRAINTREE_GOOGLE_MERCHANT_ID:-}
-    volumes:
-      - members-data:/data
-    ports:
-      - "127.0.0.1:18122:8000"
 
   specmatrix:
     build:
