@@ -63,7 +63,7 @@ tables="$(docker exec live-paydb psql -U payledger -d payledger -tAc \
 echo "CHECK paydb tables ${tables} (want >= 20)"
 [ "$tables" -ge 20 ]
 triggers="$(docker exec live-paydb psql -U payledger -d payledger -tAc \
-  "SELECT COUNT(*) FROM information_schema.triggers WHERE trigger_name IN ('trg_payment_state_machine','trg_verify_balanced_journal','trg_immutable_ledger_entries')")"
+  "SELECT COUNT(DISTINCT trigger_name) FROM information_schema.triggers WHERE trigger_name IN ('trg_payment_state_machine','trg_verify_balanced_journal','trg_immutable_ledger_entries')")"
 echo "CHECK ledger triggers ${triggers} (want 3)"
 [ "$triggers" = "3" ]
 accounts="$(docker exec live-paydb psql -U payledger -d payledger -tAc \
