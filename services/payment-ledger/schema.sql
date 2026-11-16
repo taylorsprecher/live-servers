@@ -381,3 +381,66 @@ VALUES
     (gen_random_uuid(), 'platform_fee_revenue',          'REVENUE', 'CREDIT', 'USD', TRUE),
     (gen_random_uuid(), 'merchant_payable_main',         'LIABILITY','CREDIT','USD', TRUE)
 ON CONFLICT (code) DO NOTHING;
+
+-- =====================================================================
+-- 9. PROCESSOR LAYER (SANDBOX) — network & clearing state
+-- From the payment-processor design (filed verbatim in
+-- ~/workspace/user/files/Payment_Processor_Core_Engine_pasted_2026-11-15.txt),
+-- built as a sandbox at the owner's direction 2026-11-15: no real
+-- card-network connection exists or is implied. PANs are never
+-- stored; the message log keeps DE 2 masked.
+-- =====================================================================
+CREATE TABLE IF NOT EXISTS network_stan_sequences (
+    acquirer_bin VARCHAR(16) NOT NULL,
+    network VARCHAR(16) NOT NULL,
+    current_stan INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (acquirer_bin, network)
+);
+
+CREATE TABLE IF NOT EXISTS iso8583_message_log (
+    id UUID PRIMARY KEY,
+    rrn VARCHAR(12),
+    stan VARCHAR(6),
+    mti VARCHAR(4) NOT NULL,
+    direction VARCHAR(3) NOT NULL,
+    raw_hex TEXT NOT NULL,
+    parsed_de JSONB NOT NULL DEFAULT '{}',
+    latency_ms INT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_iso_log_rrn ON iso8583_message_log(rrn);
+
+DROP TRIGGER IF EXISTS trg_immutable_iso_log ON iso8583_message_log;
+CREATE TRIGGER trg_immutable_iso_log
+BEFORE UPDATE OR DELETE ON iso8583_message_log
+FOR EACH ROW EXECUTE FUNCTION prevent_ledger_mutation();
+
+CREATE TABLE IF NOT EXISTS clearing_batches (
+    id UUID PRIMARY KEY,
+    network VARCHAR(16) NOT NULL,
+    file_name TEXT NOT NULL,
+    record_count INT NOT NULL DEFAULT 0,
+    gross_total BIGINT NOT NULL DEFAULT 0,
+    file_body TEXT,
+    status VARCHAR(16) NOT NULL DEFAULT 'GENERATED',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    transmitted_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS clearing_batch_items (
+    batch_id UUID NOT NULL REFERENCES clearing_batches(id),
+    payment_intent_id UUID NOT NULL UNIQUE REFERENCES payment_intents(id),
+    PRIMARY KEY (batch_id, payment_intent_id)
+);
+
+CREATE TABLE IF NOT EXISTS fbo_settlement_wires (
+    id UUID PRIMARY KEY,
+    sponsor_bank_ref VARCHAR(64) NOT NULL,
+    network VARCHAR(16) NOT NULL,
+    settlement_date DATE NOT NULL,
+    net_wire_amount BIGINT NOT NULL,
+    currency CHAR(3) NOT NULL DEFAULT 'USD',
+    expected_amount BIGINT,
+    reconciled BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
