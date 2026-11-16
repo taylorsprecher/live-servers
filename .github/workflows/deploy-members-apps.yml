@@ -7,8 +7,7 @@ name: Deploy member apps hub
 # the image. Used instead of the full deploy.sh so deploy.sh's RAM
 # gate is not in play for a one-service change; see
 # ops/deploy-members-apps.sh. No secrets are delivered or changed by
-# this workflow (the Stripe-key delivery in deploy-members.yml is a
-# separate path and is untouched). Gateway config, TLS, DNS, all
+# this workflow. Gateway config, TLS, DNS, all
 # other services and the audited production stack are untouched.
 
 on:
