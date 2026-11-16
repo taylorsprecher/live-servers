@@ -27,11 +27,11 @@ on our own site — buyers pay through members.911transedu.net"):
     confirmation unlocks, like Cash App. Pay Links are one-time
     payments — the cadence price is paid per period, no
     auto-renewal.
-  * Recurring subscriptions (card, Apple Pay, Google Pay, ACH) run
-    on the SEPARATE Braintree service at /subs/
-    (services/braintree-subscriptions) — not in this app. Its
-    webhooks grant and revoke access in this app's database,
-    matched by account email.
+  * Recurring subscriptions are NOT currently offered: a
+    Braintree service briefly stood at /subs/ and was removed the
+    same day (2026-11-15) when Taylor ruled PayPal out ("PayPal
+    can't be used" — Braintree is PayPal). The cadence prices are
+    paid per period through the rails above.
 
 Billing cadence (Taylor, 2026-11-15): EMSPR protocols $6,000 every
 year; the CCCE course $15 every two years per provider.
@@ -1007,7 +1007,7 @@ def websites_data():
                 "price": "$15",
                 "cadence": "every two years, per provider",
                 "buy_url": "https://members.911transedu.net/members/buy/ccce",
-                "payment": "By credit/debit card through the product's GoDaddy Pay Link when the owner has saved one on the owner Pay Links page (buyer records the order on the site; owner confirms the payment in the roster), or Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster. Recurring subscriptions by card, wallet, or bank run on the separate Braintree service at /subs/.",
+                "payment": "By credit/debit card through the product's GoDaddy Pay Link when the owner has saved one on the owner Pay Links page (buyer records the order on the site; owner confirms the payment in the roster), or Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster.",
                 "includes": "CCCE_Course_Files.zip",
             },
             {
@@ -1015,7 +1015,7 @@ def websites_data():
                 "price": "$6,000",
                 "cadence": "every year",
                 "buy_url": "https://members.911transedu.net/members/buy/emspr",
-                "payment": "By credit/debit card through the product's GoDaddy Pay Link when the owner has saved one on the owner Pay Links page (buyer records the order on the site; owner confirms the payment in the roster), or Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster. Recurring subscriptions by card, wallet, or bank run on the separate Braintree service at /subs/.",
+                "payment": "By credit/debit card through the product's GoDaddy Pay Link when the owner has saved one on the owner Pay Links page (buyer records the order on the site; owner confirms the payment in the roster), or Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster.",
                 "includes": "The full EMS protocol package; CCCE course files included",
             },
         ],
@@ -1040,7 +1040,7 @@ def websites_data():
             "url": "https://members.911transedu.net/members/apps",
             "data_feed": "https://members.911transedu.net/members/apps/data",
         },
-        "notes": "Sales run on this server only (owner decision, 2026-11-12). Cards run through GoDaddy Pay Links (owner's choice, 2026-11-15): one link per product saved on the owner Pay Links page, buyers record an order on the site, unlock confirmed in the roster; Pay Links are one-time per period on each product's cadence. Recurring subscriptions run on the separate Braintree service at /subs/ (card, Apple Pay, Google Pay, ACH); Cash App to $taylorsprecher2026 remains the no-fee option.",
+        "notes": "Sales run on this server only (owner decision, 2026-11-12). Cards run through GoDaddy Pay Links (owner's choice, 2026-11-15): one link per product saved on the owner Pay Links page, buyers record an order on the site, unlock confirmed in the roster; Pay Links are one-time per period on each product's cadence. Cash App to $taylorsprecher2026 remains the no-fee option.",
     }
     live_servers = [
         {"name": "MacLAN", "url": "https://maclan.911transedu.net", "gateway_path": "/maclan/", "purpose": "Dashboard for the Macs and the home network", "access": "Public page"},
@@ -1092,8 +1092,7 @@ def buy_page(course, member=None, message="", ok=False):
     sent inside Cash App to the same cashtag at the live-quoted BTC
     amount — no on-chain address exists or is shown.
     Card subscriptions (card, Apple Pay, Google Pay, ACH) run on
-    the separate Braintree service at /subs/; this page presents
-    the manual rails — Cash App, Bitcoin inside Cash App, and a
+    this page presents the manual rails — Cash App, Bitcoin inside Cash App, and a
     GoDaddy Pay Link when the owner has saved one. Signed-in
     members get the order buttons on this page; everyone else
     gets the sign-in/create-account step first (their account
@@ -1571,7 +1570,7 @@ def desk_page(member, message="", ok=False):
             # The desk offers the manual rails (Cash App, Bitcoin,
             # and a recorded GoDaddy Pay Link order when a link is
             # set). Recurring card/wallet/bank subscriptions live on
-            # the Braintree service at /subs/.
+            # (No subscription rail at present.)
             status = manual = "".join(parts)
         rows += (
             f'<div class="card"><strong>{esc(c["name"])}</strong><br>'
@@ -1676,7 +1675,6 @@ member. Only you can see other members' uploads.</p>
 
     card_li = (
         "<li>your card payment is confirmed — automatically when a "
-        "Braintree subscription's first charge succeeds, or by the "
         "owner for a GoDaddy Pay Link payment, or</li>"
     )
 
