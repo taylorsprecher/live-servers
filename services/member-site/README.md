@@ -6,7 +6,7 @@ http://52.41.84.116:443/members/, which redirects to the HTTPS name;
 host port 18109, loopback only; the gateway is the public entry point).
 
 - Python 3 stdlib only: `http.server`, `sqlite3`, `hashlib.pbkdf2_hmac`,
-  `urllib` (Stripe REST API + BTC rate quote). No pip installs.
+  `urllib` (BTC rate quote). No pip installs.
 - Sign-up / sign-in / sign-out with salted PBKDF2 password hashes (never
   plaintext) and 30-day HttpOnly session cookies. Duplicate emails and
   wrong passwords are rejected. Members can delete their own account.
@@ -14,17 +14,20 @@ host port 18109, loopback only; the gateway is the public entry point).
   material only — CCCE "Transgender Emergency Medicine" (OHA CCCE approved
   Aug 5, 2026 – Aug 5, 2029; Oregon EMT renewal category hours) and EMSPR.
   No protected files are exposed.
-- **Card / wallet checkout (Stripe)**: Stripe-hosted Checkout pages.
-  `payment_method_types` is not restricted, so card, Google Pay and Apple
-  Pay surface when enabled in the Stripe Dashboard and supported by the
-  buyer's device (Apple Card pays as a card / via Apple Pay; hosted
-  Checkout means no Apple Pay domain verification on this host). Payment
-  unlocks automatically via the signature-verified webhook
-  `POST /members/stripe/webhook` (`checkout.session.completed`).
-  **Status (2026-11-12): closed by the owner's decision** — no Stripe
-  keys are configured, so this path is never offered to buyers; the
-  code path is retained only. Cash App (below) is the payment method.
-- **Bitcoin**: separate path (Stripe does not process BTC), offered
+- **Card payments (GoDaddy Pay Links)**: per-product Pay Links the
+  owner saves on `/members/owner/paylinks`; the buy page renders a
+  Pay by card section for each saved link, the buyer records the
+  order on the site, and the owner's roster confirmation unlocks.
+  Pay Links are one-time per period (no auto-renewal).
+- **Recurring subscriptions (Braintree)**: card, Apple Pay,
+  Google Pay, and ACH subscriptions run on the SEPARATE Braintree
+  service at `/subs/` (`services/braintree-subscriptions`), whose
+  webhooks grant and revoke access in this site's database.
+- **Stripe: removed completely (2026-11-15)** at the owner's
+  direction. An earlier built-in Stripe Checkout integration was
+  deleted wholesale — no Stripe code, keys, or routes remain in
+  this app.
+- **Bitcoin**: offered
   alongside Cash App cash. The app quotes BTC from the USD price
   (CoinGecko), creates a pending order, and instructs the buyer to send
   that BTC amount to Taylor's cashtag `$taylorsprecher2026` INSIDE Cash
@@ -36,36 +39,17 @@ host port 18109, loopback only; the gateway is the public entry point).
   pattern — a pending order shows the USD amount and Taylor's cashtag
   `$taylorsprecher2026` (public receive handle; override via
   `CASHAPP_CASHTAG`); the owner confirms receipt in the roster to
-  unlock. Manual orders (Bitcoin + Cash App) share one log. Stripe is
-  NOT connected (no keys on the host), so card checkout — though wired
-  in code — is never presented as available while `STRIPE_SECRET_KEY`
-  is unset; every buyer-facing page names Cash App as the way to buy
-  and offers no card checkout. **Card checkout was closed by the
-  owner's decision on 2026-11-12 ("Let's just keep Cash App")** — the
-  Stripe keys were removed (GitHub secrets deleted, host `.env` lines
-  cleared), and Cash App is the standing payment method.
+  unlock. Manual orders (Bitcoin + Cash App + GoDaddy) share one
+  log, and Cash App is the standing no-fee payment method.
 - **Purchase pages** (`/members/buy/ccce`, `/members/buy/emspr`,
   public): stable per-product buy pages showing the price, the
   cashtag, the note guidance (put your account email in the Cash App
   payment note), and the owner-confirmation unlock; signed-in members
   get the order button on the page. The public training site's buy
   buttons point at these URLs (2026-11-12 sales decision).
-- **Keys are environment-only** (host `/home/deploy/live-servers/.env`,
-  passed through docker-compose): `STRIPE_SECRET_KEY`,
-  `STRIPE_WEBHOOK_SECRET`. Never hardcoded, never
-  committed. Without the Stripe secret key, the site runs normally
-  with Cash App (cash and Bitcoin) as the payment paths presented. **Stripe go-live
-  history**: on 2026-11-12 Taylor first directed "Add them via
-  Stripe" (Google Pay / Apple Pay through Stripe Checkout, Cash App
-  staying the no-fee path) and the checklist in `STRIPE_GO_LIVE.md`
-  was prepared — when the GitHub Actions secrets `STRIPE_SECRET_KEY`
-  and `STRIPE_WEBHOOK_SECRET` were configured, the members deploy
-  workflow delivered them into the host `.env` at deploy time. Later
-  the same day Taylor closed the go-live — "Let's just keep Cash
-  App" — the GitHub secrets were deleted and the host `.env` Stripe
-  lines cleared, so no keys are delivered at deploy and the site runs
-  Cash App only. `STRIPE_GO_LIVE.md` is retained as the historical
-  record.
+- **Keys**: this app holds no payment-processor keys at all. The
+  Braintree service keeps its own credentials in its own
+  environment (see `services/braintree-subscriptions/README.md`).
 - **Course contents**: served only to signed-in members with access, from
   `/data/content/` on the `members-data` volume — never a public URL.
 - **Course-file upload** (`/members/admin/upload`, owner session only,
@@ -110,10 +94,9 @@ host port 18109, loopback only; the gateway is the public entry point).
   the browser genuinely reports it (online state, connection type,
   Bluetooth availability) — no fake system prompts.
 - **Owner** = the member account registered with
-  `taylorsprecher@gmail.com`. The roster (grant/revoke, BTC confirmation,
-  Stripe payment log) is fail-closed to everyone else. Until the owner
-  registers, no manual grants are possible (automatic Stripe unlocks and
-  the fail-closed default still work).
+  `taylorsprecher@gmail.com`. The roster (grant/revoke, order
+  confirmation) is fail-closed to everyone else. Until the owner
+  registers, no manual grants are possible.
 - Persistence: SQLite at `/data/members.db` on the `members-data` named
   Docker volume — survives container recreation and redeploys.
 - History: mirrors the Muse `training-site-member-logins` app (which
