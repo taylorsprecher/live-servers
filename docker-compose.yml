@@ -150,6 +150,33 @@ services:
     ports:
       - "127.0.0.1:18109:8000"
 
+  # Stripe subscriptions — FRESH SCRIPT (owner direction, 2026-11-15).
+  # Standalone service (services/stripe-subscriptions): Subscriptions
+  # API + Payment Element for card + ACH subscriptions. Shares the
+  # members-data volume so webhook-confirmed subscriptions can unlock
+  # access in members.db (matched by account email); its own state
+  # lives in /data/subs.db. Keys come from the host .env only
+  # (SUBS_STRIPE_*), delivered by the deploy-subs workflow from
+  # GitHub Actions secrets; empty = the service runs unconfigured.
+  subs:
+    build:
+      context: ./services/stripe-subscriptions
+    container_name: live-subs
+    restart: unless-stopped
+    mem_limit: 96m
+    environment:
+      BASE_PATH: /subs
+      SUBS_DB_PATH: /data/subs.db
+      MEMBERS_DB_PATH: /data/members.db
+      PUBLIC_BASE_URL: https://members.911transedu.net
+      STRIPE_SECRET_KEY: ${SUBS_STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: <redacted>
+      STRIPE_PUBLISHABLE_KEY: ${SUBS_STRIPE_PUBLISHABLE_KEY:-}
+    volumes:
+      - members-data:/data
+    ports:
+      - "127.0.0.1:18121:8000"
+
   specmatrix:
     build:
       context: ./services/specmatrix
