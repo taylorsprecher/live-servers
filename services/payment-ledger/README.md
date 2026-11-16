@@ -58,6 +58,44 @@ documents, filed verbatim in `~/workspace/user/files/`:
   (hard declines 51/54/14/59/41/43 never cascade; irreversible codes
   block the PAN after one occurrence; soft-decline cap 2/24h).
 
+## Processor layer (sandbox)
+
+Added 2026-11-15 at the owner's direction from the payment-processor
+design (`Payment_Processor_Core_Engine_pasted_2026-11-15.txt`). It is
+a **sandbox**: there is no sponsor bank, no network-issued acquirer
+BIN, no HSM, no PCI certification, and no socket to any card network.
+The issuer is a deterministic simulator keyed to published test card
+numbers (4111…/4242…/5555…4444 approve; 4000…0002 → 51, …0069 → 54,
+…0127 → 59). Test PANs are used transiently and stored nowhere; the
+wire log masks DE 2.
+
+- `network_stan_sequences` — atomic circular STAN (1..999999) per
+  (acquirer_bin, network); RRNs are built as
+  year-digit + Julian day + hour + STAN (12 chars).
+- ISO 8583 codec — MTI + primary/secondary bitmaps; DE 2 LLVAR,
+  DE 3/4/7/11/12/13/14/22/25 numeric, DE 37/38/39/41/42/49 fixed,
+  DE 55 LLLVAR (hex-carried TLV), DE 70, DE 90. Round-trip verified.
+- `POST /ledger/processor/authorize` — builds MTI 0100, logs OUT,
+  simulates the issuer, logs MTI 0110 IN, and records the outcome on
+  a real ledger payment intent (AUTHORIZED or FAILED).
+- `POST /ledger/processor/reverse` — MTI 0420 with DE 90 original
+  data elements; intent → VOIDED. `POST /ledger/processor/echo` —
+  MTI 0800/0810 (DE 70 = 301), simulated.
+- `iso8583_message_log` — immutable wire audit (UPDATE/DELETE
+  blocked by trigger). The stored `raw_hex` is re-packed from the
+  masked fields, so DE 2 is masked in the stored bytes exactly as
+  in `parsed_de`; the unmasked message exists only transiently in
+  memory during the simulated send.
+- Clearing — `POST /ledger/processor/clearing/generate` sweeps
+  CAPTURED sandbox intents into a Base II-style fixed-width file
+  (HDR / TC05 records with masked PAN, RRN, amount, currency, CPS
+  flag / TRL with count + gross), tracked in `clearing_batches` +
+  `clearing_batch_items`; `transmit` marks GENERATED → ACKED
+  (simulated; no endpoint exists).
+- FBO wires — `POST /ledger/processor/fbo-wires` records a sponsor
+  bank net wire and reconciles it against the expected net (ACKED
+  batch gross minus fee estimates) for that network/date.
+
 ## Adaptations (documented, per the owner's no-hiding rule)
 
 - The designs presume Redis/Kafka for circuit breakers, approval
@@ -100,3 +138,10 @@ file re-upload deduplicated; EXACT_RRN match; clearing check
 difference 0; fee example reproduces $2.36 / $2.81; routing picks
 the higher-EV PSP in 3 ms; hard decline blocks cascade, soft
 decline permits it; unknown-RRN row quarantined without blocking.
+Processor layer (same day): ISO codec round-trip incl. secondary
+bitmap; STAN sequence increments; sandbox authorize approves 4111…
+(intent AUTHORIZED) and declines 4000…0002 with code 51 (FAILED);
+message log stores masked DE 2 only (byte-checked — no PAN in the
+stored hex); capture → clearing batch with correct trailer totals;
+FBO wire reconciles at the expected net and flags a wrong amount;
+reversal posts MTI 0420 and voids the intent.
