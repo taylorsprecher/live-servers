@@ -1,82 +1,50 @@
 #!/usr/bin/env python3
 """Member-login training site — Taylor's Transgender Patient Awareness, LLC.
 
-Python 3 stdlib ONLY (http.server, sqlite3, hashlib.pbkdf2_hmac, urllib for
-the Stripe REST API). Real member accounts persist in SQLite on a volume.
+Python 3 stdlib ONLY (http.server, sqlite3, hashlib.pbkdf2_hmac, urllib).
+Real member accounts persist in SQLite on a volume.
 
-Payments (on-site; no GoDaddy in this app):
-  * Stripe Checkout (hosted page at checkout.stripe.com). Keys come from the
-    host environment (STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET) — never
-    hardcoded, never committed. Checkout uses the account's default payment
-    methods (payment_method_types is NOT restricted), so credit and
-    debit cards and ACH bank transfer surface when enabled in the
-    Stripe Dashboard. (Google Pay and Apple Pay were removed at
-    Taylor's direction on 2026-11-15 — switched off in the
-    Dashboard's payment-method settings, since Checkout offers
-    whatever the account has enabled.) Payment unlocks automatically:
-    the signature-verified webhook (POST /stripe/webhook,
-    checkout.session.completed, and — for ACH — checkout.session.
-    async_payment_succeeded once the transfer clears) grants the
-    product to the paying member.
-  * Bitcoin (separate path — Stripe does not process BTC): the app quotes
-    BTC from the USD price (CoinGecko rate), creates a PENDING order, and
-    instructs the buyer to send that BTC amount to Taylor's cashtag
-    (CASHAPP_CASHTAG) INSIDE Cash App, with the buyer's account email in
-    the payment note — the same manual pattern as Cash App cash. The
-    owner confirms receipt in the roster; confirmation unlocks the
-    product. There is NO on-chain deposit address: Taylor confirmed
-    2026-11-12 that Cash App shows none ("There isn't one"), so Bitcoin
-    is received through Cash App's own Bitcoin send to the cashtag and
-    no address is ever displayed.
-  * Cash App (same manual pattern as Bitcoin): the app creates a PENDING
+Payments (on-site sales; SALES DECISION 2026-11-12, Taylor: "Sales
+on our own site — buyers pay through members.911transedu.net"):
+  * Cash App (the standing manual rail): the app creates a PENDING
     order showing the USD amount and Taylor's cashtag (CASHAPP_CASHTAG,
-    default $taylorsprecher2026 — a public receive handle). The owner
-    confirms receipt in the roster; confirmation unlocks the product.
-    Manual orders (Bitcoin + Cash App) share one log: order, member,
-    product, amount, timestamp, confirmation.
+    default $taylorsprecher2026 — a public receive handle). The buyer
+    puts their account email in the payment note; the owner confirms
+    receipt in the roster; confirmation unlocks the product.
+  * Bitcoin (same manual pattern): the app quotes BTC from the USD
+    price (CoinGecko rate), creates a PENDING order, and instructs
+    the buyer to send that BTC amount to Taylor's cashtag INSIDE
+    Cash App, with the buyer's account email in the payment note.
+    There is NO on-chain deposit address: Taylor confirmed
+    2026-11-12 that Cash App shows none ("There isn't one"), so
+    Bitcoin is received through Cash App's own Bitcoin send to the
+    cashtag and no address is ever displayed.
+  * GoDaddy Pay Links (the card rail, Taylor 2026-11-15: "Use
+    GoDaddy Pay Links for cards"): per-product links saved by the
+    owner in the settings table (godaddy_link_<course>) render a
+    Pay by card section on each buy page; the buyer records the
+    order on the site (method 'godaddy') and the owner's roster
+    confirmation unlocks, like Cash App. Pay Links are one-time
+    payments — the cadence price is paid per period, no
+    auto-renewal.
+  * Recurring subscriptions (card, Apple Pay, Google Pay, ACH) run
+    on the SEPARATE Braintree service at /subs/
+    (services/braintree-subscriptions) — not in this app. Its
+    webhooks grant and revoke access in this app's database,
+    matched by account email.
 
-SALES DECISION (2026-11-12, Taylor: "Sales on our own site — buyers pay
-through members.911transedu.net"): sales run fully through THIS site.
-Stripe is NOT connected (no keys on the host), so the operative
-purchase path is the manual Cash App flow; the Stripe checkout stays
-wired in code but is never presented as available while
-STRIPE_SECRET_KEY is unset. Each product has a stable public buy page
-at /members/buy/<key> showing the price, the cashtag, the note
+Billing cadence (Taylor, 2026-11-15): EMSPR protocols $6,000 every
+year; the CCCE course $15 every two years per provider.
+
+STRIPE: REMOVED COMPLETELY (Taylor, 2026-11-15: "remove Stripe
+completely"). An earlier built-in Stripe Checkout integration
+(hosted checkout, owner keys page, subscription webhooks) was
+deleted from this app wholesale — no Stripe code, keys, settings,
+or routes remain. Each product has a stable public buy page at
+/members/buy/<key> showing the price, the cashtag, the note
 guidance (the buyer's account email), and the owner-confirmation
-unlock — the public training site's buy buttons point at those pages.
-
-STRIPE GO-LIVE PREP (2026-11-12, Taylor: "Add them via Stripe"):
-Google Pay and Apple Pay are added through the Stripe Checkout path
-above, alongside Cash App (which remains the no-fee option). The site
-side is ready: automatic payment methods, HTTPS return URLs on
-members.911transedu.net, wallet-named copy that renders only while
-STRIPE_SECRET_KEY is set, and a key-delivery step in the members
-deploy workflow that writes the GitHub Actions secrets
-STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET into the host .env (never
-committed, never logged). Until Taylor connects Stripe and those
-secrets exist, behavior is exactly as described above. The full
-checklist lives in STRIPE_GO_LIVE.md in this directory.
-
-UPDATE (2026-11-15): Stripe was reopened at Taylor's direction.
-Keys are delivered on the owner-only Stripe keys page
-(/members/owner/stripe) into the settings table — owner-saved keys
-win over the environment keys above. Payment types were then set
-by Taylor: credit & debit cards and ACH bank transfer are the
-Stripe types ("Add ACH", "And debit card"); Google Pay and Apple
-Pay are REMOVED ("Remove Google and Apple") — switched off in the
-Stripe Dashboard payment-method settings. ACH unlocks through
-checkout.session.async_payment_succeeded when the transfer clears.
-Checkout runs in subscription mode on the cadence Taylor set the
-same day — EMSPR $6,000 every year, the CCCE course $15 every two
-years per provider — and customer.subscription.deleted ends the
-member's access when a subscription ends. Later the same day
-Taylor chose GoDaddy Pay Links for the card rail ("Use GoDaddy
-Pay Links for cards"): per-product links saved by the owner in
-the settings table (godaddy_link_<course>) render a Pay by card
-section on each buy page, with the order recorded on the site
-(method 'godaddy') and unlocked by the owner's roster
-confirmation, like Cash App. Pay Links are one-time payments —
-the cadence price is paid per period, no auto-renewal.
+unlock — the public training site's buy buttons point at those
+pages.
 
 Content: full course files are served ONLY to signed-in members with
 access, from CONTENT_DIR on the volume — never a public URL.
@@ -157,8 +125,6 @@ OWNER_EMAIL = "taylorsprecher@gmail.com"
 SESSION_DAYS = 30
 PBKDF2_ROUNDS = 200_000
 
-STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")
-STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 def _setting(key):
     """One row of the settings table (owner-saved site configuration)."""
     try:
@@ -183,22 +149,7 @@ def _set_setting(key, value):
             _db.execute("DELETE FROM settings WHERE key = ?", (key,))
 
 
-def stripe_secret_key():
-    """Stripe secret key in force: the owner-saved key (Stripe keys
-    page) wins; otherwise the host environment value above."""
-    return _setting("stripe_secret_key") or STRIPE_SECRET_KEY
 
-
-def stripe_webhook_secret():
-    """Webhook signing secret in force: owner-saved wins, else env."""
-    return _setting("stripe_webhook_secret") or STRIPE_WEBHOOK_SECRET
-
-
-def stripe_configured():
-    """True when a secret key and a webhook secret are both
-    available (owner-saved or from the environment) — card checkout
-    renders only then."""
-    return bool(stripe_secret_key() and stripe_webhook_secret())
 
 
 def godaddy_link(course_key):
@@ -348,8 +299,8 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 member_id INTEGER NOT NULL,
                 course_key TEXT NOT NULL,
-                stripe_session_id TEXT UNIQUE,
-                stripe_event_id TEXT,
+                external_id TEXT UNIQUE,
+                external_event_id TEXT,
                 amount_cents INTEGER,
                 currency TEXT,
                 created_at INTEGER NOT NULL
@@ -386,14 +337,6 @@ def init_db():
             CREATE TABLE IF NOT EXISTS settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS subscriptions (
-                stripe_subscription_id TEXT PRIMARY KEY,
-                member_id INTEGER NOT NULL,
-                course_key TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'active',
-                created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL
             );
             """
         )
@@ -613,175 +556,7 @@ def parse_multipart(body, content_type):
     return fields, files
 
 
-# ---------------------------------------------------------------- Stripe --
-def stripe_create_checkout(member, course):
-    """Create a Stripe Checkout Session. Returns (url, None) or (None, err)."""
-    key = stripe_secret_key()
-    if not key:
-        return None, "not_configured"
-    params = {
-        # Subscription mode on each product's cadence (EMSPR every
-        # year; CCCE every two years per provider — Taylor,
-        # 2026-11-15). Stripe bills the renewals; a subscription
-        # that ends ends access (see the webhook's
-        # customer.subscription.deleted branch).
-        "mode": "subscription",
-        "success_url": f"{PUBLIC_BASE_URL}{BASE}/desk?paid={course['key']}",
-        "cancel_url": f"{PUBLIC_BASE_URL}{BASE}/desk?cancelled={course['key']}",
-        "line_items[0][quantity]": "1",
-        "line_items[0][price_data][currency]": "usd",
-        "line_items[0][price_data][unit_amount]": str(course["cents"]),
-        "line_items[0][price_data][product_data][name]": course["name"],
-        "line_items[0][price_data][recurring][interval]": course["interval"],
-        "line_items[0][price_data][recurring][interval_count]": str(course["interval_count"]),
-        "metadata[member_id]": str(member["id"]),
-        "metadata[course_key]": course["key"],
-        "subscription_data[metadata][member_id]": str(member["id"]),
-        "subscription_data[metadata][course_key]": course["key"],
-        "customer_email": member["email"],
-        # payment_method_types deliberately omitted: Checkout uses the
-        # account's enabled payment methods (credit/debit cards and
-        # ACH bank transfer, as enabled in the Stripe Dashboard).
-    }
-    req = urllib.request.Request(
-        "https://api.stripe.com/v1/checkout/sessions",
-        data=urlencode(params).encode("utf-8"),
-        headers={
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Idempotency-Key": secrets.token_hex(16),
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-        return data.get("url"), None
-    except urllib.error.HTTPError as e:
-        try:
-            err = json.loads(e.read().decode("utf-8"))["error"]["message"]
-        except Exception:
-            err = f"Stripe HTTP {e.code}"
-        return None, err
-    except Exception as e:  # network etc.
-        return None, str(e)
 
-
-def stripe_verify_signature(payload_bytes, sig_header, secret, tolerance=300):
-    """Verify a Stripe webhook signature (stdlib HMAC-SHA256)."""
-    if not sig_header or not secret:
-        return False
-    parts = {}
-    for item in sig_header.split(","):
-        if "=" in item:
-            k, v = item.split("=", 1)
-            parts.setdefault(k.strip(), []).append(v.strip())
-    try:
-        timestamp = parts["t"][0]
-        signatures = parts["v1"]
-    except (KeyError, IndexError):
-        return False
-    if abs(int(time.time()) - int(timestamp)) > tolerance:
-        return False
-    signed = f"{timestamp}.".encode("utf-8") + payload_bytes
-    expected = hmac.new(
-        secret.encode("utf-8"), signed, hashlib.sha256
-    ).hexdigest()
-    return any(hmac.compare_digest(expected, s) for s in signatures)
-
-
-def grant_stripe_access(event, obj):
-    """Record a paid Stripe Checkout session and grant its course.
-    Used by checkout.session.completed for immediate methods (card,
-    wallets) and by checkout.session.async_payment_succeeded for
-    delayed methods (ACH bank transfer — Taylor, 2026-11-15: "Add
-    ACH"), which only becomes paid when the transfer clears, days
-    after checkout. Idempotent: both inserts are OR IGNORE and the
-    payments row is unique per Stripe session."""
-    meta = obj.get("metadata", {}) or {}
-    try:
-        member_id = int(meta.get("member_id", ""))
-    except ValueError:
-        member_id = None
-    course_key = meta.get("course_key", "")
-    if not member_id or course_key not in COURSE_KEYS:
-        return
-    if obj.get("payment_status") != "paid":
-        return
-    now = int(time.time())
-    try:
-        with _lock, _db:
-            _db.execute(
-                "INSERT OR IGNORE INTO payments (member_id, "
-                "course_key, stripe_session_id, stripe_event_id, "
-                "amount_cents, currency, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    member_id,
-                    course_key,
-                    obj.get("id"),
-                    event.get("id"),
-                    obj.get("amount_total"),
-                    obj.get("currency"),
-                    now,
-                ),
-            )
-            _db.execute(
-                "INSERT OR IGNORE INTO access (member_id, course_key) "
-                "VALUES (?, ?)",
-                (member_id, course_key),
-            )
-            sub_id = obj.get("subscription")
-            if sub_id:
-                _db.execute(
-                    "INSERT INTO subscriptions (stripe_subscription_id, "
-                    "member_id, course_key, status, created_at, "
-                    "updated_at) VALUES (?, ?, ?, 'active', ?, ?) "
-                    "ON CONFLICT(stripe_subscription_id) DO UPDATE SET "
-                    "status = 'active', updated_at = excluded.updated_at",
-                    (sub_id, member_id, course_key, now, now),
-                )
-    except sqlite3.Error:
-        pass
-
-
-def revoke_stripe_subscription(obj):
-    """A subscription that ends (customer.subscription.deleted)
-    ends the member's access to its product: the cadence terms
-    (EMSPR every year; CCCE every two years per provider) license
-    the period paid for, not a lifetime. Access is removed only
-    when no other active subscription covers the same product for
-    the member. Note: an owner manual grant for the same product
-    shares the one access row — if a subscription later cancels,
-    re-grant from the roster if the manual grant should stand."""
-    sub_id = obj.get("id", "")
-    if not sub_id:
-        return
-    now = int(time.time())
-    with _lock, _db:
-        row = _db.execute(
-            "SELECT member_id, course_key FROM subscriptions "
-            "WHERE stripe_subscription_id = ?",
-            (sub_id,),
-        ).fetchone()
-        if row is None:
-            return
-        _db.execute(
-            "UPDATE subscriptions SET status = 'canceled', "
-            "updated_at = ? WHERE stripe_subscription_id = ?",
-            (now, sub_id),
-        )
-        others = _db.execute(
-            "SELECT COUNT(*) AS n FROM subscriptions WHERE "
-            "member_id = ? AND course_key = ? AND status = 'active' "
-            "AND stripe_subscription_id != ?",
-            (row["member_id"], row["course_key"], sub_id),
-        ).fetchone()["n"]
-        if not others:
-            _db.execute(
-                "DELETE FROM access WHERE member_id = ? AND course_key = ?",
-                (row["member_id"], row["course_key"]),
-            )
 
 
 def btc_quote(usd_cents):
@@ -889,12 +664,11 @@ accessories</td></tr>
 
 def home_page(message="", ok=False):
     msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
-    if stripe_configured():
+    if any_godaddy_link():
         pay_note = (
-            "Or pay by credit or debit card, or ACH bank transfer, "
-            "at checkout — access unlocks automatically when payment "
-            "completes (bank transfers unlock when they clear, a few "
-            "business days). "
+            "Or pay by credit or debit card through the GoDaddy Pay "
+            "Link on each product's buy page — access unlocks when "
+            "the owner confirms your payment. "
             "You can also pay with Bitcoin inside Cash App — each "
             "course's buy page shows the Bitcoin amount to send."
         )
@@ -932,12 +706,11 @@ payment note — access unlocks once the owner confirms receipt.
 
 
 def preview_page():
-    if stripe_configured():
+    if any_godaddy_link():
         card_line = (
-            "You can also pay by credit or debit card, or ACH bank "
-            "transfer, on each product's buy page — access unlocks "
-            "automatically when payment completes (bank transfers "
-            "unlock when they clear)."
+            "You can also pay by credit or debit card through the "
+            "GoDaddy Pay Link on each product's buy page — access "
+            "unlocks when the owner confirms your payment."
         )
     else:
         card_line = (
@@ -1058,7 +831,6 @@ def apps_account_card(member):
         else ""
     )
     owner_link = (
-        f'<a class="acct-btn ghost" href="{BASE}/owner/stripe">Stripe keys</a>'
         f'<a class="acct-btn ghost" href="{BASE}/owner/paylinks">Pay Links</a>'
         if member["email"].lower() == OWNER_EMAIL
         else ""
@@ -1091,11 +863,9 @@ def apps_page(member=None):
     file so the markup stays out of the code; the Dockerfile copies
     it into the image next to app.py. The ACCOUNT-CARD marker in the
     markup is replaced with the visitor's account/profile card, and
-    the PAY-NOTE marker with the payment note for the Stripe key
-    state in force — the hub is built around the key (Taylor,
-    2026-11-15: "Build around the key"): the moment the owner saves
-    the keys, this note flips to card checkout being on, with no
-    redeploy."""
+    the PAY-NOTE marker with the payment note for the card state in
+    force: when the owner has saved a GoDaddy Pay Link, the note
+    points buyers at it; otherwise it says Cash App works today."""
     try:
         with open(
             os.path.join(os.path.dirname(os.path.abspath(__file__)), "apps.html"),
@@ -1107,14 +877,7 @@ def apps_page(member=None):
             "<h1>Apps hub unavailable</h1>"
             "<p>The apps page is missing on the server.</p>"
         )
-    if stripe_configured():
-        pay_note = (
-            "Or pay by credit or debit card, or ACH bank transfer, "
-            "on the buy pages — access unlocks automatically when "
-            "payment completes (bank transfers unlock when they "
-            "clear)."
-        )
-    elif any_godaddy_link():
+    if any_godaddy_link():
         pay_note = (
             "Or pay by credit or debit card through the GoDaddy Pay "
             "Link on each product's buy page — access unlocks when "
@@ -1122,8 +885,8 @@ def apps_page(member=None):
         )
     else:
         pay_note = (
-            "Card checkout on the buy pages is still being "
-            "switched on."
+            "To buy by card, look for the GoDaddy Pay Link on each "
+            "product's buy page — Cash App works today."
         )
     return page.replace(
         "<!-- ACCOUNT-CARD -->", apps_account_card(member)
@@ -1242,17 +1005,17 @@ def websites_data():
             {
                 "name": "Transgender Emergency Medicine — CCCE Course",
                 "price": "$15",
-                "cadence": "every two years, per provider (Stripe subscription)",
+                "cadence": "every two years, per provider",
                 "buy_url": "https://members.911transedu.net/members/buy/ccce",
-                "payment": "Credit & debit cards / ACH bank transfer via Stripe Checkout (automatic unlock; bank transfers unlock when they clear) when the owner has saved the Stripe keys on the owner Stripe keys page; or by credit/debit card through the product's GoDaddy Pay Link when the owner has saved one on the owner Pay Links page (owner confirms the payment in the roster); or Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster",
+                "payment": "By credit/debit card through the product's GoDaddy Pay Link when the owner has saved one on the owner Pay Links page (buyer records the order on the site; owner confirms the payment in the roster), or Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster. Recurring subscriptions by card, wallet, or bank run on the separate Braintree service at /subs/.",
                 "includes": "CCCE_Course_Files.zip",
             },
             {
                 "name": "EMSPR Protocols",
                 "price": "$6,000",
-                "cadence": "every year (Stripe subscription)",
+                "cadence": "every year",
                 "buy_url": "https://members.911transedu.net/members/buy/emspr",
-                "payment": "Credit & debit cards / ACH bank transfer via Stripe Checkout (automatic unlock; bank transfers unlock when they clear) when the owner has saved the Stripe keys on the owner Stripe keys page; or by credit/debit card through the product's GoDaddy Pay Link when the owner has saved one on the owner Pay Links page (owner confirms the payment in the roster); or Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster",
+                "payment": "By credit/debit card through the product's GoDaddy Pay Link when the owner has saved one on the owner Pay Links page (buyer records the order on the site; owner confirms the payment in the roster), or Cash App to $taylorsprecher2026 — buyer puts their account email in the payment note; access unlocks when the owner confirms receipt in the roster. Recurring subscriptions by card, wallet, or bank run on the separate Braintree service at /subs/.",
                 "includes": "The full EMS protocol package; CCCE course files included",
             },
         ],
@@ -1277,7 +1040,7 @@ def websites_data():
             "url": "https://members.911transedu.net/members/apps",
             "data_feed": "https://members.911transedu.net/members/apps/data",
         },
-        "notes": "Sales run on this server only (owner decision, 2026-11-12). Stripe reopened 2026-11-15: credit & debit cards and ACH bank transfer run through Stripe Checkout once the owner saves the Stripe keys on the site's owner Stripe keys page (Google Pay and Apple Pay removed at the owner's direction the same day); cards also run through GoDaddy Pay Links at the owner's choice the same day, one link per product saved on the owner Pay Links page, unlock confirmed in the roster; Cash App to $taylorsprecher2026 remains the no-fee option.",
+        "notes": "Sales run on this server only (owner decision, 2026-11-12). Cards run through GoDaddy Pay Links (owner's choice, 2026-11-15): one link per product saved on the owner Pay Links page, buyers record an order on the site, unlock confirmed in the roster; Pay Links are one-time per period on each product's cadence. Recurring subscriptions run on the separate Braintree service at /subs/ (card, Apple Pay, Google Pay, ACH); Cash App to $taylorsprecher2026 remains the no-fee option.",
     }
     live_servers = [
         {"name": "MacLAN", "url": "https://maclan.911transedu.net", "gateway_path": "/maclan/", "purpose": "Dashboard for the Macs and the home network", "access": "Public page"},
@@ -1328,17 +1091,13 @@ def buy_page(course, member=None, message="", ok=False):
     Bitcoin is offered alongside Cash App cash (Taylor, 2026-11-12):
     sent inside Cash App to the same cashtag at the live-quoted BTC
     amount — no on-chain address exists or is shown.
-    While STRIPE_SECRET_KEY is unset — the standing state since
-    Taylor closed the Stripe go-live on 2026-11-12 ("Let's just keep
-    Cash App") and the keys were removed — card checkout is never
-    offered as a working button here and Cash App is presented as
-    the way to buy. Were a key ever set again, the page would also
-    present paying by credit/debit card or ACH bank transfer via
-    Stripe Checkout, with Cash App remaining the alternative. Signed-in
-    members get the order button
-    on this page; everyone else gets the sign-in/create-account step
-    first (their account email is the identity the payment note must
-    carry)."""
+    Card subscriptions (card, Apple Pay, Google Pay, ACH) run on
+    the separate Braintree service at /subs/; this page presents
+    the manual rails — Cash App, Bitcoin inside Cash App, and a
+    GoDaddy Pay Link when the owner has saved one. Signed-in
+    members get the order buttons on this page; everyone else
+    gets the sign-in/create-account step first (their account
+    email is the identity the payment note must carry)."""
     msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
     amount = f"${course['cents'] / 100:,.2f}"
     if member is not None and course["key"] in member_access(member["id"]):
@@ -1386,37 +1145,6 @@ def buy_page(course, member=None, message="", ok=False):
         if course["key"] == "ccce"
         else ""
     )
-    # Card / wallet option (Taylor, 2026-11-12: "Add them via Stripe").
-    # While no Stripe key is configured the note stays exactly as before
-    # — card is never presented as live and Cash App is the way to buy.
-    # When the key exists, the page presents paying by credit/debit
-    # card or ACH bank transfer via Stripe Checkout, with Cash App
-    # remaining the alternative above; signed-in members without
-    # access get the checkout button itself.
-    if not stripe_configured():
-        card_note = ""
-    elif member is not None and course["key"] in member_access(member["id"]):
-        card_note = ""
-    elif member is not None:
-        card_note = (
-            "<h2>Or pay by credit or debit card, or bank (ACH)</h2>"
-            "<p>Pay through Stripe Checkout — credit and debit cards "
-            "and ACH bank transfers are accepted. Access unlocks "
-            "automatically as soon as payment completes; bank "
-            "transfers unlock when they clear, a few business days "
-            "after checkout.</p>"
-            f'<form method="post" action="{BASE}/checkout">'
-            f'<input type="hidden" name="course_key" value="{course["key"]}">'
-            f'<button type="submit">Pay by card / bank (ACH) '
-            f"— {amount}</button></form>"
-        )
-    else:
-        card_note = (
-            '<p class="small">You can also pay by credit or debit '
-            "card, or ACH bank transfer, at Stripe Checkout once you "
-            "sign in — access unlocks automatically when payment "
-            "completes (bank transfers unlock when they clear).</p>"
-        )
     # Card via GoDaddy Pay Link (Taylor, 2026-11-15: "Use GoDaddy
     # Pay Links for cards"). The section exists only while the
     # owner has saved a link for this product on the owner Pay
@@ -1567,7 +1295,6 @@ download then appears on your Member Desk.</li>
 </ol>
 {action}
 </div>
-{card_note}
 {godaddy_section}
 {btc_section}
 <p><a class="btn secondary" href="{BASE}/preview">Preview the courses</a>
@@ -1702,81 +1429,7 @@ see them, and they are never public.</p>
     return PAGE.format(title="Upload Documents", body=body)
 
 
-def owner_stripe_page(member, message="", ok=False):
-    """Owner-only Stripe keys page (Taylor, 2026-11-15: "Make a new
-    script that does take stripe to add those payment types"). The
-    owner pastes the two Stripe keys here, on the site itself; they
-    are stored in the settings table and take effect immediately —
-    no GitHub secrets, no redeploy. Values are never rendered back:
-    the page shows only whether a key is saved and its last 4."""
-    msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
-    saved_sk = _setting("stripe_secret_key")
-    saved_wh = _setting("stripe_webhook_secret")
 
-    def state(saved, env_value):
-        if saved:
-            return f"Saved on this page — ends in ••••{esc(saved[-4:])}"
-        if env_value:
-            return "Set in the server environment"
-        return "Not set"
-
-    sk_state = state(saved_sk, STRIPE_SECRET_KEY)
-    wh_state = state(saved_wh, STRIPE_WEBHOOK_SECRET)
-    live = (
-        "<strong>Card checkout is ON.</strong> Buy pages offer credit "
-        "and debit cards and ACH bank transfers through Stripe "
-        "Checkout; Cash App "
-        "stays available as the no-fee option."
-        if stripe_configured()
-        else "<strong>Card checkout is OFF.</strong> Cash App is the "
-        "only payment path until both keys are saved."
-    )
-    body = f"""
-<h1>Stripe Keys — Cards &amp; ACH Bank Transfer</h1>
-<p class="small">Owner only. Paste the two keys from your Stripe
-Dashboard and card checkout turns on right away — nothing else to
-deploy. The keys live only in this site's database on the server;
-this page never shows them again, only their last 4 characters.</p>
-{msg}
-<div class="card"><h2>Status</h2>
-<p>{live}</p>
-<p class="small">Stripe secret key: {sk_state}<br>
-Webhook signing secret: {wh_state}</p>
-<p class="small">Billing runs as Stripe subscriptions on each
-product's cadence: EMSPR renews every year; the CCCE course renews
-every two years per provider. When a subscription ends in Stripe,
-the member's access ends with it.</p></div>
-<div class="card"><h2>Save the keys</h2>
-<form method="post" action="{BASE}/owner/stripe">
-<label>Stripe secret key (starts sk_live_)</label>
-<p class="small">Stripe Dashboard → Developers → API keys → Secret key.</p>
-<input type="password" name="stripe_secret_key" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="sk_live_…" required>
-<label>Webhook signing secret (starts whsec_)</label>
-<p class="small">Stripe Dashboard → Developers → Webhooks → the endpoint
-for https://members.911transedu.net/members/stripe/webhook → Signing
-secret. The endpoint must send three events: checkout.session.completed,
-checkout.session.async_payment_succeeded (unlocks ACH bank transfers
-when they clear) and customer.subscription.deleted (ends a member's
-access when their subscription ends). If the endpoint is not listed,
-add it with that URL and all three events, then copy its secret.</p>
-<input type="password" name="stripe_webhook_secret" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="whsec_…" required>
-<button type="submit">Save keys and turn card checkout on</button></form>
-<p class="small">Payment types are set in Stripe, not here: Dashboard
-→ Settings → Payment methods. Turn ON Cards and US bank account
-(ACH). Google Pay and Apple Pay were removed at the owner's
-direction (2026-11-15) — turn both OFF there; Checkout offers
-whatever the account has enabled, so those Dashboard switches are
-what actually take them off the checkout page.</p></div>
-<div class="card"><h2>Turn card checkout off</h2>
-<p class="small">Clears the keys saved on this page. Cash App becomes
-the only payment path again. (Keys delivered through the server
-environment, if any, are not changed.)</p>
-<form method="post" action="{BASE}/owner/stripe">
-<input type="hidden" name="action" value="clear">
-<button type="submit" class="secondary">Clear saved keys</button></form></div>
-<p><a class="btn secondary" href="{BASE}/desk">Back to Member Desk</a></p>
-"""
-    return PAGE.format(title="Stripe Keys — Owner", body=body)
 
 
 def owner_paylinks_page(member, message="", ok=False):
@@ -1915,22 +1568,11 @@ def desk_page(member, message="", ok=False):
                 '<p class="small">Access unlocks when the owner confirms '
                 "receipt.</p>"
             )
-            manual = "".join(parts)
-            if stripe_configured():
-                status = (
-                    f'<form class="inline" method="post" action="{BASE}/checkout">'
-                    f'<input type="hidden" name="course_key" value="{c["key"]}">'
-                    f'<button type="submit">Buy by card — {esc(c["price"])}</button></form> '
-                    + manual
-                    + '<p class="small">Credit and debit cards and ACH '
-                    "bank transfers are accepted at checkout. Access "
-                    "unlocks automatically when payment completes "
-                    "(bank transfers unlock when they clear).</p>"
-                )
-            else:
-                # Cash App only (Taylor, 2026-11-12: "Let's just keep
-                # Cash App") — no card wording on the desk.
-                status = manual
+            # The desk offers the manual rails (Cash App, Bitcoin,
+            # and a recorded GoDaddy Pay Link order when a link is
+            # set). Recurring card/wallet/bank subscriptions live on
+            # the Braintree service at /subs/.
+            status = manual = "".join(parts)
         rows += (
             f'<div class="card"><strong>{esc(c["name"])}</strong><br>'
             f'<span class="small">{esc(price_line(c))}</span><br>{status}</div>'
@@ -1946,11 +1588,6 @@ def desk_page(member, message="", ok=False):
                 "SELECT o.*, m.name, m.email FROM manual_orders o "
                 "JOIN members m ON m.id = o.member_id "
                 "WHERE o.status = 'pending' ORDER BY o.created_at"
-            ).fetchall()
-            pays = _db.execute(
-                "SELECT p.*, m.email FROM payments p "
-                "JOIN members m ON m.id = p.member_id "
-                "ORDER BY p.created_at DESC LIMIT 20"
             ).fetchall()
         trs = ""
         for m in all_members:
@@ -1981,15 +1618,6 @@ def desk_page(member, message="", ok=False):
             )
         if not btc_rows:
             btc_rows = '<tr><td colspan="6" class="small">No pending manual-payment orders.</td></tr>'
-        pay_rows = ""
-        for p in pays:
-            pay_rows += (
-                f'<tr><td>{esc(p["email"])}</td><td>{esc(p["course_key"])}</td>'
-                f'<td>${(p["amount_cents"] or 0) / 100:.2f} {esc(p["currency"] or "")}</td>'
-                f'<td class="small">{esc(p["stripe_session_id"] or "")}</td></tr>'
-            )
-        if not pay_rows:
-            pay_rows = '<tr><td colspan="4" class="small">No card payments yet.</td></tr>'
         up_rows = all_member_uploads()
         if up_rows:
             grouped = {}
@@ -2020,11 +1648,6 @@ def desk_page(member, message="", ok=False):
 <div class="card"><h2>Course files</h2>
 <p class="small">Stage or replace the protected course bundles.</p>
 <a class="btn secondary" href="{BASE}/admin/upload">Open the upload page</a></div>
-<div class="card"><h2>Stripe keys</h2>
-<p class="small">Card and ACH bank transfer checkout: save or clear
-the Stripe keys. Card checkout is currently
-<strong>{"ON" if stripe_configured() else "OFF"}</strong>.</p>
-<a class="btn secondary" href="{BASE}/owner/stripe">Open the Stripe keys page</a></div>
 <div class="card"><h2>GoDaddy Pay Links</h2>
 <p class="small">Card payments through GoDaddy Pay Links: save or clear
 the link for each product. Buy pages show the Pay by card button for
@@ -2034,8 +1657,7 @@ each link that is set.</p>
 <p class="small">Documents members sent from the upload page, grouped by
 member. Only you can see other members' uploads.</p>
 {up_sections}</div>
-<div class="card"><h2>Recent card payments (Stripe)</h2>
-<table><tr><th>Member</th><th>Product</th><th>Amount</th><th>Session</th></tr>{pay_rows}</table></div>"""
+"""
 
     # Teach-Back collection card: unlocks with CCCE access (see the
     # COLLECTIONS design decision near the top of this file).
@@ -2052,13 +1674,11 @@ member. Only you can see other members' uploads.</p>
             '<span class="small">Unlocks with the CCCE course.</span></div>'
         )
 
-    if stripe_configured():
-        card_li = (
-            "<li>your card checkout completes — access unlocks "
-            "automatically when payment completes, or</li>"
-        )
-    else:
-        card_li = ""
+    card_li = (
+        "<li>your card payment is confirmed — automatically when a "
+        "Braintree subscription's first charge succeeds, or by the "
+        "owner for a GoDaddy Pay Link payment, or</li>"
+    )
 
     body = f"""
 <h1>Member Desk</h1>
@@ -2198,8 +1818,8 @@ class Handler(BaseHTTPRequestHandler):
             if "paid" in qs:
                 message = (
                     "Thank you! If your payment completed, access unlocks "
-                    "automatically as soon as Stripe confirms it — refresh "
-                    "this page in a few seconds."
+                    "automatically as soon as the payment is "
+                    "confirmed — refresh this page in a few seconds."
                 )
                 ok = True
             elif "cancelled" in qs:
@@ -2229,16 +1849,6 @@ class Handler(BaseHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             message = qs.get("msg", [""])[0]
             return self.send_html(upload_page(member, message, ok=bool(message)))
-        if path == BASE + "/owner/stripe":
-            member, _ = self.current_member()
-            # Fail closed: the Stripe keys page exists only for the owner.
-            if not member or member["email"].lower() != OWNER_EMAIL:
-                return self.send_html("<h1>Forbidden</h1>", status=403)
-            qs = parse_qs(parsed.query)
-            message = qs.get("msg", [""])[0]
-            return self.send_html(
-                owner_stripe_page(member, message, ok=bool(message))
-            )
         if path == BASE + "/owner/paylinks":
             member, _ = self.current_member()
             # Fail closed: the Pay Links page exists only for the owner.
@@ -2568,49 +2178,11 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
 
     def do_POST(self):
         path = urlparse(self.path).path
-        if path == BASE + "/stripe/webhook":
-            return self.stripe_webhook()
         if path == BASE + "/admin/upload":
             return self.admin_upload()
         if path == BASE + "/upload":
             return self.member_upload()
         form = self.form()
-        if path == BASE + "/owner/stripe":
-            member, _ = self.current_member()
-            # Fail closed: only the owner can save or clear Stripe keys.
-            if not member or member["email"].lower() != OWNER_EMAIL:
-                return self.send_html("<h1>Forbidden</h1>", status=403)
-            if form.get("action", "") == "clear":
-                _set_setting("stripe_secret_key", "")
-                _set_setting("stripe_webhook_secret", "")
-                return self.redirect(
-                    BASE + "/owner/stripe?msg=" + quote(
-                        "Saved Stripe keys cleared — card checkout is off. "
-                        "Cash App is the only payment path."
-                    )
-                )
-            sk = form.get("stripe_secret_key", "").strip()
-            wh = form.get("stripe_webhook_secret", "").strip()
-            if not sk.startswith(("sk_live_", "sk_test_", "rk_live_")):
-                return self.send_html(owner_stripe_page(
-                    member,
-                    "That secret key doesn't look right — it should start "
-                    "with sk_live_. Nothing was saved.",
-                ))
-            if not wh.startswith("whsec_"):
-                return self.send_html(owner_stripe_page(
-                    member,
-                    "That webhook secret doesn't look right — it should "
-                    "start with whsec_. Nothing was saved.",
-                ))
-            _set_setting("stripe_secret_key", sk)
-            _set_setting("stripe_webhook_secret", wh)
-            return self.redirect(
-                BASE + "/owner/stripe?msg=" + quote(
-                    "Stripe keys saved — card and ACH bank transfer "
-                    "checkout is ON."
-                )
-            )
         if path == BASE + "/owner/paylinks":
             member, _ = self.current_member()
             # Fail closed: only the owner can save or clear Pay Links.
@@ -2676,23 +2248,6 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
                         "DELETE FROM sessions WHERE token_hash = ?", (token_hash(token),)
                     )
             return self.redirect(BASE + "/", extra_headers=[self.clear_cookie()])
-        if path == BASE + "/checkout":
-            member, _ = self.current_member()
-            if not member:
-                return self.redirect(BASE + "/")
-            course = COURSE_BY_KEY.get(form.get("course_key", ""))
-            if course is None:
-                return self.send_html("<h1>Bad request</h1>", status=400)
-            url, err = stripe_create_checkout(member, course)
-            if url:
-                return self.redirect(url)
-            if err == "not_configured":
-                return self.send_html(
-                    desk_page(member, "Payment is by Cash App — the buy pages show the Cash App instructions for each course.")
-                )
-            return self.send_html(
-                desk_page(member, f"Checkout could not be started: {err}")
-            )
         if path == BASE + "/bitcoin/order":
             member, _ = self.current_member()
             if not member:
@@ -2850,29 +2405,7 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
             return self.redirect(BASE + "/", extra_headers=[self.clear_cookie()])
         return self.send_html("<h1>Not found</h1>", status=404)
 
-    def stripe_webhook(self):
-        payload = self.raw_body()
-        sig = self.headers.get("Stripe-Signature", "")
-        whsec = stripe_webhook_secret()
-        if not whsec or not stripe_verify_signature(payload, sig, whsec):
-            return self.send_html("<h1>Bad signature</h1>", status=400)
-        try:
-            event = json.loads(payload.decode("utf-8"))
-        except Exception:
-            return self.send_html("<h1>Bad payload</h1>", status=400)
-        if event.get("type") in (
-            "checkout.session.completed",
-            "checkout.session.async_payment_succeeded",
-        ):
-            grant_stripe_access(event, event.get("data", {}).get("object", {}))
-        elif event.get("type") == "customer.subscription.deleted":
-            revoke_stripe_subscription(event.get("data", {}).get("object", {}))
-        data = b'{"received":true}'
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(data)))
-        self.end_headers()
-        self.wfile.write(data)
+
 
 
 if __name__ == "__main__":
