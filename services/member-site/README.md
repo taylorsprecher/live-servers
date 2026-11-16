@@ -19,10 +19,9 @@ host port 18109, loopback only; the gateway is the public entry point).
   Pay by card section for each saved link, the buyer records the
   order on the site, and the owner's roster confirmation unlocks.
   Pay Links are one-time per period (no auto-renewal).
-- **Recurring subscriptions (Braintree)**: card, Apple Pay,
-  Google Pay, and ACH subscriptions run on the SEPARATE Braintree
-  service at `/subs/` (`services/braintree-subscriptions`), whose
-  webhooks grant and revoke access in this site's database.
+- **Recurring subscriptions**: not currently offered — a
+  Braintree service was removed on 2026-11-15 when the owner
+  ruled PayPal out (Braintree is PayPal).
 - **Stripe: removed completely (2026-11-15)** at the owner's
   direction. An earlier built-in Stripe Checkout integration was
   deleted wholesale — no Stripe code, keys, or routes remain in
@@ -47,9 +46,7 @@ host port 18109, loopback only; the gateway is the public entry point).
   payment note), and the owner-confirmation unlock; signed-in members
   get the order button on the page. The public training site's buy
   buttons point at these URLs (2026-11-12 sales decision).
-- **Keys**: this app holds no payment-processor keys at all. The
-  Braintree service keeps its own credentials in its own
-  environment (see `services/braintree-subscriptions/README.md`).
+- **Keys**: this app holds no payment-processor keys at all.
 - **Course contents**: served only to signed-in members with access, from
   `/data/content/` on the `members-data` volume — never a public URL.
 - **Course-file upload** (`/members/admin/upload`, owner session only,
