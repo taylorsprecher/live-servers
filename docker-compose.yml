@@ -275,14 +275,14 @@ services:
       
   blackberry:
       build:
-            context: ./services/blackberry-lan
-                container_name: live-blackberry
-                    restart: unless-stopped
-                        mem_limit: 128m
-                            environment:
-                                  BASE_PATH: /blackberry
-                                      ports:
-                                            - "127.0.0.1:18124:8771"
+      context: ./services/blackberry-lan
+    container_name: live-blackberry
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      BASE_PATH: /blackberry
+    ports:
+      - "127.0.0.1:18124:8771"
                                             
   gateway:
     image: nginx:alpine
