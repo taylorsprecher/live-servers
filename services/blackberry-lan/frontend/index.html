@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BlackBerry LAN — Air Platform</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 44rem; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; } code { background: #eee; padding: 0.1rem 0.3rem; border-radius: 4px; }
+  li { margin: 0.4rem 0; }
+</style>
+</head>
+<body>
+<h1>BlackBerry LAN — Air Platform Core</h1>
+<p>The runnable core of the BlackBerry 10 / QNX + Python design
+(<em>BlackBerry_LAN.pdf</em>): the <strong>AirCore</strong> stack VM,
+the <strong>AirBridge</strong> message bus, and the <strong>AirShield</strong>
+zero-trust policy, running as a fleet service.</p>
+<ul>
+  <li><code>GET /blackberry/health</code> — service status</li>
+  <li><code>GET /blackberry/diagnostics</code> — core diagnostics (cpu / memory / sandbox)</li>
+  <li><code>GET /blackberry/shield</code> — AirShield policy and AirBridge route table</li>
+  <li><code>POST /blackberry/aircore/run</code> — run a program, e.g. {"program": ["PUSH 5", "PUSH 3", "ADD", "HALT"]} → stack [8]</li>
+  <li><code>POST /blackberry/bridge/send</code> — send on a routed channel (diagnostics, echo)</li>
+  <li><code>GET /blackberry/bridge/messages?channel=echo</code> — read the bus</li>
+</ul>
+<p>The handset layers in the design (Cascades/QML UI, C++ bridge, signed
+.bar packaging for a BlackBerry 10 device) are design material for a device
+build; this service is the server-side core.</p>
+</body>
+</html>
