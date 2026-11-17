@@ -272,7 +272,18 @@ services:
       - paydb
     ports:
       - "127.0.0.1:18123:8000"
-
+      
+  blackberry:
+      build:
+            context: ./services/blackberry-lan
+                container_name: live-blackberry
+                    restart: unless-stopped
+                        mem_limit: 128m
+                            environment:
+                                  BASE_PATH: /blackberry
+                                      ports:
+                                            - "127.0.0.1:18124:8771"
+                                            
   gateway:
     image: nginx:alpine
     container_name: live-gateway
