@@ -314,6 +314,37 @@ services:
       - proxy
       - payledger
 
+  # Public gateway for the jasmine EC2 instance ONLY (added
+  # 2026-11-17, Taylor: "Go public"). Behind the "jasmine" compose
+  # profile so a plain `docker compose up` on the audited host never
+  # starts it. On jasmine: docker compose --profile jasmine up -d
+  # gateway-jasmine. Serves jasmine.911transedu.net on 80/443 with
+  # the fleet's path layout for the eight services that run there;
+  # backends stay loopback-only. Cert state is host-only under
+  # tls-jasmine-state/ (never in git; see tls-jasmine/issue.sh).
+  gateway-jasmine:
+    profiles: ["jasmine"]
+    image: nginx:alpine
+    container_name: live-gateway-jasmine
+    restart: unless-stopped
+    mem_limit: 64m
+    network_mode: host
+    volumes:
+      - ./gateway-jasmine/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./gateway-jasmine/locations-jasmine.conf:/etc/nginx/locations-jasmine.conf:ro
+      - ./gateway-jasmine/index.html:/etc/nginx/html-jasmine/index.html:ro
+      - ./tls-jasmine-state/certs:/etc/nginx/certs:ro
+      - ./tls-jasmine-state/webroot:/var/www/acme:ro
+    depends_on:
+      - maclan
+      - xbox
+      - wyze
+      - usb
+      - aircore
+      - fmp
+      - celltower
+      - blackberry
+
 volumes:
   maclan-data:
   xsave-data:
