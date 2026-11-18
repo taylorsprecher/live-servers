@@ -312,10 +312,44 @@ services:
       ZILLION_S3_REGION: ${ZILLION_S3_REGION:-us-west-2}
       ZILLION_S3_ROLE_ARN: ${ZILLION_S3_ROLE_ARN:-arn:aws:iam::392349106458:role/zillion-control-plane-role}
       ZILLION_S3_KMS_KEY_ID: ${ZILLION_S3_KMS_KEY_ID:-19f314ab-afa4-4746-a2b5-39427104158c}
+      # MinIO backend (fleet-internal S3-compatible store, service
+      # `minio` below; installed 2026-11-18): the service signs
+      # path-style requests with the MinIO root credentials directly
+      # — no AssumeRole, no SSE-KMS (both AWS-only). The credentials
+      # are generated on the host into .env by ops/deploy-zillion.sh
+      # and never live in git; empty credentials = the MinIO backend
+      # is reported not configured and the other backends carry on.
+      ZILLION_MINIO_ENDPOINT: ${ZILLION_MINIO_ENDPOINT:-http://minio:9000}
+      ZILLION_MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-}
+      ZILLION_MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-}
+      ZILLION_MINIO_BUCKET: ${ZILLION_MINIO_BUCKET:-zillion-objects}
     volumes:
       - zillion-data:/data
     ports:
       - "127.0.0.1:18126:8772"
+
+  # MinIO: fleet-internal S3-compatible object store backing the
+  # Zillion Storage service's `minio` backend (installed 2026-11-18
+  # at Taylor's direction). Loopback-only: the S3 API (:9000) and the
+  # console (:9001) are published on host loopback for the deploy
+  # smoke checks and local administration; the zillion container
+  # reaches the API over the compose network at http://minio:9000.
+  # Root credentials come from the host .env, generated there by
+  # ops/deploy-zillion.sh — never in git, no usable defaults.
+  minio:
+    image: minio/minio:latest
+    container_name: live-minio
+    restart: unless-stopped
+    mem_limit: 256m
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "127.0.0.1:18128:9000"
+      - "127.0.0.1:18129:9001"
 
   fastapi-app:
     build:
@@ -401,3 +435,4 @@ volumes:
   vpn-data:
   payledger-data:
   zillion-data:
+  minio-data:
