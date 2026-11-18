@@ -55,6 +55,28 @@ To revoke a phone: remove its `[Peer]` block from
 `/config/wg_confs/wg0.conf` in the volume (or delete the peer and
 restart the service), then restart `vpn`.
 
+## Revocation (2026-11-18)
+
+On 2026-11-18 Taylor directed that the connection to Mom's phone
+be taken out, that no other phones on the fleet be allowed access,
+and that the blocking be automated. All peers except `taylor`
+were revoked: phone2 (Mom's phone) and the reserved,
+never-distributed phone3–phone5. `PEERS` in docker-compose.yml
+is now `taylor` only, and peer `taylor` (10.8.0.2) is the only
+peer that exists.
+
+The tool is **ops/revoke-vpn-peers.sh** (run on the host by the
+**Revoke VPN peers** workflow): it deletes each non-kept peer's
+config directory from the volume, removes its `[Peer]` block
+from wg0.conf, restarts the service, and prints masked `wg show`
+proof that only the kept peers remain. It is idempotent and
+takes the keep-list as arguments (default `taylor`).
+
+To re-add a peer later: restore its name in `PEERS` in
+docker-compose.yml, redeploy the vpn service so the image
+regenerates its config, then export the new config through the
+encrypted path above and deliver it to the phone.
+
 ## Deploy / verify
 
 - Deploy: the **Deploy VPN service** workflow (rsync + 
