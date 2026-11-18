@@ -283,6 +283,15 @@ services:
       BASE_PATH: /blackberry
     ports:
       - "127.0.0.1:18124:8771"
+
+  flutter:
+    build:
+      context: ./services/flutter-app
+    container_name: live-flutter
+    restart: unless-stopped
+    mem_limit: 128m
+    ports:
+      - "127.0.0.1:18125:80"
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -313,6 +322,7 @@ services:
       - fileslib
       - proxy
       - payledger
+      - flutter
 
   # Public gateway for the jasmine EC2 instance ONLY (added
   # 2026-11-17, Taylor: "Go public"). Behind the "jasmine" compose
