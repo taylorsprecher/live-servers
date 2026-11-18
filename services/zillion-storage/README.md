@@ -128,10 +128,44 @@ service:
   an error string when it is not). The deploy asserts
   `CHECK zillion-minio-smoke ok` whenever the backend is configured.
 
-Design-only until their clusters/credentials exist: Ceph, GCS.
-The health endpoint lists them as not configured; nothing pretends
-otherwise. "1 Zillion TB" is the design's name — real capacity is
-always reported as measured.
+### Ceph and GCS backends (adapters written 2026-11-18)
+
+Both adapters are written and wired into the PUT/GET/DELETE/verify
+fan-out, ready ahead of the infrastructure — no Ceph cluster and no
+Google Cloud project exist yet, so both report honestly as not
+configured until their environment arrives with the real systems.
+Both speak the S3 API, so both ride one generic S3-compatible client
+in `backend/server.py` (stdlib only, SigV4-signed, path-style — the
+MinIO pattern, parameterized):
+
+- **Ceph** — the endpoint is the cluster's RADOS Gateway (RGW); the
+  keys are an RGW user's S3 keys (`radosgw-admin user create`).
+  Environment: `ZILLION_CEPH_ENDPOINT`, `ZILLION_CEPH_ACCESS_KEY` /
+  `ZILLION_CEPH_SECRET_KEY`, `ZILLION_CEPH_BUCKET` (default
+  `zillion-objects`), `ZILLION_CEPH_REGION` (the RGW zonegroup's
+  region name; default `default`).
+- **GCS** — the endpoint is Google Cloud Storage's S3-compatible
+  XML API; the keys are HMAC keys for a service account (Cloud
+  Console → Cloud Storage → Settings → Interoperability).
+  Deliberately NOT the `google-cloud-storage` SDK and NOT OAuth:
+  the SigV4 machinery is reused and the service stays stdlib-only.
+  Environment: `ZILLION_GCS_BUCKET`, `ZILLION_GCS_HMAC_ACCESS_KEY` /
+  `ZILLION_GCS_HMAC_SECRET_KEY`, `ZILLION_GCS_REGION` (must be the
+  bucket's location; default `us-east1`), `ZILLION_GCS_ENDPOINT`
+  (default `https://storage.googleapis.com`).
+
+Local verification 2026-11-18: with no environment set, `/health`
+reports both as not configured with the adapter-ready note. With
+both pointed at a local S3-compatible stand-in endpoint (a MinIO
+server standing in for RGW / the GCS XML API), a 100,000-byte object
+replicated to both, verification PASSED on both, health reported
+both live with the object counted, and DELETE removed it from both.
+That proves the adapter mechanics end to end; it does not prove
+anything against a real Ceph cluster or a real Google bucket, which
+do not exist yet.
+
+"1 Zillion TB" is the design's name — real capacity is always
+reported as measured.
 
 ## Fleet wiring
 
