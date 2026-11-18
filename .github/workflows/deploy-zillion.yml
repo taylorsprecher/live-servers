@@ -1,11 +1,14 @@
 name: Deploy Zillion Storage
 
-# Targeted deploy: rsync the repo (same as deploy.yml), then build and
-# start ONLY the zillion service and force-recreate the gateway so
-# it picks up the /zillion/ location; see ops/deploy-zillion.sh.
-# No other service is rebuilt; the audited production stack is
-# untouched. This workflow delivers no secrets (the service needs
-# none).
+# Targeted deploy: rsync the repo (same as deploy.yml), deliver the
+# Zillion AWS base credentials from GitHub secrets into the host .env
+# (only when configured; same stdin-over-SSH pattern as deploy-proxy),
+# then build and start ONLY the zillion service and force-recreate
+# the gateway so it picks up the /zillion/ location; see
+# ops/deploy-zillion.sh. No other service is rebuilt; the audited
+# production stack is untouched. Without the ZILLION_AWS_* secrets
+# the deploy still succeeds in local-only mode (S3 backend reported
+# not configured).
 
 on:
   workflow_dispatch:
@@ -39,6 +42,29 @@ jobs:
             --exclude 'demo/' \
             -e "ssh -i ~/.ssh/id_deploy" \
             ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      # Credential delivery: pipe the ZILLION_AWS_* secrets over SSH
+      # stdin into the host .env (compose reads them at `up` time)
+      # before the build, so the service can STS AssumeRole into
+      # zillion-control-plane-role for its S3 backend. Values travel
+      # on stdin only — never in argv, never echoed; GitHub also masks
+      # secret values in logs. When either secret is absent this step
+      # is skipped with a notice and the deploy proceeds local-only:
+      # the S3 backend must never block the local backends.
+      # See ops/set-zillion-aws-creds.sh.
+      - name: Deliver Zillion AWS credentials to host .env (when configured)
+        env:
+          ZILLION_AWS_ACCESS_KEY_ID: ${{ secrets.ZILLION_AWS_ACCESS_KEY_ID }}
+          ZILLION_AWS_SECRET_ACCESS_KEY: ${{ secrets.ZILLION_AWS_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -z "${ZILLION_AWS_ACCESS_KEY_ID}" ] || [ -z "${ZILLION_AWS_SECRET_ACCESS_KEY}" ]; then
+            echo "ZILLION_AWS_* secrets are not configured — deploying Zillion in local-only mode (S3 backend stays unconfigured)."
+            exit 0
+          fi
+          { printf 'ZILLION_AWS_ACCESS_KEY_ID=%s\n' "${ZILLION_AWS_ACCESS_KEY_ID}"
+            printf 'ZILLION_AWS_SECRET_ACCESS_KEY=%s\n' "${ZILLION_AWS_SECRET_ACCESS_KEY}"
+          } | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/live-servers/ops/set-zillion-aws-creds.sh'
 
       - name: Build + up zillion on host
         run: |
