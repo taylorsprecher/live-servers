@@ -232,7 +232,7 @@ services:
       TZ: America/Los_Angeles
       SERVERURL: 52.41.84.116
       SERVERPORT: "51820"
-      PEERS: taylor,phone2,phone3,phone4,phone5
+      PEERS: taylor
       PEERDNS: auto
       INTERNAL_SUBNET: 10.8.0.0
       ALLOWEDIPS: 0.0.0.0/0
