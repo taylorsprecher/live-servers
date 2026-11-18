@@ -15,7 +15,10 @@
 # RAM gate protects the host during a FULL build. This script builds
 # only zillion and force-recreates the gateway. It does NOT lower or
 # edit deploy.sh's gate and does not rebuild any other service.
-# No secrets are needed by this service and none are delivered.
+# Credentials: when the workflow has delivered ZILLION_AWS_* into the
+# host .env (ops/set-zillion-aws-creds.sh), compose passes them to
+# the service and its S3 backend activates; without them the service
+# runs local-only and this deploy still succeeds.
 set -eu
 cd /home/deploy/live-servers
 
@@ -55,6 +58,20 @@ echo "${ver}" | grep -q '"verified": true'
 curl -s --max-time 10 -X DELETE http://127.0.0.1:18126/zillion/objects/smoke-test.bin > /dev/null || true
 rm -f /tmp/zillion-smoke.bin
 echo "CHECK zillion-storage-smoke ok"
+
+echo "=== S3 BACKEND SMOKE (only when configured) ==="
+health="$(curl -s --max-time 20 http://127.0.0.1:18126/zillion/health || true)"
+echo "HEALTH ${health}"
+if echo "${health}" | grep -q '"name": "aws-s3", "type": "s3", "bucket": "[^"]*", "configured": true'; then
+  echo "CHECK zillion-s3 configured"
+  # The smoke object above must show the S3 backend in the PUT
+  # result's backends and in the verification phase.
+  echo "${put}" | grep -q '"aws-s3": {"ok": true}'
+  echo "${ver}" | grep -q '"aws-s3": {"ok": true, "result": "PASSED"'
+  echo "CHECK zillion-s3-smoke ok"
+else
+  echo "CHECK zillion-s3 not configured — local-only mode, S3 smoke skipped"
+fi
 
 echo "=== GATEWAY FORCE-RECREATE (picks up /zillion/ location) ==="
 docker compose up -d --force-recreate gateway
