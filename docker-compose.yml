@@ -301,6 +301,17 @@ services:
     environment:
       BASE_PATH: /zillion
       ZILLION_DATA: /data
+      # AWS S3 backend (bucket zillion-tb-aws-bucket, management
+      # account): base credentials arrive from GitHub secrets via
+      # ops/set-zillion-aws-creds.sh into the host .env; the service
+      # assumes zillion-control-plane-role via STS. Empty credentials
+      # = S3 backend reported not configured, local backends only.
+      ZILLION_AWS_ACCESS_KEY_ID: ${ZILLION_AWS_ACCESS_KEY_ID:-}
+      ZILLION_AWS_SECRET_ACCESS_KEY: ${ZILLION_AWS_SECRET_ACCESS_KEY:-}
+      ZILLION_S3_BUCKET: ${ZILLION_S3_BUCKET:-zillion-tb-aws-bucket}
+      ZILLION_S3_REGION: ${ZILLION_S3_REGION:-us-west-2}
+      ZILLION_S3_ROLE_ARN: ${ZILLION_S3_ROLE_ARN:-arn:aws:iam::392349106458:role/zillion-control-plane-role}
+      ZILLION_S3_KMS_KEY_ID: ${ZILLION_S3_KMS_KEY_ID:-19f314ab-afa4-4746-a2b5-39427104158c}
     volumes:
       - zillion-data:/data
     ports:
