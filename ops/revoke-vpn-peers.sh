@@ -235,7 +235,7 @@ for key in ${REMOVE_KEYS:-}; do
     fail=1
   fi
 done
-if [ "${#REMOVE[@]:-0}" -gt 0 ]; then
+if [ "${#REMOVE[@]}" -gt 0 ]; then
   PRESENT_AFTER="$(docker exec live-vpn ls /config | sed -n 's/^peer_//p' | tr '\n' ' ' || true)"
   for name in "${REMOVE[@]}"; do
     case " $PRESENT_AFTER " in
