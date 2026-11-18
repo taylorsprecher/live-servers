@@ -317,7 +317,7 @@ services:
     ports:
       - "127.0.0.1:18126:8772"
 
-    fastapi-app:
+  fastapi-app:
     build:
       context: ./services/fastapi-app
     container_name: live-fastapi-app
