@@ -44,23 +44,27 @@ echo "CHECK zillion-health direct ${code} (want 200)"
 [ "$code" = "200" ]
 
 echo "=== STORAGE SMOKE (direct loopback: PUT -> SHA-256 verify -> GET -> DELETE) ==="
+# Smoke timeouts are generous: with the S3 backend configured, a PUT
+# includes STS AssumeRole plus S3 retries with backoff and can take
+# ~30s when AWS is slow (measured 28.4s on 2026-11-18, when the old
+# 15s PUT timeout made the first wiring deploy read an empty body).
 printf 'zillion-smoke-payload' > /tmp/zillion-smoke.bin
 want_hash="$(sha256sum /tmp/zillion-smoke.bin | cut -d' ' -f1)"
-put="$(curl -s --max-time 15 -X PUT --data-binary @/tmp/zillion-smoke.bin http://127.0.0.1:18126/zillion/objects/smoke-test.bin || true)"
+put="$(curl -s --max-time 120 -X PUT --data-binary @/tmp/zillion-smoke.bin http://127.0.0.1:18126/zillion/objects/smoke-test.bin || true)"
 echo "PUT RESULT ${put}"
 echo "${put}" | grep -q "\"sha256\": \"${want_hash}\""
 echo "${put}" | grep -q '"verified": true'
-got="$(curl -s --max-time 10 http://127.0.0.1:18126/zillion/objects/smoke-test.bin || true)"
+got="$(curl -s --max-time 60 http://127.0.0.1:18126/zillion/objects/smoke-test.bin || true)"
 [ "$got" = "zillion-smoke-payload" ]
-ver="$(curl -s --max-time 10 -X POST http://127.0.0.1:18126/zillion/verify/smoke-test.bin || true)"
+ver="$(curl -s --max-time 120 -X POST http://127.0.0.1:18126/zillion/verify/smoke-test.bin || true)"
 echo "VERIFY RESULT ${ver}"
 echo "${ver}" | grep -q '"verified": true'
-curl -s --max-time 10 -X DELETE http://127.0.0.1:18126/zillion/objects/smoke-test.bin > /dev/null || true
+curl -s --max-time 60 -X DELETE http://127.0.0.1:18126/zillion/objects/smoke-test.bin > /dev/null || true
 rm -f /tmp/zillion-smoke.bin
 echo "CHECK zillion-storage-smoke ok"
 
 echo "=== S3 BACKEND SMOKE (only when configured) ==="
-health="$(curl -s --max-time 20 http://127.0.0.1:18126/zillion/health || true)"
+health="$(curl -s --max-time 60 http://127.0.0.1:18126/zillion/health || true)"
 echo "HEALTH ${health}"
 if echo "${health}" | grep -q '"name": "aws-s3", "type": "s3", "bucket": "[^"]*", "configured": true'; then
   echo "CHECK zillion-s3 configured"
