@@ -292,6 +292,20 @@ services:
     mem_limit: 128m
     ports:
       - "127.0.0.1:18125:80"
+  zillion:
+    build:
+      context: ./services/zillion-storage
+    container_name: live-zillion
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      BASE_PATH: /zillion
+      ZILLION_DATA: /data
+    volumes:
+      - zillion-data:/data
+    ports:
+      - "127.0.0.1:18126:8772"
+
   gateway:
     image: nginx:alpine
     container_name: live-gateway
@@ -323,6 +337,7 @@ services:
       - proxy
       - payledger
       - flutter
+      - zillion
 
   # Public gateway for the jasmine EC2 instance ONLY (added
   # 2026-11-17, Taylor: "Go public"). Behind the "jasmine" compose
@@ -364,3 +379,4 @@ volumes:
   fileslib-data:
   vpn-data:
   payledger-data:
+  zillion-data:
