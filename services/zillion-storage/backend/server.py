@@ -27,10 +27,14 @@ in a different AWS account than the bucket, so the S3 backend assumes
 the scoped IAM role zillion-control-plane-role via STS AssumeRole
 (SigV4-signed, stdlib only) and signs S3 requests with the temporary
 credentials. Without credentials the health endpoint reports the S3
-backend honestly as not configured rather than pretending. MinIO,
-Ceph, and GCS remain design-only. "1 Zillion TB" is the design's
-name; the health endpoint reports the host's real capacity alongside
-it.
+backend honestly as not configured rather than pretending. A fourth
+backend, MinIO (installed 2026-11-18 at Taylor's direction), runs as
+a fleet-internal container and speaks the same S3 API: the service
+signs path-style requests with the static root credentials (generated
+on the host at deploy time, never in git) — no AssumeRole and no
+SSE-KMS, which are AWS-only. Ceph and GCS remain design-only.
+"1 Zillion TB" is the design's name; the health endpoint reports the
+host's real capacity alongside it.
 
 Python stdlib only. Runs under BASE_PATH (default /zillion).
 """
@@ -415,6 +419,198 @@ def s3_health_entry():
     _s3_probe["entry"] = entry
     return dict(entry)
 
+# ======================================================================
+# MinIO backend: the same S3 API over the fleet-internal endpoint,
+# signed with the static root credentials (stdlib only). MinIO is
+# S3-compatible, so the SigV4 machinery above is reused unchanged —
+# but addressing is path-style, there is no session token, and the
+# AWS-only pieces (STS AssumeRole, SSE-KMS headers) do NOT apply.
+# ======================================================================
+
+# --- MinIO configuration (all optional; the backend is configured ---
+# --- only when the endpoint AND both credential variables are set) --
+MINIO_ENDPOINT = os.environ.get("ZILLION_MINIO_ENDPOINT", "").strip().rstrip("/")
+MINIO_ACCESS_KEY = os.environ.get("ZILLION_MINIO_ACCESS_KEY", "").strip()
+MINIO_SECRET_KEY = os.environ.get("ZILLION_MINIO_SECRET_KEY", "").strip()
+MINIO_BUCKET = os.environ.get("ZILLION_MINIO_BUCKET", "zillion-objects").strip() \
+    or "zillion-objects"
+# SigV4 credential scope only; MinIO's own default region.
+MINIO_REGION = os.environ.get("ZILLION_MINIO_REGION", "us-east-1").strip() or "us-east-1"
+
+
+def minio_configured():
+    return bool(MINIO_ENDPOINT and MINIO_ACCESS_KEY and MINIO_SECRET_KEY)
+
+
+def _minio_url(key=None):
+    url = f"{MINIO_ENDPOINT}/{quote(MINIO_BUCKET, safe='-_.~')}"
+    if key:
+        url += "/" + quote(key, safe='/-_.~')
+    return url
+
+
+def _minio_open(method, url, payload_hash, extra_headers=None, body_len=0):
+    """Open one SigV4-signed request against the MinIO endpoint with
+    the static root credentials and return the connection after
+    headers are sent; the caller streams any body, reads the
+    response, and closes."""
+    extras = {"X-Amz-Content-Sha256": payload_hash}
+    extras.update(extra_headers or {})
+    headers = sigv4_headers(
+        method=method, url=url, payload_hash=payload_hash,
+        service="s3", region=MINIO_REGION,
+        access_key=MINIO_ACCESS_KEY, secret_key=MINIO_SECRET_KEY,
+        extra_headers=extras)
+    parsed = urlparse(url)
+    conn_cls = http.client.HTTPSConnection if parsed.scheme == "https" \
+        else http.client.HTTPConnection
+    conn = conn_cls(parsed.netloc, timeout=30)
+    target = parsed.path or "/"
+    if parsed.query:
+        target += "?" + parsed.query
+    conn.putrequest(method, target, skip_accept_encoding=True)
+    for k, v in headers.items():
+        conn.putheader(k, v)
+    conn.putheader("Content-Length", str(body_len))
+    conn.endheaders()
+    return conn
+
+
+def _minio_error(method, key, status, body_bytes):
+    detail = body_bytes.decode("utf-8", "replace")[:300]
+    return AwsError(f"MinIO {method} {key} failed HTTP {status}: {detail}",
+                    status=status)
+
+
+_minio_state = {"bucket_ok": False}
+_minio_lock = threading.Lock()
+
+
+def minio_ensure_bucket():
+    """Create the object bucket on first use (HEAD, then PUT when it
+    is missing) and cache the result for the life of the process. A
+    404 from a data call clears the cache, so the next call re-checks
+    instead of trusting a bucket that is no longer there."""
+    if _minio_state["bucket_ok"]:
+        return
+    with _minio_lock:
+        if _minio_state["bucket_ok"]:
+            return
+        conn = _minio_open("HEAD", _minio_url(), EMPTY_SHA256)
+        resp = conn.getresponse()
+        resp.read()
+        conn.close()
+        if resp.status == 200:
+            _minio_state["bucket_ok"] = True
+            return
+        if resp.status != 404:
+            raise _minio_error("HEAD bucket", MINIO_BUCKET, resp.status, b"")
+        conn = _minio_open("PUT", _minio_url(), EMPTY_SHA256, body_len=0)
+        resp = conn.getresponse()
+        body = resp.read()
+        conn.close()
+        # 409 (BucketAlreadyOwnedByYou): a concurrent creator won the
+        # race — that is success for our purposes.
+        if resp.status not in (200, 409):
+            raise _minio_error("PUT bucket", MINIO_BUCKET, resp.status, body)
+        _minio_state["bucket_ok"] = True
+
+
+def minio_put_file(path, name):
+    minio_ensure_bucket()
+    payload_hash = sha256_of_file(path)
+    size = os.path.getsize(path)
+    conn = _minio_open("PUT", _minio_url(name), payload_hash, body_len=size)
+    with open(path, "rb") as fh:
+        while True:
+            block = fh.read(CHUNK)
+            if not block:
+                break
+            conn.send(block)
+    resp = conn.getresponse()
+    body = resp.read()
+    conn.close()
+    if resp.status != 200:
+        if resp.status == 404:
+            _minio_state["bucket_ok"] = False
+        raise _minio_error("PUT", name, resp.status, body)
+    return {"ok": True}
+
+
+def minio_download_hash(name):
+    """Download the object and return its SHA-256 (verify phase)."""
+    minio_ensure_bucket()
+    conn = _minio_open("GET", _minio_url(name), EMPTY_SHA256)
+    resp = conn.getresponse()
+    if resp.status != 200:
+        body = resp.read()
+        conn.close()
+        raise _minio_error("GET", name, resp.status, body)
+    h = hashlib.sha256()
+    while True:
+        block = resp.read(CHUNK)
+        if not block:
+            break
+        h.update(block)
+    conn.close()
+    return h.hexdigest()
+
+
+def minio_delete(name):
+    minio_ensure_bucket()
+    conn = _minio_open("DELETE", _minio_url(name), EMPTY_SHA256)
+    resp = conn.getresponse()
+    body = resp.read()
+    conn.close()
+    if resp.status not in (200, 204):
+        raise _minio_error("DELETE", name, resp.status, body)
+    return {"ok": True}
+
+
+def minio_list_stats():
+    """One ListObjectsV2 page (MaxKeys=1000): (object_count, bytes)."""
+    minio_ensure_bucket()
+    url = _minio_url() + "?list-type=2&max-keys=1000"
+    conn = _minio_open("GET", url, EMPTY_SHA256)
+    resp = conn.getresponse()
+    body = resp.read()
+    conn.close()
+    if resp.status != 200:
+        raise _minio_error("LIST", MINIO_BUCKET, resp.status, body)
+    count = 0
+    total = 0
+    for el in ET.fromstring(body).iter():
+        if el.tag.split("}")[-1] == "Contents":
+            count += 1
+            for child in el:
+                if child.tag.split("}")[-1] == "Size":
+                    total += int(child.text or 0)
+    return count, total
+
+
+_minio_probe = {"at": 0.0, "entry": None}
+
+
+def minio_health_entry():
+    entry = {"name": "minio", "type": "minio", "bucket": MINIO_BUCKET,
+             "configured": minio_configured(), "ok": False,
+             "endpoint": MINIO_ENDPOINT or None}
+    if not minio_configured():
+        entry["note"] = ("Fleet-internal S3-compatible backend; activates when the "
+                         "endpoint and the host-generated root credentials are provided.")
+        return entry
+    now = time.time()
+    if _minio_probe["entry"] is not None and now - _minio_probe["at"] < 30:
+        return dict(_minio_probe["entry"])
+    try:
+        count, total = with_retries(minio_list_stats, base_wait=1, cap=2)
+        entry.update({"ok": True, "objects": count, "bytes_stored": total})
+    except Exception as ex:  # noqa: BLE001 - reported, never swallowed
+        entry["error"] = str(ex)[:200]
+    _minio_probe["at"] = now
+    _minio_probe["entry"] = entry
+    return dict(entry)
+
 
 def backend_health():
     out = []
@@ -428,10 +624,7 @@ def backend_health():
             entry.update({"ok": False, "error": str(ex)[:200]})
         out.append(entry)
     out.append(s3_health_entry())
-    out.append({
-        "name": "minio", "type": "minio", "configured": False, "ok": False,
-        "note": "Design backend from the document; no MinIO cluster exists yet.",
-    })
+    out.append(minio_health_entry())
     out.append({
         "name": "ceph", "type": "ceph", "configured": False, "ok": False,
         "note": "Design backend from the document; no Ceph cluster exists yet.",
@@ -446,9 +639,9 @@ def backend_health():
 def replicate(tmp_path, name):
     """Copy the staged object to every backend, concurrently, each
     with retries; returns {backend_name: result dict}. The set is the
-    two local stores plus, when credentials are configured, aws-s3.
-    Fault isolation per the design: one backend failing never blocks
-    or fails the others — its result carries the error."""
+    two local stores plus, when configured, aws-s3 and minio. Fault
+    isolation per the design: one backend failing never blocks or
+    fails the others — its result carries the error."""
     def put_local(backend):
         dest = os.path.join(backend["path"], name)
         os.makedirs(backend["path"], exist_ok=True)
@@ -461,6 +654,9 @@ def replicate(tmp_path, name):
     if s3_configured():
         jobs.append(("aws-s3", lambda: with_retries(
             lambda: s3_put_file(tmp_path, name), base_wait=2, cap=10)))
+    if minio_configured():
+        jobs.append(("minio", lambda: with_retries(
+            lambda: minio_put_file(tmp_path, name), base_wait=2, cap=10)))
     results = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(jobs)) as pool:
         futures = {pool.submit(job): name_ for name_, job in jobs}
@@ -475,9 +671,9 @@ def replicate(tmp_path, name):
 
 def verify(name, expected_hash):
     """Re-read and re-hash every backend copy (design Phase 2). The
-    aws-s3 copy, when configured, is downloaded and hashed the same
-    way; an AWS failure is reported as an ERROR entry with the error
-    string, never hidden."""
+    aws-s3 and minio copies, when configured, are downloaded and
+    hashed the same way; a failure is reported as an ERROR entry with
+    the error string, never hidden."""
     out = {}
     for b in BACKENDS:
         path = os.path.join(b["path"], name)
@@ -504,6 +700,22 @@ def verify(name, expected_hash):
         except Exception as ex:  # noqa: BLE001 - reported, never swallowed
             out["aws-s3"] = {"ok": False, "result": "ERROR",
                              "error": str(ex)[:200]}
+    if minio_configured():
+        try:
+            actual = with_retries(lambda: minio_download_hash(name),
+                                  base_wait=2, cap=10)
+            out["minio"] = {"ok": actual == expected_hash,
+                            "result": "PASSED" if actual == expected_hash else "FAILED",
+                            "sha256": actual}
+        except AwsError as ex:
+            if ex.status == 404:
+                out["minio"] = {"ok": False, "result": "MISSING"}
+            else:
+                out["minio"] = {"ok": False, "result": "ERROR",
+                                "error": str(ex)[:200]}
+        except Exception as ex:  # noqa: BLE001 - reported, never swallowed
+            out["minio"] = {"ok": False, "result": "ERROR",
+                            "error": str(ex)[:200]}
     return out
 
 
@@ -653,6 +865,12 @@ class Handler(BaseHTTPRequestHandler):
                 removed.append("aws-s3")
             except Exception as ex:  # noqa: BLE001 - reported in the response
                 delete_errors["aws-s3"] = str(ex)[:200]
+        if minio_configured():
+            try:
+                with_retries(lambda: minio_delete(name), base_wait=2, cap=10)
+                removed.append("minio")
+            except Exception as ex:  # noqa: BLE001 - reported in the response
+                delete_errors["minio"] = str(ex)[:200]
         with _lock:
             manifest = load_manifest()
             manifest.pop(name, None)
