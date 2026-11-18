@@ -93,7 +93,7 @@ MinIO is S3-compatible, so it needs no AWS account and no outside
 service:
 
 - **Container** — compose service `minio` (container `live-minio`,
-  official `minio/minio` image, mem 256m, volume `minio-data:/data`).
+ self-built image `ghcr.io/taylorsprecher/minio:RELEASE.2025-10-15T17-29-55Z`, built from the pinned source tag via the Build MinIO Image workflow, mem 256m, volume `minio-data:/data`).
   Its S3 API (:9000) and console (:9001) are published on host
   loopback only (`127.0.0.1:18128` / `127.0.0.1:18129`) for the
   deploy smoke checks and local administration; the zillion
