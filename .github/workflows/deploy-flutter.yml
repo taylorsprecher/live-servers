@@ -1,0 +1,70 @@
+name: Deploy Flutter app
+
+# Targeted deploy of the Pathways Editor (services/flutter-app) only.
+# The Flutter Web bundle is compiled HERE on the runner — the host has
+# neither the RAM nor the headroom for a Flutter build next to the live
+# fleet — then rsynced to /home/deploy/flutter-bundle/ on the host,
+# where ops/deploy-flutter.sh installs it and restarts just the flutter
+# service plus the gateway.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "services/flutter-app/**"
+      - "ops/deploy-flutter.sh"
+      - "docker-compose.yml"
+      - "gateway/locations-common.conf"
+      - ".github/workflows/deploy-flutter.yml"
+
+jobs:
+  deploy-flutter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Build the Flutter Web bundle (on the runner, never on the host)
+        working-directory: services/flutter-app
+        run: |
+          flutter pub get
+          flutter build web --release --base-href /flutter/
+          test -f build/web/index.html
+          test -f build/web/main.dart.js
+          du -sh build/web
+
+      - name: Pull the latest code on the host
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /home/deploy/live-servers
+            git pull --ff-only
+
+      - name: Ship the bundle to the host
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p /home/deploy/flutter-bundle/build/web"
+          rsync -az --delete -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=accept-new" services/flutter-app/build/web/ "$DEPLOY_USER@$DEPLOY_HOST:/home/deploy/flutter-bundle/build/web/"
+
+      - name: Install the bundle and restart flutter + gateway on the host
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            cd /home/deploy/live-servers
+            bash ops/deploy-flutter.sh
