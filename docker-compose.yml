@@ -337,7 +337,7 @@ services:
   # Root credentials come from the host .env, generated there by
   # ops/deploy-zillion.sh — never in git, no usable defaults.
   minio:
-    image: minio/minio:latest
+    image: ghcr.io/taylorsprecher/minio:RELEASE.2025-10-15T17-29-55Z
     container_name: live-minio
     restart: unless-stopped
     mem_limit: 256m
