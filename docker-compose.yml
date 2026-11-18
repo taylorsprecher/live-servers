@@ -317,14 +317,14 @@ services:
     ports:
       - "127.0.0.1:18126:8772"
 
-        fastapi-app:
-            build:
-                  context: ./services/fastapi-app
-                      container_name: live-fastapi-app
-                          restart: unless-stopped
-                              mem_limit: 128m
-                                  ports:
-                                        - "127.0.0.1:18127:8000"
+    fastapi-app:
+    build:
+      context: ./services/fastapi-app
+    container_name: live-fastapi-app
+    restart: unless-stopped
+    mem_limit: 128m
+    ports:
+      - "127.0.0.1:18127:8000"
 
   gateway:
     image: nginx:alpine
@@ -358,7 +358,7 @@ services:
       - payledger
       - flutter
       - zillion
-            - fastapi-app
+      - fastapi-app
 
   # Public gateway for the jasmine EC2 instance ONLY (added
   # 2026-11-17, Taylor: "Go public"). Behind the "jasmine" compose
