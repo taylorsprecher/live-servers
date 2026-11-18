@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Targeted deploy for Zillion Storage ONLY (services/zillion-storage).
+#
+# What this installs: the runnable core of Taylor's "Python Cloud —
+# 1 Zillion TB" multi-cloud storage design (filed as
+# tmp3D_Python_Cloud_1Zillion_TB.docx) — streaming ingest, concurrent
+# replication to local backends, retry with backoff, SHA-256
+# verification — reachable at https://members.911transedu.net/zillion/.
+# Directed 2026-11-18: "Install" / "Apply to AWS S3" / "And websites".
+# The compose service and the gateway /zillion/ location are already
+# on main; this deploy starts the container and force-recreates the
+# gateway to pick the route up.
+#
+# Why targeted (same reasoning as ops/deploy-payledger.sh): deploy.sh's
+# RAM gate protects the host during a FULL build. This script builds
+# only zillion and force-recreates the gateway. It does NOT lower or
+# edit deploy.sh's gate and does not rebuild any other service.
+# No secrets are needed by this service and none are delivered.
+set -eu
+cd /home/deploy/live-servers
+
+echo "=== MEMORY BEFORE ==="
+free -m
+
+echo "=== BUILD + UP zillion ==="
+docker compose up -d --build zillion
+
+wait_code() {
+  local url="$1" want="$2" attempts="${3:-100}" code="000" i
+  for i in $(seq 1 "$attempts"); do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$url")" || code="000"
+    [ "$code" = "$want" ] && break
+    sleep 5
+  done
+  echo "$code"
+}
+
+echo "=== WAIT FOR zillion health (direct loopback :18126) ==="
+code="$(wait_code http://127.0.0.1:18126/zillion/health 200)"
+echo "CHECK zillion-health direct ${code} (want 200)"
+[ "$code" = "200" ]
+
+echo "=== STORAGE SMOKE (direct loopback: PUT -> SHA-256 verify -> GET -> DELETE) ==="
+printf 'zillion-smoke-payload' > /tmp/zillion-smoke.bin
+want_hash="$(sha256sum /tmp/zillion-smoke.bin | cut -d' ' -f1)"
+put="$(curl -s --max-time 15 -X PUT --data-binary @/tmp/zillion-smoke.bin http://127.0.0.1:18126/zillion/objects/smoke-test.bin || true)"
+echo "PUT RESULT ${put}"
+echo "${put}" | grep -q "\"sha256\": \"${want_hash}\""
+echo "${put}" | grep -q '"verified": true'
+got="$(curl -s --max-time 10 http://127.0.0.1:18126/zillion/objects/smoke-test.bin || true)"
+[ "$got" = "zillion-smoke-payload" ]
+ver="$(curl -s --max-time 10 -X POST http://127.0.0.1:18126/zillion/verify/smoke-test.bin || true)"
+echo "VERIFY RESULT ${ver}"
+echo "${ver}" | grep -q '"verified": true'
+curl -s --max-time 10 -X DELETE http://127.0.0.1:18126/zillion/objects/smoke-test.bin > /dev/null || true
+rm -f /tmp/zillion-smoke.bin
+echo "CHECK zillion-storage-smoke ok"
+
+echo "=== GATEWAY FORCE-RECREATE (picks up /zillion/ location) ==="
+docker compose up -d --force-recreate gateway
+
+echo "=== WAIT FOR gateway /zillion/health (public HTTPS) ==="
+code="$(wait_code https://members.911transedu.net/zillion/health 200)"
+echo "CHECK gateway zillion-health ${code} (want 200)"
+[ "$code" = "200" ]
+
+echo "=== REGRESSIONS ==="
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://members.911transedu.net/members/health || true)"
+echo "CHECK members-health gateway ${code} (want 200)"
+[ "$code" = "200" ]
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://members.911transedu.net/portal/ || true)"
+echo "CHECK portal gateway ${code} (want 200)"
+[ "$code" = "200" ]
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://members.911transedu.net/files/ || true)"
+echo "CHECK files gateway ${code} (want 200)"
+[ "$code" = "200" ]
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://members.911transedu.net/ledger/health || true)"
+echo "CHECK ledger gateway ${code} (want 200)"
+[ "$code" = "200" ]
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 https://members.911transedu.net/blackberry/health || true)"
+echo "CHECK blackberry gateway ${code} (want 200)"
+[ "$code" = "200" ]
+code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 http://127.0.0.1:80/health || true)"
+echo "CHECK audited-app ${code} (want 200)"
+[ "$code" = "200" ]
+
+echo "=== MEMORY AFTER ==="
+free -m
+docker compose ps zillion
+echo "DEPLOY ZILLION DONE"
