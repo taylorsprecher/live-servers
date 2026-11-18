@@ -1,0 +1,5 @@
+# FastAPI App — runtime dependencies, pinned.
+# Versions verified as the current stable releases on PyPI on
+# 2026-11-18 (fastapi 0.165.0, uvicorn 0.54.0).
+fastapi==0.165.0
+uvicorn[standard]==0.54.0
