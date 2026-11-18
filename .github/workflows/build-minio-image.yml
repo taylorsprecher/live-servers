@@ -1,0 +1,44 @@
+name: Build MinIO Image
+
+# Builds the fleet's self-built MinIO server image from the pinned
+# upstream source tag (services/zillion-storage/minio-image/Dockerfile)
+# and pushes it to GHCR as
+# ghcr.io/taylorsprecher/minio:RELEASE.2025-10-15T17-29-55Z.
+#
+# Why this exists: MinIO withdrew its official container images
+# (community edition is source-only), so `minio/minio` can no longer
+# be pulled. Taylor directed building the image from source
+# ourselves (2026-11-18). The build runs here because the fleet host
+# has ~1.9 GB RAM — too small to compile MinIO.
+#
+# Manual dispatch only, and it deploys nothing: after a successful
+# push, the GHCR package must be public (it contains only unmodified
+# open-source code) so the host can pull without registry
+# credentials; the Deploy Zillion Storage workflow then picks the
+# image up on its next run.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-minio-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Build and push MinIO image
+        run: |
+          docker build \
+            -t ghcr.io/taylorsprecher/minio:RELEASE.2025-10-15T17-29-55Z \
+            services/zillion-storage/minio-image/
+          docker push ghcr.io/taylorsprecher/minio:RELEASE.2025-10-15T17-29-55Z
