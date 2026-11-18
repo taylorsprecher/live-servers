@@ -14,8 +14,9 @@ A single stdlib-Python service implementing the design's pipeline:
   into RAM.
 - **Concurrent replication** — every object is copied to all
   backends in parallel (`ThreadPoolExecutor`), per-backend fault
-  isolation. The backend set is the two local stores plus, when AWS
-  credentials are configured, the S3 backend described below.
+  isolation. The backend set is the two local stores plus, when
+  configured, the AWS S3 backend and the fleet-internal MinIO
+  backend described below.
 - **Retry with exponential backoff** — 3 attempts per backend write
   (local profile 0.5s→1s→2s; the document's network profile for cloud
   backends is 2–10s).
@@ -36,7 +37,8 @@ Endpoints (under `BASE_PATH=/zillion`):
 ## Backends — real vs design
 
 Real today: `primary` and `replica` local stores on the `zillion-data`
-Docker volume.
+Docker volume, the AWS S3 backend below, and (since 2026-11-18) the
+MinIO backend below.
 
 Applied to AWS S3 (2026-11-18): bucket **zillion-tb-aws-bucket** in
 Taylor's AWS management account (392349106458, us-west-2), created
@@ -77,15 +79,56 @@ an instance role. Instead:
    before. Optional overrides: `ZILLION_S3_BUCKET`,
    `ZILLION_S3_REGION`, `ZILLION_S3_ROLE_ARN`, `ZILLION_S3_KMS_KEY_ID`.
 
-**Not live yet:** the wiring above is code-complete and locally
-tested, but it activates only when the two GitHub secrets exist and
-a deploy runs — the credentials themselves are created on a separate
-track. Until then the service runs local-only and reports the S3
-backend as not configured. The deploy smoke checks assert the S3
+**Live:** the wiring above went live on 2026-11-18 — the two GitHub
+secrets were delivered to the host `.env`, a deploy ran, and the S3
+round trip (PUT → SHA-256 verify → GET → DELETE against the real
+bucket) passed end to end. The deploy smoke checks assert the S3
 backend appears in the PUT result and verification only when it is
 configured, and pass on local backends alone when it is not.
 
-Design-only until their clusters/credentials exist: MinIO, Ceph, GCS.
+### MinIO backend (installed 2026-11-18)
+
+The design's MinIO backend runs as a fleet-internal container —
+MinIO is S3-compatible, so it needs no AWS account and no outside
+service:
+
+- **Container** — compose service `minio` (container `live-minio`,
+  official `minio/minio` image, mem 256m, volume `minio-data:/data`).
+  Its S3 API (:9000) and console (:9001) are published on host
+  loopback only (`127.0.0.1:18128` / `127.0.0.1:18129`) for the
+  deploy smoke checks and local administration; the zillion
+  container reaches the API over the compose network at
+  `http://minio:9000`. Nothing is exposed publicly and no gateway
+  route exists.
+- **Credentials** — the MinIO root user/password are generated on
+  the host by `ops/deploy-zillion.sh` into the host `.env`
+  (`MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`, the payment-ledger
+  pattern: random values, appended only when absent, never printed,
+  never in git). Compose passes them to the MinIO container and,
+  under different names, to the zillion service. There are no
+  usable defaults: empty credentials leave the backend reported
+  not configured.
+- **How the service talks to it** — the zillion service reuses its
+  stdlib SigV4 signer with the static root credentials and
+  **path-style** addressing (`{endpoint}/{bucket}/{key}`). The
+  AWS-only pieces do **not** carry over: no STS AssumeRole (there
+  is no role — the credentials are static) and no SSE-KMS headers
+  (there is no KMS key; objects sit on the fleet's own volume).
+  Environment: `ZILLION_MINIO_ENDPOINT` (default
+  `http://minio:9000`), `ZILLION_MINIO_ACCESS_KEY` /
+  `ZILLION_MINIO_SECRET_KEY` (fed from `MINIO_ROOT_USER` /
+  `MINIO_ROOT_PASSWORD`), `ZILLION_MINIO_BUCKET` (default
+  `zillion-objects`). The bucket is created automatically on first
+  use (HEAD, then PUT when missing).
+- **Behavior** — `minio` joins the same PUT/GET/DELETE/verify
+  fan-out as the other backends with the same fault isolation: if
+  MinIO is unconfigured or down, the other backends still succeed
+  and `/zillion/health` reports MinIO's state honestly (a
+  ListObjectsV2 probe with object count and bytes when it is up,
+  an error string when it is not). The deploy asserts
+  `CHECK zillion-minio-smoke ok` whenever the backend is configured.
+
+Design-only until their clusters/credentials exist: Ceph, GCS.
 The health endpoint lists them as not configured; nothing pretends
 otherwise. "1 Zillion TB" is the design's name — real capacity is
 always reported as measured.
@@ -94,6 +137,11 @@ always reported as measured.
 
 - Compose service `zillion` (container `live-zillion`, mem 128m,
   loopback `127.0.0.1:18126:8772`, volume `zillion-data:/data`).
+- Compose service `minio` (container `live-minio`, mem 256m,
+  loopback `127.0.0.1:18128:9000` API + `127.0.0.1:18129:9001`
+  console, volume `minio-data:/data`) — the MinIO backend's store;
+  `ops/deploy-zillion.sh` generates its root credentials into the
+  host `.env` and brings it up before the zillion service.
 - Gateway location `/zillion/` in `gateway/locations-common.conf`
   (with `client_max_body_size 64m` for uploads).
 - Targeted deploy: `ops/deploy-zillion.sh` +
