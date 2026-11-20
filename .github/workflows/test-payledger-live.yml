@@ -1,0 +1,46 @@
+name: Test payment ledger behavior on host (scratch DB)
+
+# Stage 3 mandatory gate for the payment-ledger redesign deploy: runs
+# ops/test-payledger-behavioral.sh on the host, which exercises the
+# deployed payledger image against a SCRATCH database on the real
+# paydb server (schema apply + worker + DB routes + trigger
+# invariants). Production ledger data is never written; the scratch
+# DB and container are removed by the script's exit trap.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-payledger-live:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync repo to host
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'secrets/' \
+            --exclude 'tls-state/' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Run behavioral gate on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/ops/test-payledger-behavioral.sh'
