@@ -8,6 +8,8 @@ import json
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
+from . import authnet
+from .authnet import ProcessorDisabled, ProcessorError
 from .config import ADMIN_TOKEN, BASE, MERCHANT_ID, WEBHOOK_SECRET
 from .ledger import (
     bin_lookup,
@@ -93,6 +95,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({
                     "status": "ok", "db": True, "psps_registered": n,
                     "processor_connected": False,
+                    "authnet": authnet.status(),
                 })
             if path == BASE + "/balances":
                 conn = db()
@@ -421,6 +424,54 @@ class Handler(BaseHTTPRequestHandler):
                     "batch": row, "simulated": True,
                     "note": "no network endpoint exists; TRANSMITTED->ACKED simulated in one step",
                 })
+
+            # Authorize.net processor (app_pkg.authnet). Like every
+            # write here, these sit behind the admin-token gate above.
+            # The processor is DISABLED unless AUTHNET_ENABLED=1 and
+            # both credentials are in the environment; while disabled
+            # every route answers 503 with the plain reason and
+            # nothing is sent to the gateway or written to the ledger.
+            if path == BASE + "/processor/authnet/check":
+                try:
+                    result = authnet.authenticate_check()
+                except ProcessorDisabled as exc:
+                    return self.send_json({"error": str(exc)}, 503)
+                except ProcessorError as exc:
+                    return self.send_json({"error": str(exc)}, 502)
+                return self.send_json({"authnet_check": result})
+
+            if path == BASE + "/processor/authnet/status":
+                data = self.body_json()
+                try:
+                    result = authnet.transaction_status(trans_id=data.get("trans_id"))
+                except ProcessorDisabled as exc:
+                    return self.send_json({"error": str(exc)}, 503)
+                except ProcessorError as exc:
+                    return self.send_json({"error": str(exc)}, 502)
+                except ValueError as exc:
+                    return self.send_json({"error": str(exc)}, 400)
+                return self.send_json({"authnet_transaction": result})
+
+            if path == BASE + "/processor/authnet/charge":
+                data = self.body_json()
+                conn = db()
+                try:
+                    with _lock, conn.cursor() as cur:
+                        result = authnet.authnet_charge(cur, data)
+                    conn.commit()
+                except ProcessorDisabled as exc:
+                    conn.rollback()
+                    return self.send_json({"error": str(exc)}, 503)
+                except ValueError as exc:
+                    conn.rollback()
+                    return self.send_json({"error": str(exc)}, 400)
+                except ProcessorError as exc:
+                    conn.rollback()
+                    return self.send_json({"error": str(exc)}, 502)
+                return self.send_json(
+                    {"authnet_charge": result},
+                    200 if result.get("deduplicated") else 201,
+                )
 
             if path == BASE + "/processor/fbo-wires":
                 data = self.body_json()

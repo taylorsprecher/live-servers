@@ -8,7 +8,7 @@ import threading
 import time
 from http.server import ThreadingHTTPServer
 
-from . import store
+from . import authnet, store
 from .config import BASE, DATABASE_URL, PORT
 from .ledger import worker_loop
 from .routes import Handler
@@ -32,6 +32,10 @@ def main():
     else:
         raise SystemExit("could not apply schema after 30 attempts")
     threading.Thread(target=worker_loop, daemon=True).start()
+    try:
+        authnet.log_state()
+    except Exception as exc:  # the state line must never block boot
+        print(f"payment-ledger authnet: state check failed: {exc}", flush=True)
     server = ThreadingHTTPServer(("0.0.0.0", PORT), Handler)
     print(f"payment-ledger listening on :{PORT} base={BASE}", flush=True)
     server.serve_forever()

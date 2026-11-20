@@ -268,6 +268,16 @@ services:
       DATABASE_URL: postgresql://payledger:${PAYLEDGER_DB_PASSWORD}@paydb:5432/payledger
       PAYLEDGER_ADMIN_TOKEN: ${PAYLEDGER_ADMIN_TOKEN:-}
       PAYLEDGER_WEBHOOK_SECRET: ${PAYLEDGER_WEBHOOK_SECRET:-}
+      # Authorize.net processor (app_pkg/authnet.py). The credential
+      # pair is delivered from GitHub secrets into the host .env by
+      # deploy-payledger.yml (ops/set-authnet-creds.sh); both default
+      # empty here. AUTHNET_ENABLED is deliberately passed through
+      # unset by default: the processor stays DISABLED (fail closed)
+      # until the host .env explicitly sets AUTHNET_ENABLED=1.
+      AUTHNET_API_LOGIN_ID: ${AUTHNET_API_LOGIN_ID:-}
+      AUTHNET_TRANSACTION_KEY: ${AUTHNET_TRANSACTION_KEY:-}
+      AUTHNET_ENV: ${AUTHNET_ENV:-production}
+      AUTHNET_ENABLED: ${AUTHNET_ENABLED:-}
     depends_on:
       - paydb
     ports:

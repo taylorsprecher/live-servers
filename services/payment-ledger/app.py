@@ -48,6 +48,14 @@ HTTP surface (BASE_PATH, default /ledger):
   POST /ledger/fees/estimate    three-layer IC++ fee estimate
   POST /ledger/route            routing decision for an intent
   POST /ledger/recon/run        matching passes + anomaly detection
+  POST /ledger/processor/authnet/check   Authorize.net credential
+                                check (503 while the processor is
+                                disabled — the default)
+  POST /ledger/processor/authnet/charge  Authorize.net authCapture
+                                from an Accept.js nonce, recorded
+                                through the canonical captured event
+  POST /ledger/processor/authnet/status  Authorize.net transaction
+                                status read-back
   GET  /ledger/balances         ledger account balances
   GET  /ledger/exceptions       reconciliation exceptions
   GET  /ledger/recon/status     match / exception counts
@@ -124,6 +132,14 @@ from app_pkg.processor import (  # noqa: E402
     next_stan,
     sandbox_authorize,
     sandbox_reverse,
+)
+from app_pkg import authnet  # noqa: E402
+from app_pkg.authnet import (  # noqa: E402
+    ProcessorDisabled,
+    ProcessorError,
+    authenticate_check,
+    authnet_charge,
+    transaction_status,
 )
 from app_pkg.routes import Handler  # noqa: E402
 from app_pkg.server import main  # noqa: E402

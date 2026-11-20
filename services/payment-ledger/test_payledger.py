@@ -78,6 +78,27 @@ gateway = open(
 check("gateway routes /ledger/", "location /ledger/" in gateway and "18123" in gateway)
 check("gateway has no /subs/", "/subs/" not in gateway)
 
+# Authorize.net processor (app_pkg/authnet.py): present, gated,
+# nonce-based, and wired through compose — while staying disabled
+# by default. Behavioral coverage lives in test_authnet.py.
+authnet_path = os.path.join(HERE, "app_pkg", "authnet.py")
+authnet_src = open(authnet_path, encoding="utf-8").read()
+import ast as _ast
+_ast.parse(authnet_src)
+check("authnet module parses", True)
+check("authnet gated by AUTHNET_ENABLED", "AUTHNET_ENABLED" in authnet_src)
+check("authnet reads credentials from env only",
+      "AUTHNET_API_LOGIN_ID" in authnet_src and "AUTHNET_TRANSACTION_KEY" in authnet_src)
+check("authnet cap guard present", "SINGLE_TXN_CAP" in authnet_src and "6000" in authnet_src)
+check("authnet charges use opaqueData nonces", "opaqueData" in authnet_src)
+check("authnet records via canonical captured event",
+      '"captured"' in authnet_src and "process_event" in authnet_src)
+check("app.py exposes authnet", "authnet" in app)
+check("compose payledger passes AUTHNET credentials",
+      "AUTHNET_API_LOGIN_ID" in compose and "AUTHNET_TRANSACTION_KEY" in compose)
+check("compose payledger passes AUTHNET_ENABLED (unset default)",
+      "AUTHNET_ENABLED" in compose)
+
 if failures:
     print(f"\n{len(failures)} FAILURES")
     sys.exit(1)

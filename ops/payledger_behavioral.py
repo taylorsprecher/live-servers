@@ -101,6 +101,28 @@ def webhook(event_id, payload):
 st, doc = callj("GET", "/health", admin=False)
 check("health ok + db true", st == 200 and doc.get("db") is True, f"{st} {doc}")
 
+# 1b. Authorize.net processor: health reports its state, and a charge
+# with a fabricated nonce can never be approved or post to the
+# ledger. The scratch env never sets AUTHNET_ENABLED, so the expected
+# answer is 503 (disabled, fail closed); if the processor were ever
+# enabled, the gateway itself rejects a fabricated nonce (502) or
+# declines it (recorded FAILED, no journal). Either way the clearing
+# and payable balances must remain exactly 0 at this point.
+an = doc.get("authnet") or {}
+check("health reports authnet processor state",
+      an.get("processor") == "authorizenet" and "enabled" in an, f"{doc}")
+st, doc = callj("POST", "/processor/authnet/charge",
+                {"amount": 100, "nonce": "behavioral-dummy-nonce",
+                 "idempotency_key": "bt-authnet-refused"})
+bal = balances()
+check("authnet dummy-nonce charge never approves",
+      st in (200, 201, 400, 502, 503)
+      and (doc.get("authnet_charge") or {}).get("approved") is not True,
+      f"{st} {doc}")
+check("authnet dummy-nonce charge posted nothing to the ledger",
+      bal.get("acquirer_clearing_expected") == 0
+      and bal.get("merchant_payable_main") == 0, f"{bal}")
+
 # 2. Intent create + idempotent dedupe.
 st, doc = callj("POST", "/intents", {"idempotency_key": "bt-1", "amount": 10000})
 intent1 = (doc.get("intent") or {}).get("id")

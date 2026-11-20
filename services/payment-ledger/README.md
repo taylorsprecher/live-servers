@@ -128,6 +128,63 @@ wire log masks DE 2.
   `ops/deploy-payledger.sh` into the host `.env` only — never in
   git, never printed.
 
+## Authorize.net processor (built 2026-11-20, DISABLED by default)
+
+`app_pkg/authnet.py` is the platform's first real PSP adapter, for
+the owner's Authorize.net merchant account (acquirer Global
+Payments, Gateway 2886423; approved 2026-11-20, Acquirer Agreement
+accepted the same day). It adapts the standalone pipeline script
+(`~/workspace/user/files/authorize_net_pipeline.py`): same payload
+shapes, same plain-language error wording, same account caps —
+largest single transaction **$6,000**, monthly sales **$6,000**
+(enforced in code; an EMSPR sale at $6,000 exactly hits both).
+
+- **Enable gate (fail closed):** the processor runs only when
+  `AUTHNET_ENABLED=1` AND both `AUTHNET_API_LOGIN_ID` and
+  `AUTHNET_TRANSACTION_KEY` are present in the service environment.
+  In every other state the routes answer **503** with the plain
+  reason, the boot log prints one `authnet: DISABLED (...)` line,
+  and `/ledger/health` reports the state under its `authnet` key.
+  Credential values are never logged or stored anywhere.
+- **Credential delivery:** `deploy-payledger.yml` pipes the two
+  GitHub repo secrets over SSH stdin into the host `.env`
+  (`ops/set-authnet-creds.sh`, 0600 upsert — the zillion/proxy
+  pattern) and compose passes them through. Delivery alone does
+  **not** enable anything; `AUTHNET_ENABLED=1` in the host `.env`
+  plus a redeploy is the separate, deliberate on-switch. Charges
+  additionally cannot succeed until Global Payments enables
+  Transaction Processing on the account (acquirer-side; the portal
+  toggle was still greyed out when the agreement was accepted).
+- **Routes** (all behind the same `X-Admin-Token` gate as every
+  write): `POST /ledger/processor/authnet/check` (credential check,
+  no money), `POST /ledger/processor/authnet/status` (gateway
+  read-back of one transaction), `POST /ledger/processor/authnet/charge`
+  — body `{amount (minor units), nonce, descriptor?, invoice?,
+  description?, email?, currency?, idempotency_key?}`.
+- **How a charge records:** the buyer's browser tokenizes the card
+  with Accept.js; this service only ever sees the nonce
+  (opaqueData) — no PAN touches the fleet. The adapter creates the
+  intent under idempotency key `authnet:{key}` (a repeat never
+  charges twice) plus a `PENDING` attempt, submits
+  `authCaptureTransaction`, and on approval hands the canonical
+  **captured** event to `ledger.process_event` — the existing write
+  path — which claims the gateway transaction id on the attempt,
+  posts the capture journal under `capture:{intent_id}`, and walks
+  the intent to `CAPTURED`. Declines mark the attempt `DECLINED`
+  and the intent `FAILED`; nothing is posted. Settlement then
+  arrives through the canonical surfaces like any other PSP's
+  (webhook / settlement file carrying the transaction id) and posts
+  `settle:authorizenet:{transId}:SALE`. **Open decision:** the
+  Authorize.net webhook signature key (a third credential) is not
+  wired — settlement can equally arrive via the settlement-file
+  route, which needs no new secret.
+- **Tests:** `test_authnet.py` (offline: payload shape, cap guard,
+  disabled/missing-credential behavior, recording seam against a
+  fake ledger) runs anywhere with plain `python3`; the static
+  checks in `test_payledger.py` and the scratch-DB behavioral gate
+  (`ops/payledger_behavioral.py` §1b: dummy-nonce charge never
+  approves, never posts) cover the wiring at deploy time.
+
 ## Verified before deploy (local PostgreSQL 16, 2026-11-15)
 
 Schema applies cleanly; invalid state transition rejected;

@@ -6,11 +6,26 @@ name: Deploy payment ledger
 # ops/deploy-payledger.sh. The payledger secrets
 # (PAYLEDGER_DB_PASSWORD / PAYLEDGER_ADMIN_TOKEN /
 # PAYLEDGER_WEBHOOK_SECRET) are generated on the host into its .env by
-# the ops script when absent — this workflow delivers no secrets. No
-# other service is rebuilt; the audited production stack is untouched.
+# the ops script when absent. The one credential pair this workflow
+# DOES deliver is Authorize.net's: when the AUTHNET_API_LOGIN_ID /
+# AUTHNET_TRANSACTION_KEY repo secrets are configured, they are piped
+# over SSH stdin into the host .env (ops/set-authnet-creds.sh, the
+# zillion/proxy pattern — never in argv, never echoed) before the
+# build. Delivering them does not enable the processor: AUTHNET_ENABLED
+# stays unset (off) unless the host .env deliberately sets it to 1.
+# The deliberate on-switch is this workflow's enable_authnet dispatch
+# input: set it true and the deploy also upserts AUTHNET_ENABLED=1
+# into the host .env (ops/set-authnet-enabled.sh) before the build.
+# No other service is rebuilt; the audited production stack is
+# untouched.
 
 on:
   workflow_dispatch:
+    inputs:
+      enable_authnet:
+        description: "Also set AUTHNET_ENABLED=1 in the host .env (turns the Authorize.net processor ON at this deploy)"
+        type: boolean
+        default: false
 
 jobs:
   deploy-payledger:
@@ -41,6 +56,43 @@ jobs:
             --exclude 'demo/' \
             -e "ssh -i ~/.ssh/id_deploy" \
             ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      # Credential delivery: pipe the AUTHNET_* secrets over SSH
+      # stdin into the host .env (compose reads them at `up` time)
+      # before the build, so the payledger service's Authorize.net
+      # processor can read them from its environment. Values travel
+      # on stdin only — never in argv, never echoed; GitHub also
+      # masks secret values in logs. When either secret is absent
+      # this step is skipped with a notice and the deploy proceeds:
+      # the processor must never block the ledger deploy, and it
+      # stays disabled until AUTHNET_ENABLED=1 is set in the host
+      # .env as a separate deliberate step.
+      # See ops/set-authnet-creds.sh.
+      - name: Deliver Authorize.net credentials to host .env (when configured)
+        env:
+          AUTHNET_API_LOGIN_ID: ${{ secrets.AUTHNET_API_LOGIN_ID }}
+          AUTHNET_TRANSACTION_KEY: ${{ secrets.AUTHNET_TRANSACTION_KEY }}
+        run: |
+          if [ -z "${AUTHNET_API_LOGIN_ID}" ] || [ -z "${AUTHNET_TRANSACTION_KEY}" ]; then
+            echo "AUTHNET_* secrets are not configured — deploying with the Authorize.net processor disabled."
+            exit 0
+          fi
+          { printf 'AUTHNET_API_LOGIN_ID=%s\n' "${AUTHNET_API_LOGIN_ID}"
+            printf 'AUTHNET_TRANSACTION_KEY=%s\n' "${AUTHNET_TRANSACTION_KEY}"
+          } | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/live-servers/ops/set-authnet-creds.sh'
+
+      # Deliberate on-switch: runs ONLY when the dispatcher set the
+      # enable_authnet input true. Writes AUTHNET_ENABLED=1 into the
+      # host .env over the same SSH-stdin pattern, before the build,
+      # so this deploy brings the processor up enabled. A plain
+      # deploy (input false/absent) never touches the switch.
+      # See ops/set-authnet-enabled.sh.
+      - name: Enable Authorize.net processor (only when requested)
+        if: ${{ inputs.enable_authnet }}
+        run: |
+          printf 'AUTHNET_ENABLED=1\n' | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/live-servers/ops/set-authnet-enabled.sh'
 
       - name: Build + up payledger on host
         run: |
