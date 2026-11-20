@@ -38,10 +38,10 @@ if [ -z "${PW}" ]; then
 fi
 
 psql_scratch() {
-  docker exec live-paydb psql -U payledger -d "${SCRATCH_DB}" -v ON_ERROR_STOP=1 "$@"
+  docker exec -i live-paydb psql -U payledger -d "${SCRATCH_DB}" -v ON_ERROR_STOP=1 "$@"
 }
 psql_admin() {
-  docker exec live-paydb psql -U payledger -d payledger -v ON_ERROR_STOP=1 "$@"
+  docker exec -i live-paydb psql -U payledger -d payledger -v ON_ERROR_STOP=1 "$@"
 }
 
 cleanup() {

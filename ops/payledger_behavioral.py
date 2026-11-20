@@ -122,24 +122,30 @@ except Exception:
     check("STAN increments by 1", False, f"{s1} -> {s2}")
 
 # 4. Sandbox authorize: approve 4111..., decline 4000...0002 (code 51).
-_, d = callj("POST", "/intents", {"idempotency_key": "bt-2", "amount": 10000})
-intent2 = (d.get("intent") or {}).get("id")
+# The sandbox processor creates and moves its OWN payment intent (it
+# does not attach to a caller-created one); the authorization summary
+# in the response names that intent and its resulting status.
 st, auth = callj("POST", "/processor/authorize",
-                 {"pan": "4111111111111111", "amount": 10000,
-                  "payment_intent_id": intent2})
-check("sandbox authorize approve (HTTP 200)", st == 200, f"{st} {auth}")
-check("authorized intent reaches AUTHORIZED", wait_status(intent2, "AUTHORIZED"),
-      f"auth resp: {auth}")
+                 {"pan": "4111111111111111", "amount": 10000})
+authz = auth.get("authorization") or {}
+intent2 = authz.get("payment_intent_id")
+check("sandbox authorize approve (code 00, AUTHORIZED)",
+      st == 200 and authz.get("response_code") == "00"
+      and authz.get("intent_status") == "AUTHORIZED" and bool(intent2),
+      f"{st} {auth}")
+check("authorized intent reads back AUTHORIZED",
+      bool(intent2) and wait_status(intent2, "AUTHORIZED"))
 
-_, d = callj("POST", "/intents", {"idempotency_key": "bt-3", "amount": 5000})
-intent3 = (d.get("intent") or {}).get("id")
 st, dec = callj("POST", "/processor/authorize",
-                {"pan": "4000000000000002", "amount": 5000,
-                 "payment_intent_id": intent3})
-check("sandbox authorize decline carries code 51",
-      st == 200 and "51" in json.dumps(dec), f"{st} {dec}")
-check("declined intent reaches FAILED", wait_status(intent3, "FAILED"),
-      f"decline resp: {dec}")
+                {"pan": "4000000000000002", "amount": 5000})
+decz = dec.get("authorization") or {}
+intent3 = decz.get("payment_intent_id")
+check("sandbox authorize decline (code 51, FAILED)",
+      st == 200 and decz.get("response_code") == "51"
+      and decz.get("intent_status") == "FAILED" and bool(intent3),
+      f"{st} {dec}")
+check("declined intent reads back FAILED",
+      bool(intent3) and wait_status(intent3, "FAILED"))
 
 # 5. Message log stores masked PAN only.
 _, msgs = callj("GET", "/processor/messages", admin=False)
