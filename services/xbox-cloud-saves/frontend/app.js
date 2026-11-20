@@ -102,7 +102,7 @@ async function refreshList() {
     }
     for (const s of data.saves) {
       const tr = document.createElement("tr");
-      const updated = new Date(s.timestamp * 1000).toLocaleString();
+      const updated = new Date(s.timestamp * 1000).toLocaleString("en-GB", { hour12: false });
       tr.innerHTML = `
         <td></td><td>${s.saveVersion}</td><td>${s.size} B</td><td>${updated}</td>
         <td>
