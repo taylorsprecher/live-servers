@@ -68,14 +68,18 @@ FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # Baud rates from the spec's controller. COM3/COM4 are the bio-telemetry
 # mirror targets (LH surge -> COM3, FSH pulse -> COM4): they carry no
 # device talker of their own, only frames the controller mirrors to them.
+# COM_HDMI1/COM_HDMI2 are the HDMI bridge pair from the 'Cport to Coort'
+# spec update (2026-11-10): bidirectional, 115200 baud.
 BAUD = {
     "COM1": 9600, "COM2": 9600, "Sport": 115200, "Coort": 115200,
+    "COM_HDMI1": 115200, "COM_HDMI2": 115200,
     "LH": 9600, "FSH": 9600, "CELL": 115200, "BT": 115200,
     "WIFI": 115200, "LAN": 115200, "ZILTB": 115200,
     "COM3": 9600, "COM4": 9600,
 }
 
-TALKERS = ("COM1", "COM2", "Sport", "Coort", "LH", "FSH", "BT", "WIFI", "LAN")
+TALKERS = ("COM1", "COM2", "Sport", "Coort", "COM_HDMI1", "COM_HDMI2",
+           "LH", "FSH", "BT", "WIFI", "LAN")
 
 
 def build_sinks(cfg, events, dynamodb):
