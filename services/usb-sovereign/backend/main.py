@@ -69,7 +69,8 @@ FRONTEND_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # mirror targets (LH surge -> COM3, FSH pulse -> COM4): they carry no
 # device talker of their own, only frames the controller mirrors to them.
 # COM_HDMI1/COM_HDMI2 are the HDMI bridge pair from the 'Cport to Coort'
-# spec update (2026-11-10): bidirectional, 115200 baud.
+# spec update (2026-11-10): bidirectional, 115200 baud. The pair is the
+# Apple TV link (Taylor, 2026-11-19): its device is the Apple TV ('Cave').
 BAUD = {
     "COM1": 9600, "COM2": 9600, "Sport": 115200, "Coort": 115200,
     "COM_HDMI1": 115200, "COM_HDMI2": 115200,
