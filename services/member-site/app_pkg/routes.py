@@ -1,0 +1,772 @@
+"""HTTP dispatch — the route inventory transcribed verbatim from the
+monolith's Handler, plus the one allowed new route:
+GET {BASE}/assets/fleet.css (the vendored design system)."""
+import json
+import os
+import secrets
+import shutil
+import sqlite3
+import time
+import zipfile
+from http.server import BaseHTTPRequestHandler
+from urllib.parse import parse_qs, quote, urlparse
+
+from .auth import (
+    create_session,
+    hash_password,
+    member_for_token,
+    token_hash,
+    verify_password,
+)
+from .catalog import (
+    COLLECTION_BY_KEY,
+    COLLECTION_CONTENT_TYPES,
+    COLLECTION_EXTS,
+    COURSE_BY_KEY,
+    COURSE_KEYS,
+    COURSES,
+    UPLOAD_TARGETS,
+)
+from .config import (
+    BASE,
+    CASHAPP_CASHTAG,
+    BTC_RATE_SOURCE,
+    CONTENT_DIR,
+    MAX_UPLOAD_BYTES,
+    MEMBER_UPLOAD_CONTENT_TYPES,
+    MEMBER_UPLOAD_EXTS,
+    MEMBER_UPLOAD_MAX_BYTES,
+    OWNER_EMAIL,
+    SESSION_DAYS,
+)
+from .pages import (
+    PAGE,
+    buy_page,
+    desk_page,
+    esc,
+    home_page,
+    member_upload_page,
+    owner_paylinks_page,
+    preview_page,
+    upload_page,
+    apps_page,
+)
+from .store import (
+    _db,
+    _lock,
+    _set_setting,
+    apps_data,
+    btc_quote,
+    collection_files,
+    grant_access,
+    has_content_access,
+    member_access,
+    member_upload_dir,
+    member_upload_magic_ok,
+    parse_multipart,
+    product_dir,
+    resolve_content_path,
+    sanitize_filename,
+)
+
+
+class Handler(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, fmt, *args):
+        pass
+
+    # -- helpers ---------------------------------------------------------
+    def send_html(self, body_html, status=200, extra_headers=None):
+        data = body_html.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        for k, v in (extra_headers or []):
+            self.send_header(k, v)
+        self.end_headers()
+        self.wfile.write(data)
+
+    def send_json(self, obj, status=200):
+        data = json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def redirect(self, path, extra_headers=None):
+        headers = [("Location", path)] + (extra_headers or [])
+        self.send_html("", status=303, extra_headers=headers)
+
+    def session_cookie(self, token):
+        return (
+            "Set-Cookie",
+            f"members_session={token}; Path={BASE}/; HttpOnly; SameSite=Lax; "
+            f"Max-Age={SESSION_DAYS * 86400}",
+        )
+
+    def clear_cookie(self):
+        return (
+            "Set-Cookie",
+            f"members_session=; Path={BASE}/; HttpOnly; SameSite=Lax; Max-Age=0",
+        )
+
+    def current_member(self):
+        cookie = self.headers.get("Cookie", "")
+        token = None
+        for part in cookie.split(";"):
+            part = part.strip()
+            if part.startswith("members_session="):
+                token = part.split("=", 1)[1]
+        return member_for_token(token), token
+
+    def raw_body(self):
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        return self.rfile.read(length) if length else b""
+
+    def form(self):
+        qs = parse_qs(self.raw_body().decode("utf-8"))
+        return {k: v[0] for k, v in qs.items()}
+
+    # -- routes ----------------------------------------------------------
+    def do_GET(self):
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == BASE:
+            return self.redirect(BASE + "/")
+        if path == BASE + "/health":
+            data = b'{"status":"ok"}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            return self.wfile.write(data)
+        if path == BASE + "/assets/fleet.css":
+            css_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "assets", "fleet.css",
+            )
+            try:
+                with open(css_path, "rb") as fh:
+                    data = fh.read()
+            except OSError:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            self.send_response(200)
+            self.send_header("Content-Type", "text/css; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            return self.wfile.write(data)
+        if path == BASE + "/preview":
+            return self.send_html(preview_page())
+        if path == BASE + "/apps":
+            member, _ = self.current_member()
+            return self.send_html(apps_page(member))
+        if path == BASE + "/apps/data":
+            return self.send_json(apps_data())
+        if path.startswith(BASE + "/buy/"):
+            course = COURSE_BY_KEY.get(path[len(BASE + "/buy/"):])
+            if course is None:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            member, _ = self.current_member()
+            return self.send_html(buy_page(course, member))
+        if path == BASE + "/":
+            member, _ = self.current_member()
+            if member:
+                return self.redirect(BASE + "/desk")
+            return self.send_html(home_page())
+        if path == BASE + "/desk":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            qs = parse_qs(parsed.query)
+            message, ok = "", False
+            if "paid" in qs:
+                message = (
+                    "Thank you! If your payment completed, access unlocks "
+                    "automatically as soon as the payment is "
+                    "confirmed — refresh this page in a few seconds."
+                )
+                ok = True
+            elif "cancelled" in qs:
+                message = "Checkout was cancelled — no charge was made."
+            return self.send_html(desk_page(member, message, ok))
+        if path == BASE + "/upload":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            qs = parse_qs(parsed.query)
+            message = qs.get("msg", [""])[0]
+            return self.send_html(
+                member_upload_page(member, message, ok=bool(message))
+            )
+        if path.startswith(BASE + "/upload/download/"):
+            tail = path[len(BASE + "/upload/download/"):]
+            try:
+                upload_id = int(tail)
+            except ValueError:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            return self.member_upload_download(upload_id)
+        if path == BASE + "/admin/upload":
+            member, _ = self.current_member()
+            # Fail closed: the upload page exists only for the owner.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            qs = parse_qs(parsed.query)
+            message = qs.get("msg", [""])[0]
+            return self.send_html(upload_page(member, message, ok=bool(message)))
+        if path == BASE + "/owner/paylinks":
+            member, _ = self.current_member()
+            # Fail closed: the Pay Links page exists only for the owner.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            qs = parse_qs(parsed.query)
+            message = qs.get("msg", [""])[0]
+            return self.send_html(
+                owner_paylinks_page(member, message, ok=bool(message))
+            )
+        if path.startswith(BASE + "/content/"):
+            rest = path[len(BASE + "/content/"):]
+            key, _, sub = rest.partition("/")
+            return self.serve_content(key, sub)
+        return self.send_html("<h1>Not found</h1>", status=404)
+
+    def stream_file(self, fpath, content_type):
+        size = os.path.getsize(fpath)
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header(
+            "Content-Disposition",
+            f'attachment; filename="{os.path.basename(fpath)}"',
+        )
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Length", str(size))
+        self.end_headers()
+        with open(fpath, "rb") as fh:
+            while True:
+                chunk = fh.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+
+    def serve_content(self, key, sub=""):
+        member, _ = self.current_member()
+        if not member:
+            return self.redirect(BASE + "/")
+        if key in COLLECTION_BY_KEY:
+            return self.serve_collection(member, key, sub)
+        course = COURSE_BY_KEY.get(key)
+        if course is None or sub:
+            return self.send_html("<h1>Not found</h1>", status=404)
+        if key not in member_access(member["id"]):
+            return self.send_html(
+                "<h1>Locked</h1><p>This content needs course access.</p>",
+                status=403,
+            )
+        fpath = resolve_content_path(course)
+        if fpath is None:
+            return self.send_html(
+                "<h1>Files being added</h1><p>Your access is saved. The "
+                "course files are being added to the site and will "
+                "appear here once added.</p>",
+                status=404,
+            )
+        return self.stream_file(fpath, "application/zip")
+
+    def serve_collection(self, member, key, sub=""):
+        """Serve a content collection (teachback). Gating decision: the
+        collection unlocks with its linked course's access (teachback ->
+        CCCE) — see the COLLECTIONS design note. No access -> 403."""
+        collection = COLLECTION_BY_KEY[key]
+        if not has_content_access(member["id"], key):
+            return self.send_html(
+                "<h1>Locked</h1><p>This collection unlocks with the "
+                f"{esc(COURSE_BY_KEY[collection['unlock_course']]['short'])} "
+                "course.</p>",
+                status=403,
+            )
+        files = collection_files(key)
+        if sub:
+            # Only ever serve a name that is actually staged (no path
+            # traversal: the staged list is the allowlist).
+            name = sanitize_filename(sub, COLLECTION_EXTS)
+            staged = {n for n, _s, _m in files}
+            if name is None or name not in staged:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            ext = os.path.splitext(name)[1].lower()
+            return self.stream_file(
+                os.path.join(product_dir(key), name),
+                COLLECTION_CONTENT_TYPES.get(ext, "application/octet-stream"),
+            )
+        if not files:
+            return self.send_html(
+                "<h1>Files being added</h1><p>The teach-back documents "
+                "are being added to the site and will appear here once "
+                "added.</p>",
+                status=404,
+            )
+        items = "".join(
+            f'<div class="card"><strong>{esc(name)}</strong><br>'
+            f'<span class="small">{size:,} bytes</span><br>'
+            f'<a class="btn" href="{BASE}/content/{key}/{esc(name)}">Download</a></div>'
+            for name, size, _mtime in files
+        )
+        body = f"""
+<h1>{esc(collection["short"])} Collection</h1>
+<p class="small">Similar-topic teach-back documents from Taylor's
+Transgender Patient Awareness, LLC — included with CCCE course access.</p>
+{items}
+<p><a class="btn secondary" href="{BASE}/desk">Back to Member Desk</a></p>
+"""
+        return self.send_html(PAGE.format(base=BASE, title="Teach-Back Collection", body=body))
+
+    def admin_upload(self):
+        """Owner-only content upload. Fail-closed: 403 for anyone who is
+        not the signed-in owner. Accepts a browser multipart form
+        (fields product + file) or a raw body with
+        ?product=ccce|emspr|teachback (or X-Product header) and
+        X-Filename. Products take zip bundles only; the teachback
+        collection takes individual documents (COLLECTION_EXTS).
+        Writes ONLY to CONTENT_DIR/<target>/ on the volume — never the
+        repo tree."""
+        member, _ = self.current_member()
+        if not member or member["email"].lower() != OWNER_EMAIL:
+            return self.send_html("<h1>Forbidden</h1>", status=403)
+
+        def reject(message, status=400):
+            return self.send_html(upload_page(member, message), status=status)
+
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        # Small headroom over the file cap for multipart framing.
+        if length <= 0 or length > MAX_UPLOAD_BYTES + 1024 * 1024:
+            self.close_connection = True
+            return reject(
+                f"Upload missing or larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB cap.",
+                status=413,
+            )
+        body = self.rfile.read(length)
+        ctype = self.headers.get("Content-Type", "")
+        product = None
+        filename = None
+        data = None
+        if ctype.startswith("multipart/form-data"):
+            fields, files = parse_multipart(body, ctype)
+            product = (fields.get("product") or "").strip().lower()
+            if "file" in files:
+                filename, data = files["file"]
+        else:
+            qs = parse_qs(urlparse(self.path).query)
+            product = (
+                qs.get("product", [""])[0]
+                or self.headers.get("X-Product", "")
+            ).strip().lower()
+            filename = self.headers.get("X-Filename", "")
+            data = body
+        if product not in UPLOAD_TARGETS:
+            return reject("Choose a target: ccce, emspr, or teachback.")
+        if not data:
+            return reject("No file data received.")
+        if len(data) > MAX_UPLOAD_BYTES:
+            return reject(
+                f"That file is over the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB cap.",
+                status=413,
+            )
+        is_collection = product in COLLECTION_BY_KEY
+        if is_collection:
+            target_label = COLLECTION_BY_KEY[product]["short"]
+            filename = sanitize_filename(filename, COLLECTION_EXTS)
+            if filename is None:
+                return reject(
+                    "Collection files must be one of: "
+                    + ", ".join(COLLECTION_EXTS)
+                    + "."
+                )
+            ext = os.path.splitext(filename)[1].lower()
+            if ext in (".zip", ".docx") and not any(
+                data.startswith(magic) for magic in ZIP_MAGICS
+            ):
+                return reject("That file is not a valid zip-based document.")
+            if ext == ".pdf" and not data.startswith(b"%PDF-"):
+                return reject("That file is not a PDF document.")
+        else:
+            target_label = COURSE_BY_KEY[product]["short"]
+            filename = sanitize_filename(filename) or sanitize_filename(
+                COURSE_BY_KEY[product]["file"]
+            )
+            if filename is None:
+                return reject("The uploaded file must be a .zip file.")
+            if not any(data.startswith(magic) for magic in ZIP_MAGICS):
+                return reject("That file is not a zip archive.")
+        dest_dir = product_dir(product)
+        os.makedirs(dest_dir, exist_ok=True)
+        tmp_path = os.path.join(dest_dir, f".upload-{secrets.token_hex(6)}.tmp")
+        final_path = os.path.join(dest_dir, filename)
+        try:
+            with open(tmp_path, "wb") as fh:
+                fh.write(data)
+            if os.path.splitext(filename)[1].lower() in (".zip", ".docx") and (
+                not zipfile.is_zipfile(tmp_path)
+            ):
+                os.unlink(tmp_path)
+                return reject("That file is not a valid zip archive.")
+            os.replace(tmp_path, final_path)  # duplicate upload replaces cleanly
+        except OSError as e:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            return reject(f"Upload could not be saved: {e}", status=500)
+        with _lock, _db:
+            _db.execute(
+                "INSERT INTO uploads (owner_email, course_key, filename, bytes, "
+                "created_at) VALUES (?, ?, ?, ?, ?)",
+                (member["email"], product, filename, len(data), int(time.time())),
+            )
+        return self.send_html(
+            upload_page(
+                member,
+                f"Uploaded {filename} ({len(data):,} bytes) for "
+                f"{target_label}. Members with access can download it now.",
+                ok=True,
+            )
+        )
+
+    def member_upload(self):
+        """Signed-in member document upload (department inbox). Anyone
+        not signed in is sent to sign-in. Files are allowlist + magic
+        checked, capped at MEMBER_UPLOAD_MAX_BYTES, sanitized, and
+        written ONLY to UPLOADS_DIR/<member_id>/ on the volume — never
+        CONTENT_DIR, never the repo tree, never a public URL."""
+        member, _ = self.current_member()
+        if not member:
+            return self.redirect(BASE + "/")
+
+        def reject(message, status=400):
+            return self.send_html(member_upload_page(member, message), status=status)
+
+        length = int(self.headers.get("Content-Length", 0) or 0)
+        # Small headroom over the file cap for multipart framing.
+        cap_mb = MEMBER_UPLOAD_MAX_BYTES // (1024 * 1024)
+        if length <= 0 or length > MEMBER_UPLOAD_MAX_BYTES + 1024 * 1024:
+            self.close_connection = True
+            return reject(
+                f"Upload missing or larger than the {cap_mb} MB cap.",
+                status=413,
+            )
+        body = self.rfile.read(length)
+        ctype = self.headers.get("Content-Type", "")
+        if not ctype.startswith("multipart/form-data"):
+            return reject("Please use the upload form on this page.")
+        _fields, files = parse_multipart(body, ctype)
+        if "file" not in files:
+            return reject("No file received — choose a file and try again.")
+        filename, data = files["file"]
+        if not data:
+            return reject("That file is empty.")
+        if len(data) > MEMBER_UPLOAD_MAX_BYTES:
+            return reject(f"That file is over the {cap_mb} MB cap.", status=413)
+        filename = sanitize_filename(filename, MEMBER_UPLOAD_EXTS)
+        if filename is None:
+            return reject(
+                "That file type is not accepted. Please send a PDF, Word "
+                "(.doc/.docx), Excel (.xls/.xlsx), image (.png/.jpg), or "
+                "ZIP file."
+            )
+        if not member_upload_magic_ok(filename, data):
+            return reject(
+                "That file does not look like the document type its name "
+                "claims."
+            )
+        dest_dir = member_upload_dir(member["id"])
+        os.makedirs(dest_dir, exist_ok=True)
+        # Same name again -> keep both (name-2.ext, name-3.ext, ...):
+        # a member inbox never silently overwrites an earlier document.
+        stored = filename
+        stem, ext = os.path.splitext(filename)
+        n = 2
+        while os.path.exists(os.path.join(dest_dir, stored)):
+            stored = f"{stem}-{n}{ext}"
+            n += 1
+        tmp_path = os.path.join(dest_dir, f".upload-{secrets.token_hex(6)}.tmp")
+        try:
+            with open(tmp_path, "wb") as fh:
+                fh.write(data)
+            os.replace(tmp_path, os.path.join(dest_dir, stored))
+        except OSError as e:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            return reject(f"Upload could not be saved: {e}", status=500)
+        with _lock, _db:
+            _db.execute(
+                "INSERT INTO member_uploads (member_id, filename, "
+                "stored_name, bytes, created_at) VALUES (?, ?, ?, ?, ?)",
+                (member["id"], filename, stored, len(data), int(time.time())),
+            )
+        return self.send_html(
+            member_upload_page(
+                member,
+                f"Uploaded {filename} ({len(data):,} bytes). Thank you — "
+                "it is in your member inbox.",
+                ok=True,
+            )
+        )
+
+    def member_upload_download(self, upload_id):
+        """Download one member upload. Served ONLY to the member who
+        uploaded it or to the owner; everyone else is fail-closed 403,
+        anonymous users are sent to sign-in. The allowlist is the
+        member_uploads table itself — a file that is not recorded
+        there is never served."""
+        member, _ = self.current_member()
+        if not member:
+            return self.redirect(BASE + "/")
+        with _lock:
+            row = _db.execute(
+                "SELECT * FROM member_uploads WHERE id = ?", (upload_id,)
+            ).fetchone()
+        if row is None:
+            return self.send_html("<h1>Not found</h1>", status=404)
+        is_owner = member["email"].lower() == OWNER_EMAIL
+        if not is_owner and row["member_id"] != member["id"]:
+            return self.send_html("<h1>Forbidden</h1>", status=403)
+        fpath = os.path.join(
+            member_upload_dir(row["member_id"]), row["stored_name"]
+        )
+        if not os.path.isfile(fpath):
+            return self.send_html("<h1>Not found</h1>", status=404)
+        ext = os.path.splitext(row["filename"])[1].lower()
+        return self.stream_file(
+            fpath,
+            MEMBER_UPLOAD_CONTENT_TYPES.get(ext, "application/octet-stream"),
+        )
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        if path == BASE + "/admin/upload":
+            return self.admin_upload()
+        if path == BASE + "/upload":
+            return self.member_upload()
+        form = self.form()
+        if path == BASE + "/owner/paylinks":
+            member, _ = self.current_member()
+            # Fail closed: only the owner can save or clear Pay Links.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            links = {}
+            for c in COURSES:
+                v = form.get(f"godaddy_link_{c['key']}", "").strip()
+                if v and not v.startswith("https://"):
+                    return self.send_html(owner_paylinks_page(
+                        member,
+                        "That link doesn't look right — a Pay Link "
+                        "starts with https://. Nothing was saved.",
+                    ))
+                links[c["key"]] = v
+            for key, v in links.items():
+                _set_setting(f"godaddy_link_{key}", v)
+            return self.redirect(
+                BASE + "/owner/paylinks?msg=" + quote(
+                    "Pay links saved — each buy page now shows the "
+                    "card button for the links you set."
+                )
+            )
+        if path == BASE + "/signup":
+            name = form.get("name", "").strip()
+            email = form.get("email", "").strip()
+            password = form.get("password", "")
+            if not name or "@" not in email or len(password) < 8:
+                return self.send_html(
+                    home_page("Please give a name, a valid email, and a password of 8+ characters.")
+                )
+            salt_hex, hash_hex = hash_password(password)
+            try:
+                with _lock, _db:
+                    cur = _db.execute(
+                        "INSERT INTO members (name, email, pw_salt, pw_hash, created_at) "
+                        "VALUES (?, ?, ?, ?, ?)",
+                        (name, email, salt_hex, hash_hex, int(time.time())),
+                    )
+                    member_id = cur.lastrowid
+            except sqlite3.IntegrityError:
+                return self.send_html(
+                    home_page("That email is already registered — please sign in instead.")
+                )
+            token = create_session(member_id)
+            return self.redirect(BASE + "/desk", extra_headers=[self.session_cookie(token)])
+        if path == BASE + "/signin":
+            email = form.get("email", "").strip()
+            password = form.get("password", "")
+            with _lock:
+                row = _db.execute(
+                    "SELECT * FROM members WHERE email = ?", (email,)
+                ).fetchone()
+            if row is None or not verify_password(password, row["pw_salt"], row["pw_hash"]):
+                return self.send_html(home_page("Sign-in failed: wrong email or password."))
+            token = create_session(row["id"])
+            return self.redirect(BASE + "/desk", extra_headers=[self.session_cookie(token)])
+        if path == BASE + "/signout":
+            _, token = self.current_member()
+            if token:
+                with _lock, _db:
+                    _db.execute(
+                        "DELETE FROM sessions WHERE token_hash = ?", (token_hash(token),)
+                    )
+            return self.redirect(BASE + "/", extra_headers=[self.clear_cookie()])
+        if path == BASE + "/bitcoin/order":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            course = COURSE_BY_KEY.get(form.get("course_key", ""))
+            if course is None:
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            if course["key"] in member_access(member["id"]):
+                return self.send_html(desk_page(member, "You already have access to this.", ok=True))
+            btc_amount, _rate = btc_quote(course["cents"])
+            if btc_amount is None:
+                return self.send_html(
+                    desk_page(member, "The Bitcoin rate is unavailable right now — please try again shortly.")
+                )
+            with _lock, _db:
+                _db.execute(
+                    "INSERT INTO manual_orders (member_id, course_key, method, "
+                    "usd_cents, amount_text, detail, created_at) "
+                    "VALUES (?, ?, 'bitcoin', ?, ?, ?, ?)",
+                    (member["id"], course["key"], course["cents"],
+                     f"{btc_amount} BTC",
+                     f"Cash App {CASHAPP_CASHTAG} · {BTC_RATE_SOURCE}",
+                     int(time.time())),
+                )
+            return self.send_html(
+                desk_page(
+                    member,
+                    f"Bitcoin order created: send {btc_amount} BTC to "
+                    f"{CASHAPP_CASHTAG} inside Cash App — put your account "
+                    "email in the payment note. Access unlocks when the "
+                    "owner confirms receipt.",
+                    ok=True,
+                )
+            )
+        if path == BASE + "/godaddy/order":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            course = COURSE_BY_KEY.get(form.get("course_key", ""))
+            if course is None:
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            if course["key"] in member_access(member["id"]):
+                return self.send_html(desk_page(member, "You already have access to this.", ok=True))
+            amount_text = f"${course['cents'] / 100:.2f}"
+            with _lock, _db:
+                _db.execute(
+                    "INSERT INTO manual_orders (member_id, course_key, method, "
+                    "usd_cents, amount_text, detail, created_at) "
+                    "VALUES (?, ?, 'godaddy', ?, ?, ?, ?)",
+                    (member["id"], course["key"], course["cents"], amount_text,
+                     "GoDaddy Pay Link", int(time.time())),
+                )
+            return self.send_html(
+                desk_page(
+                    member,
+                    f"Card order created: if you have not paid yet, pay "
+                    f"{amount_text} through the GoDaddy Pay Link on the "
+                    "buy page. Access unlocks when the owner confirms "
+                    "your payment.",
+                    ok=True,
+                )
+            )
+        if path == BASE + "/cashapp/order":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            course = COURSE_BY_KEY.get(form.get("course_key", ""))
+            if course is None:
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            if course["key"] in member_access(member["id"]):
+                return self.send_html(desk_page(member, "You already have access to this.", ok=True))
+            amount_text = f"${course['cents'] / 100:.2f}"
+            with _lock, _db:
+                _db.execute(
+                    "INSERT INTO manual_orders (member_id, course_key, method, "
+                    "usd_cents, amount_text, detail, created_at) "
+                    "VALUES (?, ?, 'cashapp', ?, ?, ?, ?)",
+                    (member["id"], course["key"], course["cents"], amount_text,
+                     CASHAPP_CASHTAG, int(time.time())),
+                )
+            return self.send_html(
+                desk_page(
+                    member,
+                    f"Cash App order created: send {amount_text} to "
+                    f"{CASHAPP_CASHTAG} in Cash App — put your account email "
+                    "in the payment note. Access unlocks when the owner "
+                    "confirms receipt.",
+                    ok=True,
+                )
+            )
+        if path == BASE + "/manual/confirm":
+            member, _ = self.current_member()
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            try:
+                order_id = int(form.get("order_id", ""))
+            except ValueError:
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            with _lock, _db:
+                row = _db.execute(
+                    "SELECT * FROM manual_orders WHERE id = ? AND status = 'pending'",
+                    (order_id,),
+                ).fetchone()
+                if row:
+                    _db.execute(
+                        "UPDATE manual_orders SET status = 'confirmed', "
+                        "confirmed_at = ?, confirmed_by = ? WHERE id = ?",
+                        (int(time.time()), member["email"], order_id),
+                    )
+                    _db.execute(
+                        "INSERT OR IGNORE INTO access (member_id, course_key) VALUES (?, ?)",
+                        (row["member_id"], row["course_key"]),
+                    )
+            return self.redirect(BASE + "/desk")
+        if path == BASE + "/access":
+            member, _ = self.current_member()
+            # Fail closed: only the owner can grant/revoke.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            try:
+                target_id = int(form.get("member_id", ""))
+            except ValueError:
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            course_key = form.get("course_key", "")
+            action = form.get("action", "")
+            if course_key not in COURSE_KEYS or action not in ("grant", "revoke"):
+                return self.send_html("<h1>Bad request</h1>", status=400)
+            with _lock, _db:
+                if action == "grant":
+                    _db.execute(
+                        "INSERT OR IGNORE INTO access (member_id, course_key) VALUES (?, ?)",
+                        (target_id, course_key),
+                    )
+                else:
+                    _db.execute(
+                        "DELETE FROM access WHERE member_id = ? AND course_key = ?",
+                        (target_id, course_key),
+                    )
+            return self.redirect(BASE + "/desk")
+        if path == BASE + "/delete-account":
+            member, _ = self.current_member()
+            if not member:
+                return self.redirect(BASE + "/")
+            if not verify_password(form.get("password", ""), member["pw_salt"], member["pw_hash"]):
+                return self.send_html(desk_page(member, "Delete failed: wrong password."))
+            with _lock, _db:
+                _db.execute("DELETE FROM access WHERE member_id = ?", (member["id"],))
+                _db.execute("DELETE FROM sessions WHERE member_id = ?", (member["id"],))
+                _db.execute("DELETE FROM manual_orders WHERE member_id = ?", (member["id"],))
+                _db.execute("DELETE FROM payments WHERE member_id = ?", (member["id"],))
+                _db.execute("DELETE FROM member_uploads WHERE member_id = ?", (member["id"],))
+                _db.execute("DELETE FROM members WHERE id = ?", (member["id"],))
+            # The member's inbox files go with the account.
+            shutil.rmtree(member_upload_dir(member["id"]), ignore_errors=True)
+            return self.redirect(BASE + "/", extra_headers=[self.clear_cookie()])
+        return self.send_html("<h1>Not found</h1>", status=404)

@@ -3,6 +3,39 @@
    rgba(26, 28, 31, 0.65), refraction border 1px rgba(255,255,255,0.18),
    specular top highlight. Palette matches the bridge dashboard:
    Soft Slate #1A1C1F, Resilient Blue #4DA3FF, Strict Black #000000. */
+/* Fleet design-system tokens (DESIGN.md §3) — canonical block copied
+   verbatim from design-system/fleet.css. This page is a dark Liquid
+   Glass TV surface (spec in the header below): it adopts the Fleet
+   font stack and ink base, while its bright glass variants (--blue /
+   --green / --red / --dim below) are retained on purpose — the Fleet
+   light-surface values would fail contrast on the dark glass, and
+   --blue/--green must match the chart strokes appletv.js draws
+   (#4DA3FF / #3fce7c). */
+:root {
+  --ink: #0f1f2e;
+  --ink-soft: #1b3448;
+  --accent: #0e7c7b;
+  --accent-strong: #095e5d;
+  --accent-soft: #e3f2f1;
+  --bg: #f6f8f9;
+  --surface: #ffffff;
+  --line: #d8e0e4;
+  --text: #16232c;
+  --muted: #5b6d77;
+  --ok: #177245;
+  --ok-soft: #e5f3ec;
+  --warn: #9a6a00;
+  --warn-soft: #faf1da;
+  --bad: #b3261e;
+  --bad-soft: #fbeae9;
+  --radius: 12px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 3px rgba(15, 31, 46, 0.10), 0 4px 14px rgba(15, 31, 46, 0.06);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 :root {
   --white: #FFFFFF;
   --slate: #1A1C1F;
@@ -18,11 +51,11 @@ body {
   margin: 0;
   padding: calc(20px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
            calc(20px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
-  background: #000000;
+  background: var(--ink);
   background-image: radial-gradient(1200px 500px at 20% -10%, rgba(77, 163, 255, 0.14), transparent),
                     radial-gradient(900px 420px at 90% 0%, rgba(63, 206, 124, 0.08), transparent);
   color: var(--white);
-  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font);
 }
 header {
   display: flex; justify-content: space-between; align-items: flex-start;

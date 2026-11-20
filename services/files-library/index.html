@@ -4,37 +4,42 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Files Library — 911transedu.net</title>
+<link rel="stylesheet" href="__BASE_PATH__/assets/fleet.css">
 <style>
-  :root { --bg: #0b1120; --card: #1e293b; --border: #334155; --text: #f8fafc; --muted: #94a3b8; --accent: #38bdf8; }
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
-  .wrap { max-width: 880px; margin: 0 auto; padding: 2rem 1rem 4rem; }
-  h1 { font-size: 1.7rem; margin: 0 0 0.25rem; }
   .sub { color: var(--muted); margin: 0 0 1.5rem; line-height: 1.5; }
   .counts { color: var(--muted); font-size: 0.92rem; margin: 0 0 1.5rem; }
   .files-search-label { display: block; font-weight: 600; margin-bottom: 0.4rem; }
-  .files-search { width: 100%; font: inherit; padding: 0.7rem 0.9rem; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text); margin-bottom: 0.5rem; }
+  .files-search { width: 100%; font: inherit; padding: 0.7rem 0.9rem; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--surface); color: var(--text); margin-bottom: 0.5rem; min-height: 44px; }
+  .files-search:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
   .files-count { color: var(--muted); font-size: 0.9rem; min-height: 1.3em; margin: 0 0 1.5rem; }
   .files-group { margin-bottom: 2rem; }
   .files-group-title { font-size: 1.15rem; margin: 0 0 0.6rem; overflow-wrap: anywhere; }
   .files-group-count { color: var(--muted); font-size: 0.82rem; font-weight: 500; margin-left: 0.4rem; }
-  .files-list { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-  .file-row { display: flex; flex-wrap: wrap; gap: 2px 20px; align-items: baseline; padding: 0.8rem 1rem; border-top: 1px solid var(--border); }
+  .files-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  .file-row { display: flex; flex-wrap: wrap; gap: 2px 20px; align-items: baseline; padding: 0.8rem 1rem; border-top: 1px solid var(--line); }
   .file-row:first-child { border-top: none; }
   .file-main { flex: 1 1 320px; min-width: 0; }
   .file-name { font-weight: 600; overflow-wrap: anywhere; }
-  .file-desc { display: block; font-size: 0.9rem; color: #cbd5e1; margin-top: 2px; overflow-wrap: anywhere; }
+  .file-desc { display: block; font-size: 0.9rem; color: var(--muted); margin-top: 2px; overflow-wrap: anywhere; }
   .file-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; font-size: 0.85rem; color: var(--muted); }
-  .file-dl { font-weight: 600; color: var(--accent); text-decoration: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 12px; white-space: nowrap; }
+  .file-dl { font-weight: 600; color: var(--accent-strong); text-decoration: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 12px; white-space: nowrap; }
   .file-dl:hover { border-color: var(--accent); }
-  .file-tag { font-size: 0.76rem; font-weight: 600; border: 1px solid var(--border); border-radius: 999px; padding: 3px 10px; color: #cbd5e1; white-space: nowrap; }
+  .file-tag { font-size: 0.76rem; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; color: var(--muted); white-space: nowrap; }
   .files-held .files-list { border-style: dashed; }
   .files-none { color: var(--muted); }
-  a.back { color: var(--accent); text-decoration: none; }
 </style>
 </head>
 <body>
-  <div class="wrap">
+  <header class="fl-header"><div class="fl-header-inner">
+    <a class="fl-wordmark" href="/members/">911TransEdu</a>
+    <span class="fl-service">Files Library</span>
+    <nav class="fl-nav">
+      <a href="/portal/">Network Portal</a>
+      <a href="https://911transedu.net/">Main Site</a>
+      <a href="https://members.911transedu.net/members/">Member Desk</a>
+    </nav>
+  </div></header>
+  <main class="fl-main">
     <h1>Files Library</h1>
     <p class="sub">Taylor&rsquo;s complete file library, grouped by project. Files with a
       Download button save straight from this page; files marked &ldquo;On file&rdquo; are in
@@ -46,8 +51,12 @@
     <p class="files-count" id="filesCount" role="status"></p>
     __GROUPS__
     <p class="files-none" id="filesNone" hidden>No files match your search.</p>
-    <p><a class="back" href="/portal/">&larr; Back to the portal</a></p>
-  </div>
+    <p><a href="/portal/">&larr; Back to the portal</a></p>
+  </main>
+  <footer class="fl-footer"><div class="fl-footer-inner">
+    <span>Taylor&rsquo;s Transgender Patient Awareness, LLC</span>
+    <a href="https://911transedu.net">911transedu.net</a>
+  </div></footer>
 <script>
   // Files library search — filters the listed entries in place; in-page state only.
   (function(){

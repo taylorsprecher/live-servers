@@ -216,7 +216,7 @@ function TcpIpPanel({
             <p className="muted">
               Current lease: <span className="mono">{config.tcpip.dhcp_lease.ip_address}</span>
               {config.tcpip.dhcp_lease.leased_at &&
-                <> · leased {new Date(config.tcpip.dhcp_lease.leased_at * 1000).toLocaleTimeString()}</>}
+                <> · leased {new Date(config.tcpip.dhcp_lease.leased_at * 1000).toLocaleTimeString('en-GB', { hour12: false })}</>}
             </p>
             <button onClick={renewLease} disabled={busy || !config.cable_connected}>
               Renew DHCP Lease
@@ -973,7 +973,7 @@ function Telemetry({
             {events.map((e) => (
               <tr key={e.id}>
                 <td>{e.id}</td>
-                <td className="mono">{new Date(e.ts * 1000).toLocaleTimeString()}</td>
+                <td className="mono">{new Date(e.ts * 1000).toLocaleTimeString('en-GB', { hour12: false })}</td>
                 <td>{e.source}</td>
                 <td>{e.metric}</td>
                 <td>{e.value ?? '—'}</td>

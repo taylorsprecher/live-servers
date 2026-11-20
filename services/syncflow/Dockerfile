@@ -6,6 +6,8 @@ FROM python:3.12-slim
 
 WORKDIR /app
 COPY app.py index.html README.md ./
+COPY app_pkg/ ./app_pkg/
+COPY assets/ ./assets/
 
 ENV PYTHONUNBUFFERED=1 \
     BASE_PATH=/syncflow \

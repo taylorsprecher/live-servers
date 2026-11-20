@@ -5,12 +5,54 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BlackBerry LAN — Air Platform</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 2rem auto; max-width: 44rem; padding: 0 1rem; }
-  h1 { font-size: 1.4rem; } code { background: #eee; padding: 0.1rem 0.3rem; border-radius: 4px; }
+  /* Fleet design-system adoption (DESIGN.md §3, Tier 2): canonical Fleet
+     tokens copied verbatim from design-system/fleet.css. This page has
+     no JavaScript and no ids — markup below only gains a header/footer
+     shell; every route string is unchanged. */
+  :root {
+    --ink: #0f1f2e;
+    --ink-soft: #1b3448;
+    --accent: #0e7c7b;
+    --accent-strong: #095e5d;
+    --accent-soft: #e3f2f1;
+    --bg: #f6f8f9;
+    --surface: #ffffff;
+    --line: #d8e0e4;
+    --text: #16232c;
+    --muted: #5b6d77;
+    --ok: #177245;
+    --ok-soft: #e5f3ec;
+    --warn: #9a6a00;
+    --warn-soft: #faf1da;
+    --bad: #b3261e;
+    --bad-soft: #fbeae9;
+    --radius: 12px;
+    --radius-sm: 10px;
+    --shadow: 0 1px 3px rgba(15, 31, 46, 0.10), 0 4px 14px rgba(15, 31, 46, 0.06);
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text);
+         margin: 0; line-height: 1.5; }
+  header { background: var(--ink); color: #eaf1f4; }
+  .header-inner { max-width: 44rem; margin: 0 auto; padding: 14px 1rem; }
+  .wordmark { color: #ffffff; font-weight: 700; letter-spacing: 0.02em; }
+  .service { color: #a9c6c5; font-size: 0.92rem; margin-left: 10px; }
+  main { max-width: 44rem; margin: 0 auto; padding: 1rem 1rem 2rem; }
+  h1 { font-size: 1.4rem; color: var(--ink); }
+  a { color: var(--accent-strong); }
+  code { background: var(--accent-soft); color: var(--accent-strong);
+         padding: 0.1rem 0.3rem; border-radius: 4px; font-family: var(--mono); }
   li { margin: 0.4rem 0; }
+  footer { background: var(--ink); color: #a9c6c5; font-size: 0.88rem; margin-top: 40px; }
+  .footer-inner { max-width: 44rem; margin: 0 auto; padding: 18px 1rem 26px; }
 </style>
 </head>
 <body>
+<header><div class="header-inner"><span class="wordmark">911TransEdu</span><span class="service">BlackBerry LAN</span></div></header>
+<main>
 <h1>BlackBerry LAN — Air Platform Core</h1>
 <p>The runnable core of the BlackBerry 10 / QNX + Python design
 (<em>BlackBerry_LAN.pdf</em>): the <strong>AirCore</strong> stack VM,
@@ -27,5 +69,7 @@ zero-trust policy, running as a fleet service.</p>
 <p>The handset layers in the design (Cascades/QML UI, C++ bridge, signed
 .bar packaging for a BlackBerry 10 device) are design material for a device
 build; this service is the server-side core.</p>
+</main>
+<footer><div class="footer-inner">BlackBerry LAN — Air Platform Core</div></footer>
 </body>
 </html>
