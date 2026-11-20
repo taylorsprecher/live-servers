@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SyncFlow — Backend–Frontend Sync Flow</title>
+<link rel="stylesheet" href="__BASE_PATH__/assets/fleet.css">
 <style>
   :root {
-    --bg: #0b1220; --panel: #111a2e; --panel2: #0e1626; --line: #1e2a44;
-    --text: #e6edf3; --dim: #8b98b8; --accent: #4f8cff; --green: #3fb96f;
-    --red: #e5534b; --orange: #d29922; --purple: #a371f7;
+    --bg: #f6f8f9; --panel: #ffffff; --panel2: #f6f8f9; --line: #d8e0e4;
+    --text: #16232c; --dim: #5b6d77; --accent: #0e7c7b; --green: #177245;
+    --red: #b3261e; --orange: #9a6a00; --purple: #095e5d;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
@@ -64,6 +65,12 @@
 </style>
 </head>
 <body>
+<header class="fl-header"><div class="fl-header-inner">
+  <a class="fl-wordmark" href="/members/">911TransEdu</a>
+  <span class="fl-service">SyncFlow</span>
+  <nav class="fl-nav"><a href="__BASE_PATH__/" aria-current="page">Sync demo</a></nav>
+</div></header>
+<main class="fl-main">
 <div class="wrap">
   <h1>SyncFlow</h1>
   <p class="sub">The Backend–Frontend Sync Flow, running live: optimistic updates, versioned deltas, and 409 conflict resolution between two devices editing one profile.</p>
@@ -79,7 +86,7 @@
   </div>
 
   <div class="grid">
-    <section class="panel" id="device-a">
+    <section class="panel fl-card" id="device-a">
       <h2>📱 Device A — Phone <span class="ver">v?</span></h2>
       <p class="hint">Profile Screen. Edits save optimistically: the panel updates first, then the gateway confirms.</p>
       <div class="fields"></div>
@@ -91,7 +98,7 @@
       <div class="delta"></div>
     </section>
 
-    <section class="panel" id="device-b">
+    <section class="panel fl-card" id="device-b">
       <h2>💻 Device B — Laptop <span class="ver">v?</span></h2>
       <p class="hint">A second device with its own copy of the profile and its own base version. Save here first, then save a stale edit on Device A to produce a real 409 conflict.</p>
       <div class="fields"></div>
@@ -103,7 +110,7 @@
       <div class="delta"></div>
     </section>
 
-    <section class="panel" id="resolver">
+    <section class="panel fl-card" id="resolver">
       <h2>⚠️ Conflict Resolver</h2>
       <p class="hint" id="resolver-note"></p>
       <table>
@@ -117,13 +124,13 @@
       <div class="status" id="resolver-status"></div>
     </section>
 
-    <section class="panel">
+    <section class="panel fl-card">
       <h2>📡 Event Stream <span style="color:var(--dim);font-size:.8rem;font-weight:400">— the Event Listener, live</span></h2>
       <p class="hint">Events emitted by the Event Bus as they happen: DELTA_CREATED, PROFILE_UPDATED, CONFLICT_DETECTED.</p>
       <ul class="events" id="events"><li class="empty">Listening…</li></ul>
     </section>
 
-    <section class="panel">
+    <section class="panel fl-card">
       <h2>🧾 Stored Deltas</h2>
       <p class="hint">Every delta the sync engine computed and stored, oldest first.</p>
       <div class="deltas" id="deltas"><span style="color:var(--dim)">None yet.</span></div>
@@ -132,6 +139,11 @@
 
   <p class="foot">Demo data only — one invented demo profile. <button class="secondary" id="reset">Reset demo</button> restores the profile at version 1 and clears the delta history and event stream.</p>
 </div>
+</main>
+<footer class="fl-footer"><div class="fl-footer-inner">
+  <span>Taylor's Transgender Patient Awareness, LLC</span>
+  <a href="https://911transedu.net">911transedu.net</a>
+</div></footer>
 
 <script>
 const BASE = "__BASE_PATH__";
