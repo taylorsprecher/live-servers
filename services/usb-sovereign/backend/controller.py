@@ -26,6 +26,10 @@ FAILOVER_THRESHOLD_S = 5.0  # spec: cellular silence > 5.0 s binds ZILTB
 
 PAIRS = [("COM1", "COM2"), ("Sport", "Coort"),
          ("COM_HDMI1", "COM_HDMI2")]
+
+# The HDMI bridge pair is the Apple TV link (Taylor, 2026-11-19):
+# the device on COM_HDMI1 <-> COM_HDMI2 is the Apple TV ('Cave').
+PAIR_DEVICES = {"COM_HDMI1": "Apple TV"}
 INGEST_SOURCES = ["LH", "FSH", "BT", "WIFI", "LAN"]
 ALL_SOURCES = ["COM1", "COM2", "Sport", "Coort",
                "COM_HDMI1", "COM_HDMI2", "CELL", "ZILTB"] + INGEST_SOURCES
@@ -247,13 +251,16 @@ class UnifiedSerialController:
             }
         pairs = []
         for a, b in PAIRS:
-            pairs.append({
+            entry = {
                 "a": a, "b": b,
                 "a_to_b_bytes": self.ports[b].bytes_transmitted,
                 "b_to_a_bytes": self.ports[a].bytes_transmitted,
                 "a_bytes_per_s": sources[a]["bytes_per_s"],
                 "b_bytes_per_s": sources[b]["bytes_per_s"],
-            })
+            }
+            if a in PAIR_DEVICES:
+                entry["device"] = PAIR_DEVICES[a]
+            pairs.append(entry)
         mirrors = {}
         for source, (target, prefix) in MIRRORS.items():
             target_port = self.ports.get(target)
