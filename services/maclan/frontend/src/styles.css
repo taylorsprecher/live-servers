@@ -1,14 +1,47 @@
+/* MacLAN — Fleet design-system adoption (DESIGN.md §3, Tier 2).
+   Canonical Fleet tokens copied verbatim from design-system/fleet.css;
+   every color/font/radius below re-points at those tokens. The app is a
+   light Fleet surface with an ink sidebar; the terminal / bandwidth /
+   gauge canvases stay ink-dark because App.tsx draws them with light
+   gridlines and traces (JS drawing colors are untouched). All class
+   names are unchanged — App.tsx hooks are sacred. */
+:root {
+  --ink: #0f1f2e;
+  --ink-soft: #1b3448;
+  --accent: #0e7c7b;
+  --accent-strong: #095e5d;
+  --accent-soft: #e3f2f1;
+  --bg: #f6f8f9;
+  --surface: #ffffff;
+  --line: #d8e0e4;
+  --text: #16232c;
+  --muted: #5b6d77;
+  --ok: #177245;
+  --ok-soft: #e5f3ec;
+  --warn: #9a6a00;
+  --warn-soft: #faf1da;
+  --bad: #b3261e;
+  --bad-soft: #fbeae9;
+  --radius: 12px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 3px rgba(15, 31, 46, 0.10), 0 4px 14px rgba(15, 31, 46, 0.06);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #1e1e22;
-  color: #f5f5f7;
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
 }
 .window { display: flex; min-height: 100vh; }
 .sidebar {
   width: 240px; flex-shrink: 0; padding: 16px 12px;
-  background: rgba(40, 40, 46, 0.9); border-right: 1px solid #3a3a40;
+  background: var(--ink); border-right: 1px solid var(--ink-soft);
+  color: #eaf1f4;
   display: flex; flex-direction: column; gap: 6px;
 }
 .traffic { display: flex; gap: 8px; margin-bottom: 8px; }
@@ -16,77 +49,83 @@ body {
 .traffic span:nth-child(1) { background: #ff5f57; }
 .traffic span:nth-child(2) { background: #febc2e; }
 .traffic span:nth-child(3) { background: #28c840; }
-.sidebar h1 { font-size: 20px; margin: 4px 8px 0; }
+.sidebar h1 { font-size: 20px; margin: 4px 8px 0; color: #ffffff; }
+.sidebar .muted { color: #a9c6c5; }
 .sidebar nav { display: flex; flex-direction: column; gap: 2px; margin-top: 10px; }
 .nav {
   text-align: left; padding: 7px 10px; border: 0; border-radius: 8px;
-  background: transparent; color: #f5f5f7; font-size: 14px; cursor: pointer;
+  background: transparent; color: #eaf1f4; font-size: 14px; cursor: pointer;
+  min-height: 40px;
 }
-.nav:hover { background: #3a3a42; }
-.nav.active { background: #0a84ff; }
-.sidefoot { margin-top: auto; padding: 8px; }
+.nav:hover { background: var(--ink-soft); }
+.nav.active { background: var(--accent); color: #ffffff; }
+.sidefoot { margin-top: auto; padding: 8px; color: #a9c6c5; }
 .panel { flex: 1; padding: 24px 28px; overflow-y: auto; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.card { background: #2c2c32; border: 1px solid #3a3a40; border-radius: 12px; padding: 14px 16px; }
-.card h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #a1a1a6; }
-.card p { margin: 0; font-size: 17px; font-weight: 600; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 16px; }
+.card h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.card p { margin: 0; font-size: 17px; font-weight: 600; color: var(--ink); }
 .tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
-.tbl th { text-align: left; color: #a1a1a6; font-weight: 500; padding: 8px 10px; border-bottom: 1px solid #3a3a40; }
-.tbl td { padding: 8px 10px; border-bottom: 1px solid #2c2c32; }
+.tbl th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.tbl td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
 .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-.mono { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.mono { font-family: var(--mono); font-size: 13px; }
 .cap { text-transform: capitalize; }
-.muted { color: #a1a1a6; }
+.muted { color: var(--muted); }
 .small { font-size: 12px; }
 button {
-  background: #0a84ff; color: #fff; border: 0; border-radius: 7px;
+  background: var(--accent); color: #fff; border: 1px solid var(--accent); border-radius: var(--radius-sm);
   padding: 5px 12px; font-size: 13px; cursor: pointer; text-transform: capitalize;
+  min-height: 36px;
 }
+button:hover { background: var(--accent-strong); border-color: var(--accent-strong); }
 button:disabled { opacity: .5; }
 input {
-  background: #2c2c32; border: 1px solid #48484e; border-radius: 7px;
-  color: #f5f5f7; padding: 6px 10px; font-size: 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-sm);
+  color: var(--text); padding: 6px 10px; font-size: 14px; min-height: 36px;
 }
+input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
 .row { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; }
 .terminal {
-  background: #101013; border: 1px solid #3a3a40; border-radius: 10px;
-  padding: 14px 16px; font-family: ui-monospace, Menlo, monospace; font-size: 13px;
+  background: var(--ink); color: #eaf1f4; border: 1px solid var(--ink-soft); border-radius: var(--radius-sm);
+  padding: 14px 16px; font-family: var(--mono); font-size: 13px;
   white-space: pre-wrap;
 }
-.stub { background: #2c2c32; border: 1px dashed #48484e; border-radius: 12px; padding: 18px; }
-.error { background: #5c1a1a; border: 1px solid #a33; border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; }
+.stub { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius); padding: 18px; }
+.error { background: var(--bad-soft); color: var(--bad); border: 1px solid var(--bad); border-radius: var(--radius-sm); padding: 10px 14px; margin-bottom: 16px; }
 
 /* Increment 2 — TCP/IP panel, Bluetooth controls, bandwidth graph */
 .card.block { margin-bottom: 16px; }
 .row.wrap { flex-wrap: wrap; }
 .row.top { margin-top: 14px; margin-bottom: 0; }
-button.ghost { background: transparent; border: 1px solid #48484e; color: #a1a1a6; }
+button.ghost { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+button.ghost:hover { border-color: var(--accent); color: var(--accent-strong); background: var(--surface); }
 tr.dim td { opacity: .45; }
 .seg { display: flex; gap: 18px; margin-bottom: 14px; font-size: 14px; }
 .seg label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
 .formgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-.formgrid label, label.inline { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: #a1a1a6; }
-label.inline { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; color: #f5f5f7; }
+.formgrid label, label.inline { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+label.inline { flex-direction: row; align-items: center; gap: 8px; font-size: 14px; color: var(--text); }
 .switchrow { display: flex; gap: 9px; align-items: center; font-size: 14px; cursor: pointer; }
 .switch { position: relative; width: 40px; height: 24px; flex-shrink: 0; display: inline-block; }
-.switch input { opacity: 0; width: 0; height: 0; }
+.switch input { opacity: 0; width: 0; height: 0; min-height: 0; }
 .slider {
-  position: absolute; inset: 0; border-radius: 24px; background: #48484e;
+  position: absolute; inset: 0; border-radius: 24px; background: var(--line);
   transition: background .15s;
 }
 .slider::before {
   content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%;
   background: #fff; top: 3px; left: 3px; transition: transform .15s;
 }
-.switch input:checked + .slider { background: #30d158; }
+.switch input:checked + .slider { background: var(--ok); }
 .switch input:checked + .slider::before { transform: translateX(16px); }
-.graphwrap { background: #2c2c32; border: 1px solid #3a3a40; border-radius: 12px; padding: 14px; }
-canvas.bw { width: 100%; height: auto; display: block; background: #1a1a1e; border-radius: 8px; }
+.graphwrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; }
+canvas.bw { width: 100%; height: auto; display: block; background: var(--ink); border-radius: 8px; }
 .legend { display: flex; gap: 18px; align-items: center; margin-top: 10px; }
 .legend .dot { margin-right: 5px; }
 
 /* 2026-11-10 — Ping Tester scrollback, Bandwidth Test gauge, RF panel */
 .pingterm { max-height: 280px; overflow-y: auto; }
 .gaugewrap { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
-canvas.gauge { background: #1a1a1e; border-radius: 8px; display: block; }
+canvas.gauge { background: var(--ink); border-radius: 8px; display: block; }
 .legend { flex-wrap: wrap; }
