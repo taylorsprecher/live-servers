@@ -20,12 +20,13 @@ function fmtTime(ts) {
   return d.toTimeString().slice(0, 8);
 }
 
-const SOURCE_ORDER = ["CELL", "ZILTB", "LAN", "WIFI", "BT", "LH", "FSH", "COM1", "COM2", "Sport", "Coort"];
+const SOURCE_ORDER = ["CELL", "ZILTB", "LAN", "WIFI", "BT", "LH", "FSH", "COM1", "COM2", "Sport", "Coort", "COM_HDMI1", "COM_HDMI2"];
 
 function renderPairs(pairs) {
   $("pairs").innerHTML = pairs.map(p => `
     <div class="pair-card">
       <div class="pair-title">${p.a} <span>&harr;</span> ${p.b}</div>
+      ${p.device ? `<div class="flow"><span class="dir">device</span> <strong>${p.device}</strong></div>` : ""}
       <div class="flow"><span class="dir">${p.a} &rarr; ${p.b}</span>
         <strong>${fmtBytes(p.a_to_b_bytes)} · ${fmtRate(p.a_bytes_per_s)}</strong></div>
       <div class="flow"><span class="dir">${p.b} &rarr; ${p.a}</span>
