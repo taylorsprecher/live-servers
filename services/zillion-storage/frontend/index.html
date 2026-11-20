@@ -4,36 +4,48 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Zillion Storage — 1 Zillion TB</title>
+<link rel="stylesheet" href="assets/fleet.css">
 <style>
-  body { font-family: -apple-system, system-ui, sans-serif; margin: 2rem auto; max-width: 760px; padding: 0 1rem; line-height: 1.45; }
-  h1 { font-size: 1.5rem; margin-bottom: .25rem; }
-  .sub { color: #666; margin-top: 0; }
-  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-  th, td { border: 1px solid #ccc; padding: .4rem .6rem; text-align: left; font-size: .92rem; }
-  code { background: #f2f2f2; padding: .1rem .3rem; border-radius: 4px; }
-  .ok { color: #137333; font-weight: 600; }
-  .pending { color: #b06000; font-weight: 600; }
-  form { margin: 1.5rem 0; }
-  button { padding: .45rem .9rem; }
+  .ok { color: var(--ok); font-weight: 600; }
+  .pending { color: var(--warn); font-weight: 600; }
   #msg { white-space: pre-wrap; font-size: .9rem; }
+  form#up { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  form#up input[type="file"] { min-height: 44px; }
 </style>
 </head>
 <body>
+<header class="fl-header"><div class="fl-header-inner">
+  <a class="fl-wordmark" href="/members/">911TransEdu</a>
+  <span class="fl-service">Zillion Storage</span>
+  <nav class="fl-nav"><a href="./" aria-current="page">Storage</a></nav>
+</div></header>
+<main class="fl-main">
 <h1>Zillion Storage</h1>
-<p class="sub">The runnable core of the <strong>Python Cloud — 1 Zillion TB</strong> design: streaming ingest, concurrent replication, retry with backoff, and SHA-256 verification on every object. “1 Zillion TB” is the design’s name — the real capacity of each backend is shown below, exactly as measured.</p>
+<p class="fl-muted">The runnable core of the <strong>Python Cloud — 1 Zillion TB</strong> design: streaming ingest, concurrent replication, retry with backoff, and SHA-256 verification on every object. “1 Zillion TB” is the design’s name — the real capacity of each backend is shown below, exactly as measured.</p>
 
+<section class="fl-card">
 <h2>Backends</h2>
-<table id="backends"><tr><th>Backend</th><th>Type</th><th>Status</th><th>Capacity</th></tr></table>
+<div class="fl-table-wrap"><table class="fl-table" id="backends"><tr><th>Backend</th><th>Type</th><th>Status</th><th>Capacity</th></tr></table></div>
+</section>
 
+<section class="fl-card">
 <h2>Store an object</h2>
 <form id="up">
   <input type="file" id="file" required>
-  <button type="submit">Upload with replication + verification</button>
+  <button class="fl-btn fl-btn-primary" type="submit">Upload with replication + verification</button>
 </form>
 <p id="msg"></p>
+</section>
 
+<section class="fl-card">
 <h2>Objects</h2>
-<table id="objects"><tr><th>Name</th><th>Size</th><th>SHA-256</th><th>Verify</th></tr></table>
+<div class="fl-table-wrap"><table class="fl-table" id="objects"><tr><th>Name</th><th>Size</th><th>SHA-256</th><th>Verify</th></tr></table></div>
+</section>
+</main>
+<footer class="fl-footer"><div class="fl-footer-inner">
+  <span>Taylor's Transgender Patient Awareness, LLC</span>
+  <a href="https://911transedu.net">911transedu.net</a>
+</div></footer>
 
 <script>
 const base = location.pathname.endsWith('/') ? location.pathname : location.pathname + '/';

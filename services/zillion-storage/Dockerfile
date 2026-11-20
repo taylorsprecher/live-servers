@@ -11,6 +11,7 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
+COPY assets/ ./assets/
 
 RUN useradd --create-home zillion && mkdir -p /data && chown -R zillion:zillion /app /data
 USER zillion
