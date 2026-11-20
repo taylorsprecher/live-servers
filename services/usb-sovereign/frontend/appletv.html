@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Apple TV — HDMI Link</title>
+<meta name="theme-color" content="#000000">
+<!-- Home-screen install (Taylor, 2026-11-19): opens standalone from the
+     iPhone Home Screen via these tags + apple-touch-icon.png; the web
+     app manifest covers Android/Chrome. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Apple TV Link">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="appletv.css">
+</head>
+<body>
+<header>
+  <div>
+    <h1>Apple TV <span>HDMI Link</span></h1>
+    <p class="sub">USB-SOVEREIGN bridge pair COM_HDMI1 &#8596; COM_HDMI2 · device: Apple TV (&lsquo;Cave&rsquo;) · 115200 baud</p>
+  </div>
+  <div class="meta">
+    <div>Session <strong id="session-id">—</strong></div>
+    <div>Uptime <strong id="uptime">—</strong></div>
+    <div id="conn" class="conn">connecting…</div>
+  </div>
+</header>
+
+<section class="glass hero">
+  <div class="hero-state">
+    <div class="label">Link state</div>
+    <div id="link-state" class="state-badge">—</div>
+    <div id="link-note" class="note">Apple TV link on the bridge&rsquo;s HDMI pair</div>
+  </div>
+  <div class="hero-flow">
+    <div class="flow-block">
+      <div class="label">COM_HDMI1 &rarr; COM_HDMI2</div>
+      <div class="big" id="a-to-b">—</div>
+      <div class="rate" id="a-rate">—</div>
+    </div>
+    <div class="flow-block">
+      <div class="label">COM_HDMI2 &rarr; COM_HDMI1</div>
+      <div class="big" id="b-to-a">—</div>
+      <div class="rate" id="b-rate">—</div>
+    </div>
+  </div>
+</section>
+
+<section class="glass chart-card">
+  <div class="label">Throughput — bytes/s, last 60 updates</div>
+  <canvas id="chart" height="120"></canvas>
+  <div class="legend">
+    <span class="sw a"></span> HDMI1 &rarr; HDMI2
+    <span class="sw b"></span> HDMI2 &rarr; HDMI1
+  </div>
+</section>
+
+<section class="endpoints">
+  <div class="glass endpoint">
+    <h3>COM_HDMI1</h3>
+    <table class="kv">
+      <tr><td>Frames in</td><td id="h1-frames">—</td></tr>
+      <tr><td>Bytes in</td><td id="h1-bytes">—</td></tr>
+      <tr><td>Rate</td><td id="h1-rate">—</td></tr>
+      <tr><td>Last activity</td><td id="h1-last">—</td></tr>
+      <tr><td>Baud</td><td>115200</td></tr>
+    </table>
+  </div>
+  <div class="glass endpoint">
+    <h3>COM_HDMI2</h3>
+    <table class="kv">
+      <tr><td>Frames in</td><td id="h2-frames">—</td></tr>
+      <tr><td>Bytes in</td><td id="h2-bytes">—</td></tr>
+      <tr><td>Rate</td><td id="h2-rate">—</td></tr>
+      <tr><td>Last activity</td><td id="h2-last">—</td></tr>
+      <tr><td>Baud</td><td>115200</td></tr>
+    </table>
+  </div>
+  <div class="glass endpoint">
+    <h3>Bridge context</h3>
+    <table class="kv">
+      <tr><td>Active uplink</td><td id="ctx-uplink">—</td></tr>
+      <tr><td>Failovers</td><td id="ctx-failovers">—</td></tr>
+      <tr><td>Envelopes published</td><td id="ctx-published">—</td></tr>
+      <tr><td>MQTT</td><td id="ctx-mqtt">—</td></tr>
+    </table>
+  </div>
+</section>
+
+<footer>
+  <a href="index.html">&larr; Full bridge dashboard</a>
+  <span>USB-SOVEREIGN v1 · HDMI bridge pair · front end for the Apple TV link</span>
+</footer>
+<script src="appletv.js"></script>
+</body>
+</html>
