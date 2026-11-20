@@ -1,0 +1,58 @@
+name: Deploy fileslib service only
+
+# Targeted deploy: rsync the repo (same as deploy.yml), then build and
+# recreate ONLY the fileslib service on the host and force-recreate the
+# gateway so it loads the current locations-common.conf. Used instead
+# of the full deploy.sh so deploy.sh's RAM gate is not in play for a
+# one-service change; see ops/deploy-fileslib.sh for the reasoning. TLS
+# config, DNS, all other routes and services are untouched.
+#
+# Added for the Stage 3 redesign deploy (2026-11-20): the existing deploy-files-library workflow re-stages volume bytes; the redesign needs a code-only deploy that leaves the fileslib-data volume untouched.
+# The optional deploy_ref input checks out a different tree (e.g. the
+# baseline/production-2026-11-20 branch for a rollback) while running
+# this workflow's tooling; empty = the ref this run was dispatched from.
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_ref:
+        description: 'Tree to deploy (empty = dispatched ref; set to baseline/production-2026-11-20 to roll back)'
+        required: false
+        default: ''
+
+jobs:
+  deploy-fileslib:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.deploy_ref }}
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync repo to host
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'secrets/' \
+            --exclude 'tls-state/' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Build + up fileslib only on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/ops/deploy-fileslib.sh'
