@@ -76,6 +76,8 @@ FRAME_HEADERS = {
     "COM2": b"\x41\x4c\x31",        # 'AL1'
     "Sport": b"\x41\x53\x30",       # 'AS0' sport_handshake
     "Coort": b"\x41\x43\x31",       # 'AC1' coort_response
+    "COM_HDMI1": b"\x41\x44\x31",   # 'AD1' hdmi_display_link
+    "COM_HDMI2": b"\x41\x44\x32",   # 'AD2' hdmi_display_link
     "LH": b"\x41\x48\x30",          # bio-telemetry
     "FSH": b"\x41\x46\x30",
     "BT": b"\x41\x42\x30",
