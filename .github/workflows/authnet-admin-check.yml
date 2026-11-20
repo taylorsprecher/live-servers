@@ -1,0 +1,48 @@
+name: Authorize.net admin check
+
+# One-purpose diagnostic: rsync the repo to the host, then run
+# ops/authnet-admin-check.sh there. The script ensures the ledger
+# admin token (PAYLEDGER_ADMIN_TOKEN) exists in the host .env —
+# generating it host-side if absent, exactly like
+# ops/deploy-payledger.sh — and uses it host-side to call the
+# ledger's admin-gated Authorize.net credential check on loopback.
+# The token never leaves the host and never appears in this log;
+# the only output is the check's JSON result (no credential values).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  authnet-admin-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Rsync repo to host
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'secrets/' \
+            --exclude 'tls-state/' \
+            --exclude '.venv' \
+            --exclude 'venv' \
+            --exclude 'node_modules' \
+            --exclude '__pycache__' \
+            --exclude 'demo/' \
+            -e "ssh -i ~/.ssh/id_deploy" \
+            ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Run Authorize.net credential check on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/ops/authnet-admin-check.sh'
