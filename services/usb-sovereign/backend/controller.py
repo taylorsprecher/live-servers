@@ -24,9 +24,11 @@ from collections import deque
 
 FAILOVER_THRESHOLD_S = 5.0  # spec: cellular silence > 5.0 s binds ZILTB
 
-PAIRS = [("COM1", "COM2"), ("Sport", "Coort")]
+PAIRS = [("COM1", "COM2"), ("Sport", "Coort"),
+         ("COM_HDMI1", "COM_HDMI2")]
 INGEST_SOURCES = ["LH", "FSH", "BT", "WIFI", "LAN"]
-ALL_SOURCES = ["COM1", "COM2", "Sport", "Coort", "CELL", "ZILTB"] + INGEST_SOURCES
+ALL_SOURCES = ["COM1", "COM2", "Sport", "Coort",
+               "COM_HDMI1", "COM_HDMI2", "CELL", "ZILTB"] + INGEST_SOURCES
 
 # Bio-telemetry mirroring (bio_telemetry_routing RDL): an LH frame whose
 # header is 0x41A0 (lh_surge) is mirrored byte-for-byte to COM3, and an
@@ -118,7 +120,10 @@ class UnifiedSerialController:
         now = time.time()
         ports = self.ports
 
-        # 1. Paired forwarding loops: COM1 <-> COM2, Sport <-> Coort (R1/R2)
+        # 1. Paired forwarding loops: COM1 <-> COM2, Sport <-> Coort,
+        #    COM_HDMI1 <-> COM_HDMI2 (R1/R2; the HDMI bridge pair is
+        #    from the 'Cport to Coort' spec update, 2026-11-10: 115200
+        #    baud, bidirectional forwarding, same telemetry fan-out)
         for a, b in PAIRS:
             pa, pb = ports[a], ports[b]
             if pa.in_waiting > 0:
