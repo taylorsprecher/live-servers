@@ -1,0 +1,38 @@
+name: Stage 0 fleet backup to S3
+
+# Manually dispatched (Stage 0 of the fleet redesign, 2026-11-20).
+# Copies ops/fleet_backup.py to the host and runs it there. The script
+# snapshots every live-servers Docker volume (online tar via a throwaway
+# container) plus a pg_dump of the paydb Postgres, uploads everything to
+# S3 with checksums, verifies each object (HEAD + list), and prints the
+# full inventory into this run log. No service is restarted; nothing
+# about the live site changes. Host .env credentials are read on the
+# host only and never printed.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  stage0-fleet-backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Copy backup script to host
+        run: |
+          scp -i ~/.ssh/id_deploy ops/fleet_backup.py \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/fleet_backup.py"
+
+      - name: Run backup on host
+        run: |
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'python3 /home/deploy/fleet_backup.py'
