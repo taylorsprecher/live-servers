@@ -33,6 +33,7 @@ jobs:
           rsync -az --delete \
             --exclude '.git/' \
             --exclude '.env' \
+            --exclude 'secrets/' \
             --exclude 'tls-state/' \
             --exclude '.venv' \
             --exclude 'venv' \
