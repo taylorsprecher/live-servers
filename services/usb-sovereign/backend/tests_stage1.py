@@ -531,8 +531,9 @@ from simulated_ports import SimulatedSerialPort  # noqa: E402
 
 def _sim_controller(with_store=False):
     ports = {name: SimulatedSerialPort(name, baudrate=9600) for name in
-             ("COM1", "COM2", "Sport", "Coort", "LH", "FSH", "CELL",
-              "BT", "WIFI", "LAN", "ZILTB", "COM3", "COM4")}
+             ("COM1", "COM2", "Sport", "Coort", "COM_HDMI1", "COM_HDMI2",
+              "LH", "FSH", "CELL", "BT", "WIFI", "LAN", "ZILTB",
+              "COM3", "COM4")}
     dyn = DynamoDbStubSink()
     iot = MqttIoTStubSink(on_publish=dyn.put)
     s3 = S3BatchLoggerStub(log_dir=tempfile.mkdtemp(prefix="usb-sov-logs-"))
