@@ -99,6 +99,32 @@ check("compose payledger passes AUTHNET credentials",
 check("compose payledger passes AUTHNET_ENABLED (unset default)",
       "AUTHNET_ENABLED" in compose)
 
+# eCheck (ACH) checkout: second switch, public route, catalog
+# amounts, buyer authorization, pending-settlement markers.
+check("authnet eCheck gated by AUTHNET_ECHECK_ENABLED",
+      "AUTHNET_ECHECK_ENABLED" in authnet_src)
+check("authnet eCheck records pending settlement",
+      "PENDING_SETTLEMENT" in authnet_src and '"ECHECK"' in authnet_src)
+check("authnet checkout catalog is server-side",
+      "ECHECK_PRODUCTS" in authnet_src)
+check("app.py documents the public echeck checkout route",
+      "checkout/echeck" in app)
+routes_src = open(os.path.join(HERE, "app_pkg", "routes.py"), encoding="utf-8").read()
+check("routes expose the public echeck checkout",
+      '"/checkout/echeck"' in routes_src and "public_echeck_checkout" in routes_src)
+check("compose payledger passes AUTHNET_ECHECK_ENABLED (unset default)",
+      "AUTHNET_ECHECK_ENABLED" in compose)
+member_pages = open(
+    os.path.join(REPO, "services", "member-site", "app_pkg", "pages.py"),
+    encoding="utf-8",
+).read()
+check("buy pages carry the ACH option with the WEB authorization sentence",
+      "Or pay by bank account — ACH" in member_pages
+      and "I authorize Taylor's Transgender Patient Awareness, LLC to debit "
+          "my bank account for this purchase" in member_pages)
+check("buy pages tokenize bank data with Accept.js, never post it",
+      "Accept.dispatchData" in member_pages and "bankData" in member_pages)
+
 if failures:
     print(f"\n{len(failures)} FAILURES")
     sys.exit(1)

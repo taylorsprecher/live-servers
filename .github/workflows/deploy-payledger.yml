@@ -16,6 +16,10 @@ name: Deploy payment ledger
 # The deliberate on-switch is this workflow's enable_authnet dispatch
 # input: set it true and the deploy also upserts AUTHNET_ENABLED=1
 # into the host .env (ops/set-authnet-enabled.sh) before the build.
+# eCheck (ACH) has a second, independent on-switch of the same kind:
+# the enable_echeck input upserts AUTHNET_ECHECK_ENABLED=1
+# (ops/set-authnet-echeck-enabled.sh). Both default false; a plain
+# deploy changes neither switch.
 # No other service is rebuilt; the audited production stack is
 # untouched.
 
@@ -24,6 +28,10 @@ on:
     inputs:
       enable_authnet:
         description: "Also set AUTHNET_ENABLED=1 in the host .env (turns the Authorize.net processor ON at this deploy)"
+        type: boolean
+        default: false
+      enable_echeck:
+        description: "Also set AUTHNET_ECHECK_ENABLED=1 in the host .env (turns Authorize.net eCheck/ACH charges ON at this deploy; needs enable_authnet too, valid credentials, and the members redeploy with AUTHNET_CLIENT_KEY before buyers see the ACH option)"
         type: boolean
         default: false
 
@@ -93,6 +101,17 @@ jobs:
         run: |
           printf 'AUTHNET_ENABLED=1\n' | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
               'bash /home/deploy/live-servers/ops/set-authnet-enabled.sh'
+
+      # eCheck on-switch: same deliberate pattern, one level up.
+      # Runs ONLY when the dispatcher set the enable_echeck input
+      # true. Writes AUTHNET_ECHECK_ENABLED=1 into the host .env
+      # before the build. A plain deploy never touches either
+      # switch. See ops/set-authnet-echeck-enabled.sh.
+      - name: Enable Authorize.net eCheck (only when requested)
+        if: ${{ inputs.enable_echeck }}
+        run: |
+          printf 'AUTHNET_ECHECK_ENABLED=1\n' | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/live-servers/ops/set-authnet-echeck-enabled.sh'
 
       - name: Build + up payledger on host
         run: |

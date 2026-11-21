@@ -296,6 +296,7 @@ class FakeCursor:
             self.attempts[params[0]] = {
                 "id": params[0], "payment_intent_id": params[1],
                 "psp_name": params[2], "status": "PENDING",
+                "features": params[3],
             }
         elif s.startswith("UPDATE payment_attempts"):
             self.attempts[params[1]]["status"] = "DECLINED"
@@ -352,6 +353,149 @@ try:
     except ProcessorDisabled:
         check("charge refuses while disabled before any DB write",
               "authnet:test-3" not in cur.intents)
+finally:
+    authnet._ledger = real_ledger
+
+# ------------------------------------------------------------------ eCheck gates
+
+ECHECK_ENV = dict(DUMMY_ENV, AUTHNET_ECHECK_ENABLED="1")
+
+cfg = cfg_from(DUMMY_ENV)
+check("eCheck off by default: card-enabled config is not eCheck-enabled",
+      not cfg.echeck_enabled())
+check("eCheck off reason names AUTHNET_ECHECK_ENABLED",
+      "AUTHNET_ECHECK_ENABLED" in (cfg.echeck_disabled_reason() or ""))
+
+cfg = cfg_from(env_without("AUTHNET_ENABLED") | {"AUTHNET_ECHECK_ENABLED": "1"})
+check("eCheck flag on but processor switch off -> eCheck disabled (base gate first)",
+      not cfg.echeck_enabled()
+      and "AUTHNET_ENABLED" in (cfg.echeck_disabled_reason() or ""))
+
+cfg = cfg_from(ECHECK_ENV)
+check("both switches on + credentials present -> eCheck enabled", cfg.echeck_enabled())
+st = authnet.status(cfg)
+check("status() reports eCheck state, no credential values anywhere",
+      st["echeck_enabled"] is True and st["echeck_disabled_reason"] is None
+      and "dummy-login-id" not in json.dumps(st)
+      and "dummy-transaction-key" not in json.dumps(st))
+st = authnet.status(cfg_from(DUMMY_ENV))
+check("status() reports eCheck disabled reason while the flag is off",
+      st["echeck_enabled"] is False
+      and "AUTHNET_ECHECK_ENABLED" in (st["echeck_disabled_reason"] or ""))
+
+try:
+    authnet.execute_echeck_charge(cfg_from(DUMMY_ENV), 1500, "nonce-x",
+                                  transport=transport_forbidden)
+    check("execute_echeck_charge refuses while the eCheck switch is off",
+          False, "no exception raised")
+except ProcessorDisabled as exc:
+    check("execute_echeck_charge refuses while the eCheck switch is off",
+          "AUTHNET_ECHECK_ENABLED" in str(exc))
+
+check("eCheck cap guard fires before the gateway is touched",
+      raises_value_error(lambda: authnet.execute_echeck_charge(
+          cfg_from(ECHECK_ENV), 600001, "nonce-x", transport=transport_forbidden)))
+
+calls = []
+res = authnet.execute_echeck_charge(cfg_from(ECHECK_ENV), 1500, "bank-nonce-1",
+                                    invoice="CCCE-TEST",
+                                    transport=transport_returning(CHARGE_OK, calls))
+sent = calls[0]["createTransactionRequest"]["transactionRequest"]
+check("execute_echeck_charge approves on responseCode 1, spends the nonce as opaqueData",
+      res["approved"] is True
+      and sent["payment"]["opaqueData"]["dataValue"] == "bank-nonce-1"
+      and sent["amount"] == "15.00"
+      and "bankAccount" not in json.dumps(calls[0]))
+
+# ------------------------------------------------------------------ eCheck recording
+
+cur2 = FakeCursor()
+fake2 = FakeLedger(cur2)
+authnet._ledger = lambda: fake2  # noqa: E731
+try:
+    try:
+        authnet.authnet_echeck_charge(
+            cur2, {"amount": 1500, "nonce": "bank-nonce-1",
+                   "idempotency_key": "echeck-noauth"},
+            cfg=cfg_from(ECHECK_ENV), transport=transport_forbidden)
+        check("eCheck charge without buyer authorization is refused", False,
+              "no exception raised")
+    except ValueError as exc:
+        check("eCheck charge without buyer authorization is refused",
+              "authorize" in str(exc) and "authnet:echeck-noauth" not in cur2.intents)
+
+    calls = []
+    out = authnet.authnet_echeck_charge(
+        cur2, {"amount": 1500, "nonce": "bank-nonce-1", "authorization": True,
+               "account_type": "checking", "invoice": "CCCE-TEST",
+               "idempotency_key": "echeck-1"},
+        cfg=cfg_from(ECHECK_ENV), transport=transport_returning(CHARGE_OK, calls))
+    check("approved eCheck charge records CAPTURED with pending-settlement state",
+          out["approved"] is True and out["intent"]["status"] == "CAPTURED"
+          and out["payment_method"] == "ECHECK"
+          and out["settlement_state"] == "PENDING_SETTLEMENT")
+    check("eCheck recording used the canonical captured event, marked eCheck + pending",
+          len(fake2.events) == 1
+          and fake2.events[0]["payload"]["kind"] == "captured"
+          and fake2.events[0]["payload"]["payment_method"] == "ECHECK"
+          and fake2.events[0]["payload"]["settlement_state"] == "PENDING_SETTLEMENT")
+    feats = json.loads(list(cur2.attempts.values())[0]["features"])
+    check("eCheck attempt features mark method, WEB type, pending settlement",
+          feats["payment_method"] == "ECHECK" and feats["echeck_type"] == "WEB"
+          and feats["settlement_state"] == "PENDING_SETTLEMENT"
+          and feats["account_type"] == "checking")
+
+    out = authnet.authnet_echeck_charge(
+        cur2, {"amount": 1500, "nonce": "bank-nonce-2", "authorization": True,
+               "idempotency_key": "echeck-2"},
+        cfg=cfg_from(ECHECK_ENV), transport=transport_returning(CHARGE_DECLINE))
+    check("declined eCheck charge: intent FAILED, no journal event",
+          out["approved"] is False and out["intent"]["status"] == "FAILED"
+          and out["settlement_state"] is None and len(fake2.events) == 1)
+
+    try:
+        authnet.authnet_echeck_charge(
+            cur2, {"amount": 1500, "nonce": "bank-nonce-3", "authorization": True,
+                   "idempotency_key": "echeck-3"},
+            cfg=cfg_from(DUMMY_ENV), transport=transport_forbidden)
+        check("eCheck charge refuses while the switch is off, before any DB write",
+              False, "no exception")
+    except ProcessorDisabled:
+        check("eCheck charge refuses while the switch is off, before any DB write",
+              "authnet:echeck-3" not in cur2.intents)
+
+    # Public checkout: the amount comes from the catalog, never the request.
+    calls = []
+    out = authnet.checkout_echeck(
+        cur2, {"product": "ccce", "nonce": "bank-nonce-9", "email": "buyer@example.com",
+               "authorization": True, "amount": 1, "idempotency_key": "co-1"},
+        cfg=cfg_from(ECHECK_ENV), transport=transport_returning(CHARGE_OK, calls))
+    sent = calls[0]["createTransactionRequest"]["transactionRequest"]
+    check("checkout charges the catalog price, not the requested amount",
+          out["approved"] is True and out["amount_minor"] == 1500
+          and sent["amount"] == "15.00")
+    check("checkout result is buyer-safe: no intent internals",
+          "intent" not in out and out["payment_method"] == "ECHECK"
+          and out["settlement_state"] == "PENDING_SETTLEMENT")
+
+    try:
+        authnet.checkout_echeck(
+            cur2, {"product": "nope", "nonce": "bank-nonce-9",
+                   "email": "buyer@example.com", "authorization": True},
+            cfg=cfg_from(ECHECK_ENV), transport=transport_forbidden)
+        check("checkout refuses an unknown product", False, "no exception")
+    except ValueError as exc:
+        check("checkout refuses an unknown product", "unknown product" in str(exc))
+
+    try:
+        authnet.checkout_echeck(
+            cur2, {"product": "ccce", "nonce": "bank-nonce-9",
+                   "email": "buyer@example.com", "authorization": True},
+            cfg=cfg_from(DUMMY_ENV), transport=transport_forbidden)
+        check("checkout refuses 503-style while eCheck is disabled", False, "no exception")
+    except ProcessorDisabled as exc:
+        check("checkout refuses 503-style while eCheck is disabled",
+              "eCheck is disabled" in str(exc))
 finally:
     authnet._ledger = real_ledger
 

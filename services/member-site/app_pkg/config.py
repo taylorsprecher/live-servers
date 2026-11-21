@@ -33,6 +33,35 @@ PBKDF2_ROUNDS = 200_000
 CASHAPP_CASHTAG = os.environ.get("CASHAPP_CASHTAG") or "$taylorsprecher2026"
 
 
+# ACH (eCheck) checkout on the buy pages. The section renders only
+# when ALL THREE hold — the same "exists only while configured"
+# pattern as the GoDaddy Pay Link section:
+#   * AUTHNET_ECHECK_ENABLED=1 (the same switch the payment
+#     ledger's eCheck gate reads; one host .env entry arms both),
+#   * the Authorize.net API Login ID is present,
+#   * the Authorize.net PUBLIC Client Key is present.
+# The Login ID and Client Key are browser-public identifiers by
+# design (Accept.js authData; the Client Key "may safely be stored
+# in a website" per Authorize.net) — the Transaction Key is a
+# secret, is never configured here, and never appears on a page.
+# Bank routing/account numbers are tokenized by Accept.js in the
+# buyer's browser and never reach this service.
+AUTHNET_ECHECK_ENABLED = (os.environ.get("AUTHNET_ECHECK_ENABLED") or "") == "1"
+AUTHNET_API_LOGIN_ID = (os.environ.get("AUTHNET_API_LOGIN_ID") or "").strip()
+AUTHNET_CLIENT_KEY = (os.environ.get("AUTHNET_CLIENT_KEY") or "").strip()
+AUTHNET_ENV = (os.environ.get("AUTHNET_ENV") or "production").strip().lower()
+if AUTHNET_ENV not in ("production", "sandbox"):
+    AUTHNET_ENV = "production"
+ACH_CHECKOUT_READY = bool(
+    AUTHNET_ECHECK_ENABLED and AUTHNET_API_LOGIN_ID and AUTHNET_CLIENT_KEY
+)
+ACCEPT_JS_URL = (
+    "https://jstest.authorize.net/v1/Accept.js"
+    if AUTHNET_ENV == "sandbox"
+    else "https://js.authorize.net/v1/Accept.js"
+)
+
+
 BTC_RATE_URL = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
 
 

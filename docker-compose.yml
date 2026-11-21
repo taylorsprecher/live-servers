@@ -136,6 +136,15 @@ services:
       # Public base for links and return URLs on this domain.
       PUBLIC_BASE_URL: https://members.911transedu.net
       CASHAPP_CASHTAG: ${CASHAPP_CASHTAG:-}
+      # ACH (eCheck) buy-page section: renders only when the switch
+      # is on AND both Accept.js identifiers are present. The API
+      # Login ID and the PUBLIC Client Key are browser-public by
+      # design; the Transaction Key is a secret and is NEVER passed
+      # to this service.
+      AUTHNET_ECHECK_ENABLED: ${AUTHNET_ECHECK_ENABLED:-}
+      AUTHNET_API_LOGIN_ID: ${AUTHNET_API_LOGIN_ID:-}
+      AUTHNET_CLIENT_KEY: ${AUTHNET_CLIENT_KEY:-}
+      AUTHNET_ENV: ${AUTHNET_ENV:-production}
     volumes:
       - members-data:/data
     ports:
@@ -278,6 +287,10 @@ services:
       AUTHNET_TRANSACTION_KEY: ${AUTHNET_TRANSACTION_KEY:-}
       AUTHNET_ENV: ${AUTHNET_ENV:-production}
       AUTHNET_ENABLED: ${AUTHNET_ENABLED:-}
+      # eCheck (ACH) has its own second switch on top of
+      # AUTHNET_ENABLED: eCheck charges refuse until the host .env
+      # explicitly sets AUTHNET_ECHECK_ENABLED=1 as well.
+      AUTHNET_ECHECK_ENABLED: ${AUTHNET_ECHECK_ENABLED:-}
     depends_on:
       - paydb
     ports:

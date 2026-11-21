@@ -21,9 +21,29 @@ Design rules, in order:
    "sandbox"). Values are never logged, never placed in ledger rows,
    and never returned by any function in this module.
 
-3. CARD NUMBERS NEVER TOUCH THIS SERVICE. Charges submit an
-   Accept.js payment nonce (opaqueData) minted in the buyer's
-   browser; this module only forwards the nonce.
+3. CARD NUMBERS NEVER TOUCH THIS SERVICE — and neither do bank
+   routing/account numbers. Charges submit an Accept.js payment
+   nonce (opaqueData) minted in the buyer's browser; this module
+   only forwards the nonce. Accept.js tokenizes bank accounts the
+   same way (secureData.bankData -> opaqueData, per the Accept.js
+   documentation), and a bank nonce spent in
+   createTransactionRequest is an eCheck.Net debit (SEC code WEB).
+
+3b. eCHECK HAS ITS OWN SECOND SWITCH. Card charges need
+   AUTHNET_ENABLED=1; eCheck charges additionally need
+   AUTHNET_ECHECK_ENABLED=1 (the eCheck.Net service was activated
+   on the account 2026-11-21). Either switch off, or credentials
+   missing, and eCheck operations refuse exactly like card ones.
+   An eCheck charge also requires the buyer's explicit debit
+   authorization (the WEB authorization checkbox on the buy page)
+   to be asserted in the request — without it the charge is
+   refused before anything is created or sent. An approved
+   eCheck response means the gateway ACCEPTED the debit: the
+   canonical captured event records it (the clearing expectation
+   is real), and the attempt is marked payment_method=ECHECK /
+   settlement_state=PENDING_SETTLEMENT, because eCheck funds
+   hold ~5 business days and a debit can still return; settlement
+   then arrives through the same canonical surfaces as cards.
 
 4. LEDGER WRITES GO THROUGH THE EXISTING WRITE PATH. A successful
    charge is recorded exactly the way the inbox worker records a
@@ -99,6 +119,7 @@ class AuthNetConfig:
         self.env = name if name in ENDPOINTS else "production"
         self.endpoint = ENDPOINTS[self.env]
         self.enabled_flag = (env.get("AUTHNET_ENABLED") or "").strip() == "1"
+        self.echeck_flag = (env.get("AUTHNET_ECHECK_ENABLED") or "").strip() == "1"
 
     def missing(self):
         out = []
@@ -123,6 +144,20 @@ class AuthNetConfig:
     def enabled(self):
         return self.disabled_reason() is None
 
+    def echeck_disabled_reason(self):
+        """None when eCheck charges may run; otherwise why not.
+        The base processor gates apply first (processor switch +
+        credentials), then the eCheck switch itself."""
+        reason = self.disabled_reason()
+        if reason is not None:
+            return reason
+        if not self.echeck_flag:
+            return "AUTHNET_ECHECK_ENABLED is not set to 1"
+        return None
+
+    def echeck_enabled(self):
+        return self.echeck_disabled_reason() is None
+
     def auth_block(self):
         return {"name": self.login_id, "transactionKey": self.txn_key}
 
@@ -136,6 +171,15 @@ def require_enabled(cfg):
         )
 
 
+def require_echeck_enabled(cfg):
+    reason = cfg.echeck_disabled_reason()
+    if reason is not None:
+        raise ProcessorDisabled(
+            f"Authorize.net eCheck is disabled ({reason}); "
+            "eCheck charges are refused, nothing was sent to the gateway"
+        )
+
+
 def status(cfg=None):
     """Health-report block. Contains no credential material — only
     whether each gate is satisfied."""
@@ -146,6 +190,8 @@ def status(cfg=None):
         "configured": cfg.configured(),
         "env": cfg.env,
         "disabled_reason": cfg.disabled_reason(),
+        "echeck_enabled": cfg.echeck_enabled(),
+        "echeck_disabled_reason": cfg.echeck_disabled_reason(),
     }
 
 
@@ -154,9 +200,12 @@ def log_state(cfg=None):
     cfg = cfg or AuthNetConfig()
     st = status(cfg)
     if st["enabled"]:
+        echeck = "ENABLED" if st["echeck_enabled"] else (
+            f"DISABLED ({st['echeck_disabled_reason']})")
         print(
             f"payment-ledger authnet: ENABLED (env={st['env']}); "
-            "credentials present (values never logged)",
+            "credentials present (values never logged); "
+            f"eCheck {echeck}",
             flush=True,
         )
     else:
@@ -345,11 +394,12 @@ def interpret_charge_response(resp):
     }
 
 
-def execute_charge(cfg, amount_minor, nonce, descriptor=DEFAULT_DESCRIPTOR,
-                   invoice="", description="", email="", transport=None):
-    """Gateway call only — no ledger writes. Raises ProcessorDisabled,
-    ValueError (bad amount / missing nonce), or ProcessorError."""
-    require_enabled(cfg)
+def _execute_nonce_charge(cfg, amount_minor, nonce, descriptor,
+                          invoice, description, email, transport):
+    """Gateway call only — no ledger writes, no gate checks (the
+    callers gate). A nonce is a nonce: card and bank (eCheck)
+    Accept.js nonces spend identically, as an opaqueData
+    authCaptureTransaction."""
     _, amount = parse_amount_minor(amount_minor)
     nonce = (nonce or "").strip()
     if not nonce:
@@ -361,6 +411,26 @@ def execute_charge(cfg, amount_minor, nonce, descriptor=DEFAULT_DESCRIPTOR,
     except ApiError as err:
         raise ProcessorError("CHARGE FAILED - " + explain_auth_failure(err))
     return interpret_charge_response(resp)
+
+
+def execute_charge(cfg, amount_minor, nonce, descriptor=DEFAULT_DESCRIPTOR,
+                   invoice="", description="", email="", transport=None):
+    """Gateway call only — no ledger writes. Raises ProcessorDisabled,
+    ValueError (bad amount / missing nonce), or ProcessorError."""
+    require_enabled(cfg)
+    return _execute_nonce_charge(cfg, amount_minor, nonce, descriptor,
+                                 invoice, description, email, transport)
+
+
+def execute_echeck_charge(cfg, amount_minor, nonce, descriptor=DEFAULT_DESCRIPTOR,
+                          invoice="", description="", email="", transport=None):
+    """The eCheck twin of execute_charge: same nonce spend, gated on
+    the eCheck switch as well as the processor switch. The nonce
+    must have been minted from bank data (Accept.js bankData); the
+    gateway then processes the debit as eCheck (WEB)."""
+    require_echeck_enabled(cfg)
+    return _execute_nonce_charge(cfg, amount_minor, nonce, descriptor,
+                                 invoice, description, email, transport)
 
 
 def transaction_status(cfg=None, trans_id=None, transport=None):
@@ -403,7 +473,8 @@ def _new_uuid():
     return str(uuid.uuid4())
 
 
-def record_charge(cur, intent, attempt_id, result, amount_minor, currency):
+def record_charge(cur, intent, attempt_id, result, amount_minor, currency,
+                  event_extra=None):
     """Record a completed gateway charge through the ledger's
     existing write path, inside the caller's transaction.
 
@@ -414,7 +485,10 @@ def record_charge(cur, intent, attempt_id, result, amount_minor, currency):
     Declined: the attempt is marked DECLINED with the gateway's
     code and the intent walks to FAILED (the sandbox_authorize
     pattern). No journal is posted for a decline.
-    Returns the fresh intent row."""
+    `event_extra` merges additional markers into the captured
+    event payload (eCheck carries payment_method / settlement
+    state); process_event ignores keys it does not consume, so the
+    canonical posting is unchanged. Returns the fresh intent row."""
     ledger = _ledger()
     if result["approved"]:
         payload = {
@@ -426,6 +500,8 @@ def record_charge(cur, intent, attempt_id, result, amount_minor, currency):
             "amount": amount_minor,
             "currency": currency,
         }
+        if event_extra:
+            payload.update(event_extra)
         ledger.process_event(cur, {
             "payload": payload,
             "external_event_id": result["trans_id"],
@@ -438,6 +514,43 @@ def record_charge(cur, intent, attempt_id, result, amount_minor, currency):
         )
         ledger.move_status(cur, intent, "FAILED", attempt_id)
     return ledger.get_intent(cur, intent["id"])
+
+
+def _create_intent_attempt(cur, data, amount_minor, currency, merchant_id, feats):
+    """The intent + PENDING attempt every Authorize.net charge
+    starts from, under idempotency key authnet:{key}. Returns
+    (existing_intent, None, None) when the key repeats — a retried
+    request never charges twice — else (None, intent_id,
+    attempt_id)."""
+    dedupe = data.get("idempotency_key") or data.get("invoice") or _new_uuid()
+    intent_key = f"authnet:{dedupe}"
+
+    cur.execute(
+        "SELECT * FROM payment_intents WHERE idempotency_key = %s", (intent_key,)
+    )
+    existing = cur.fetchone()
+    if existing:
+        return existing, None, None
+
+    intent_id = _new_uuid()
+    cur.execute(
+        "INSERT INTO payment_intents (id, idempotency_key, merchant_id, amount, currency, status) "
+        "VALUES (%s, %s, %s, %s, %s, 'CREATED')",
+        (intent_id, intent_key, merchant_id, amount_minor, currency),
+    )
+    cur.execute(
+        "INSERT INTO payment_state_transitions (payment_intent_id, from_status, to_status) "
+        "VALUES (%s, NULL, 'CREATED')",
+        (intent_id,),
+    )
+    attempt_id = _new_uuid()
+    cur.execute(
+        "INSERT INTO payment_attempts (id, payment_intent_id, attempt_type, psp_name, "
+        "psp_transaction_id, status, raw_response_code, features) "
+        "VALUES (%s, %s, 'AUTHORIZATION', %s, NULL, 'PENDING', NULL, %s)",
+        (attempt_id, intent_id, PSP_NAME, json.dumps(feats)),
+    )
+    return None, intent_id, attempt_id
 
 
 def authnet_charge(cur, data, cfg=None, transport=None):
@@ -461,40 +574,16 @@ def authnet_charge(cur, data, cfg=None, transport=None):
         raise ValueError("nonce (Accept.js dataValue) is required")
     currency = (data.get("currency") or "USD").upper()
     merchant_id = data.get("merchant_id") or MERCHANT_ID
-    dedupe = data.get("idempotency_key") or data.get("invoice") or _new_uuid()
-    intent_key = f"authnet:{dedupe}"
-
-    cur.execute(
-        "SELECT * FROM payment_intents WHERE idempotency_key = %s", (intent_key,)
-    )
-    existing = cur.fetchone()
-    if existing:
-        return {"intent": existing, "deduplicated": True, "charged": False}
-
-    intent_id = _new_uuid()
-    cur.execute(
-        "INSERT INTO payment_intents (id, idempotency_key, merchant_id, amount, currency, status) "
-        "VALUES (%s, %s, %s, %s, %s, 'CREATED')",
-        (intent_id, intent_key, merchant_id, amount_minor, currency),
-    )
-    cur.execute(
-        "INSERT INTO payment_state_transitions (payment_intent_id, from_status, to_status) "
-        "VALUES (%s, NULL, 'CREATED')",
-        (intent_id,),
-    )
-    attempt_id = _new_uuid()
     feats = {
         "entry_mode": "CARD_NOT_PRESENT",
         "descriptor": data.get("descriptor") or DEFAULT_DESCRIPTOR,
     }
     if data.get("invoice"):
         feats["invoice"] = data["invoice"]
-    cur.execute(
-        "INSERT INTO payment_attempts (id, payment_intent_id, attempt_type, psp_name, "
-        "psp_transaction_id, status, raw_response_code, features) "
-        "VALUES (%s, %s, 'AUTHORIZATION', %s, NULL, 'PENDING', NULL, %s)",
-        (attempt_id, intent_id, PSP_NAME, json.dumps(feats)),
-    )
+    existing, intent_id, attempt_id = _create_intent_attempt(
+        cur, data, amount_minor, currency, merchant_id, feats)
+    if existing is not None:
+        return {"intent": existing, "deduplicated": True, "charged": False}
 
     result = execute_charge(
         cfg, amount_minor, nonce,
@@ -516,3 +605,169 @@ def authnet_charge(cur, data, cfg=None, transport=None):
         "auth_code": result["auth_code"],
         "message": result["message"],
     }
+
+
+# ---------------------------------------------------------------- eCheck
+
+ECHECK_TYPE = "WEB"  # the SEC code an Accept.js bank nonce spends as
+SETTLEMENT_PENDING = "PENDING_SETTLEMENT"
+ACCOUNT_TYPES = ("checking", "savings", "businessChecking")
+
+# The public checkout sells exactly the member site's catalog, at
+# the catalog prices — the buyer never names an amount. Keys and
+# prices mirror services/member-site/app_pkg/catalog.py.
+ECHECK_PRODUCTS = {
+    "ccce": {
+        "amount_minor": 1500,
+        "invoice_prefix": "CCCE",
+        "description": "CCCE course — Cultural Competence Continuing Education",
+    },
+    "emspr": {
+        "amount_minor": 600000,
+        "invoice_prefix": "EMSPR",
+        "description": "EMSPR Protocols",
+    },
+}
+
+
+def authnet_echeck_charge(cur, data, cfg=None, transport=None):
+    """Full eCheck adapter used by the public checkout route.
+
+    data: amount (minor units), nonce (Accept.js dataValue minted
+    from bankData), authorization (must be exactly True — the
+    buyer's WEB debit authorization from the buy-page checkbox),
+    account_type?, descriptor?, invoice?, description?, email?,
+    currency?, merchant_id?, idempotency_key?.
+
+    Same intent/idempotency/recording discipline as authnet_charge;
+    the differences are the gates (eCheck switch), the required
+    authorization assertion, and the markers: the attempt features
+    and the captured event carry payment_method=ECHECK and
+    settlement_state=PENDING_SETTLEMENT, and an approved result
+    reports that pending state — the gateway accepted the debit,
+    the money has not settled yet.
+    """
+    cfg = cfg or AuthNetConfig()
+    require_echeck_enabled(cfg)
+    if data.get("authorization") is not True:
+        raise ValueError(
+            "the buyer must authorize the bank debit (the authorization "
+            "checkbox on the buy page) before an eCheck charge can be "
+            "submitted; nothing was charged")
+    amount_minor, _ = parse_amount_minor(data.get("amount"))
+    nonce = (data.get("nonce") or data.get("data_value") or "").strip()
+    if not nonce:
+        raise ValueError("nonce (Accept.js dataValue) is required")
+    account_type = (data.get("account_type") or "checking").strip()
+    if account_type not in ACCOUNT_TYPES:
+        raise ValueError(
+            "account_type must be one of: " + ", ".join(ACCOUNT_TYPES))
+    currency = (data.get("currency") or "USD").upper()
+    merchant_id = data.get("merchant_id") or MERCHANT_ID
+    feats = {
+        "entry_mode": "ECHECK",
+        "payment_method": "ECHECK",
+        "echeck_type": ECHECK_TYPE,
+        "settlement_state": SETTLEMENT_PENDING,
+        "account_type": account_type,
+        "descriptor": data.get("descriptor") or DEFAULT_DESCRIPTOR,
+    }
+    if data.get("invoice"):
+        feats["invoice"] = data["invoice"]
+    existing, intent_id, attempt_id = _create_intent_attempt(
+        cur, data, amount_minor, currency, merchant_id, feats)
+    if existing is not None:
+        return {"intent": existing, "deduplicated": True, "charged": False}
+
+    result = execute_echeck_charge(
+        cfg, amount_minor, nonce,
+        descriptor=data.get("descriptor") or DEFAULT_DESCRIPTOR,
+        invoice=data.get("invoice") or "",
+        description=data.get("description") or "",
+        email=data.get("email") or "",
+        transport=transport,
+    )
+    intent = {"id": intent_id, "status": "CREATED", "amount": amount_minor,
+              "currency": currency}
+    intent = record_charge(
+        cur, intent, attempt_id, result, amount_minor, currency,
+        event_extra={
+            "payment_method": "ECHECK",
+            "settlement_state": SETTLEMENT_PENDING,
+        },
+    )
+    return {
+        "intent": intent,
+        "deduplicated": False,
+        "charged": True,
+        "approved": result["approved"],
+        "trans_id": result["trans_id"],
+        "auth_code": result["auth_code"],
+        "message": result["message"],
+        "payment_method": "ECHECK",
+        "settlement_state": SETTLEMENT_PENDING if result["approved"] else None,
+    }
+
+
+def checkout_echeck(cur, data, cfg=None, transport=None):
+    """Public buy-page checkout: POST /ledger/checkout/echeck.
+
+    data: product (catalog key), nonce, descriptor?, email,
+    authorization, account_type?, idempotency_key?.
+
+    The amount comes from the server-side catalog (ECHECK_PRODUCTS),
+    never from the request. The buyer's email is required (it is the
+    member account the purchase belongs to, and the gateway's
+    customer email). Returns a buyer-safe result dict — no intent
+    internals, no credential material.
+    """
+    cfg = cfg or AuthNetConfig()
+    require_echeck_enabled(cfg)
+    product_key = (data.get("product") or "").strip().lower()
+    product = ECHECK_PRODUCTS.get(product_key)
+    if product is None:
+        raise ValueError(
+            "unknown product for ACH checkout: "
+            f"{product_key or '(missing)'} — expected one of: "
+            + ", ".join(sorted(ECHECK_PRODUCTS)))
+    email = (data.get("email") or "").strip()
+    if not email or "@" not in email:
+        raise ValueError("the buyer's account email is required")
+    dedupe = (data.get("idempotency_key") or "").strip() or _new_uuid()
+    invoice = f"{product['invoice_prefix']}-{dedupe[:8]}"
+    charge_data = {
+        "amount": product["amount_minor"],
+        "nonce": data.get("nonce") or data.get("data_value") or "",
+        "descriptor": data.get("descriptor") or DEFAULT_DESCRIPTOR,
+        "invoice": invoice,
+        "description": product["description"],
+        "email": email,
+        "authorization": data.get("authorization"),
+        "account_type": data.get("account_type") or "checking",
+        "idempotency_key": dedupe,
+    }
+    result = authnet_echeck_charge(cur, charge_data, cfg=cfg, transport=transport)
+    out = {
+        "product": product_key,
+        "amount_minor": product["amount_minor"],
+        "deduplicated": result["deduplicated"],
+        "charged": result["charged"],
+    }
+    if result["charged"]:
+        out.update({
+            "approved": result["approved"],
+            "trans_id": result["trans_id"],
+            "message": result["message"],
+            "payment_method": result["payment_method"],
+            "settlement_state": result["settlement_state"],
+        })
+    else:
+        out.update({
+            "approved": None,
+            "trans_id": None,
+            "message": "this payment was already submitted — it is not "
+                       "being charged twice",
+            "payment_method": "ECHECK",
+            "settlement_state": None,
+        })
+    return out

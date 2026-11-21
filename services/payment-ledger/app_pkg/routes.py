@@ -229,6 +229,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path.startswith(BASE + "/webhooks/"):
                 return self.webhook(path[len(BASE + "/webhooks/"):])
+            if path == BASE + "/checkout/echeck":
+                return self.public_echeck_checkout()
             if not self.admin_ok():
                 return self.send_json({"error": "admin token required"}, 401)
 
@@ -540,6 +542,43 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
             return self.send_json({"error": f"{type(exc).__name__}: {exc}"}, 500)
+
+    # -- Public ACH checkout (buy pages) --------------------------------
+    def public_echeck_checkout(self):
+        """POST /ledger/checkout/echeck — the one public write.
+
+        Called by the member site's buy pages after Accept.js has
+        tokenized the buyer's bank account in the browser; the body
+        carries only the payment nonce (bank numbers never reach
+        this service). Deliberately NOT behind the admin token —
+        safety comes from the fail-closed gates instead: the route
+        refuses 503 unless the processor AND the eCheck switch are
+        on with credentials present, the amount comes from the
+        server-side catalog (the buyer cannot name a price), the
+        buyer's debit authorization must be asserted, and the
+        idempotency key makes a retried submission charge once."""
+        try:
+            data = self.body_json()
+        except Exception:
+            return self.send_json({"error": "request body must be JSON"}, 400)
+        conn = db()
+        try:
+            with _lock, conn.cursor() as cur:
+                result = authnet.checkout_echeck(cur, data)
+            conn.commit()
+        except ProcessorDisabled as exc:
+            conn.rollback()
+            return self.send_json({"error": str(exc)}, 503)
+        except ValueError as exc:
+            conn.rollback()
+            return self.send_json({"error": str(exc)}, 400)
+        except ProcessorError as exc:
+            conn.rollback()
+            return self.send_json({"error": str(exc)}, 502)
+        return self.send_json(
+            {"echeck_checkout": result},
+            200 if result.get("deduplicated") else 201,
+        )
 
     # -- Webhooks (Stage 1: verify, land raw, acknowledge) --------------
     def webhook(self, source):

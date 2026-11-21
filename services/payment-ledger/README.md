@@ -185,6 +185,54 @@ largest single transaction **$6,000**, monthly sales **$6,000**
   (`ops/payledger_behavioral.py` §1b: dummy-nonce charge never
   approves, never posts) cover the wiring at deploy time.
 
+## eCheck (ACH) checkout (built 2026-11-21, DISABLED by default)
+
+eCheck.Net was activated on the merchant account 2026-11-21
+(limits identical to cards: $6,000 per transaction / $6,000 per
+month; types PPD/WEB/CCD/TEL; funds hold 5 business days). The
+adapter's card path spends Accept.js nonces; Accept.js tokenizes
+bank accounts identically (`secureData.bankData` → `opaqueData`,
+per the Accept.js documentation), and a bank nonce spent in
+`createTransactionRequest` is an eCheck debit (SEC code WEB).
+Bank routing/account numbers therefore never reach this service,
+exactly like card numbers.
+
+- **Second switch (fail closed):** eCheck charges require
+  `AUTHNET_ENABLED=1` AND `AUTHNET_ECHECK_ENABLED=1` AND the
+  credentials. `/ledger/health` reports `echeck_enabled` /
+  `echeck_disabled_reason` alongside the card state. The
+  deliberate flip is `deploy-payledger.yml`'s `enable_echeck`
+  input (`ops/set-authnet-echeck-enabled.sh`) — a plain deploy
+  changes neither switch.
+- **Public route:** `POST /ledger/checkout/echeck` — the ledger's
+  one public write, called by the member site's buy pages. It is
+  not behind the admin token; safety is the fail-closed gates,
+  a **server-side catalog** (`authnet.ECHECK_PRODUCTS`: ccce
+  $15.00, emspr $6,000.00 — the buyer never names an amount), a
+  required buyer **authorization assertion** (the WEB debit
+  authorization checkbox on the buy page; without it the charge
+  is refused before anything is created), and the same
+  `authnet:{key}` idempotency discipline as card charges.
+- **Recording:** through the same canonical captured event as
+  cards, with markers: the attempt features and the captured
+  event carry `payment_method=ECHECK`, `echeck_type=WEB`,
+  `settlement_state=PENDING_SETTLEMENT` — an approved eCheck
+  response means the gateway accepted the debit; the money
+  settles ~5 business days later through the canonical
+  settlement surfaces, and a returned debit surfaces through
+  reconciliation like any other exception.
+- **Buy pages:** the member site renders an "Or pay by bank
+  account — ACH" section only while configured (the GoDaddy
+  section's pattern): `AUTHNET_ECHECK_ENABLED=1` plus the API
+  Login ID plus the **Public Client Key** (`AUTHNET_CLIENT_KEY`)
+  in the members environment. The Login ID and Client Key are
+  browser-public by design; the Transaction Key is never passed
+  to the member site. Go-live order: fix the stored Transaction
+  Key (the E00007 fix), deploy payledger with `enable_echeck`,
+  generate the Public Client Key in the portal (Account →
+  Settings → Security Settings → Manage Public Client Key) into
+  the host `.env`, redeploy members.
+
 ## Verified before deploy (local PostgreSQL 16, 2026-11-15)
 
 Schema applies cleanly; invalid state transition rejected;

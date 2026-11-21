@@ -3,11 +3,17 @@ Body markup, copy, and logic are the monolith's, moved function-for-function;
 the PAGE shell now links the vendored fleet.css and uses the Fleet
 header/footer pattern."""
 import html
+import json
 import os
 import time
+import uuid
 
 from .catalog import COLLECTIONS, COURSES, price_line
 from .config import (
+    ACCEPT_JS_URL,
+    ACH_CHECKOUT_READY,
+    AUTHNET_API_LOGIN_ID,
+    AUTHNET_CLIENT_KEY,
     BASE,
     CASHAPP_CASHTAG,
     CONTENT_DIR,
@@ -364,6 +370,138 @@ def apps_page(member=None):
     )
 
 
+def _ach_section(course, member, amount):
+    """ACH (eCheck) section for the buy page — "" unless the
+    checkout is configured (config.ACH_CHECKOUT_READY: the eCheck
+    switch plus the Accept.js identifiers), the same
+    exists-only-while-configured pattern as the GoDaddy section.
+
+    The bank fields carry NO name attributes and sit outside any
+    form: nothing on this page can submit them to our server. The
+    inline script hands them to Accept.js (Accept.dispatchData
+    with bankData), which exchanges them at Authorize.net for a
+    one-time payment nonce; only the nonce, the product key, the
+    member's account email, an idempotency key, and the
+    authorization assertion are posted — to the payment ledger's
+    public checkout route, which charges the server-side catalog
+    amount. The pay button stays disabled until the WEB debit
+    authorization box is checked."""
+    if not ACH_CHECKOUT_READY:
+        return ""
+    if member is not None and course["key"] in member_access(member["id"]):
+        return ""
+    if member is None:
+        return (
+            '<div class="card"><h2>Or pay by bank account — ACH</h2>'
+            '<p class="small">You can also pay by bank account (ACH) '
+            "once you sign in — your account comes first, because "
+            "your account email is how the payment is matched.</p></div>"
+        )
+    script = """<script>
+(function () {
+  var btn = document.getElementById("ach-pay");
+  var auth = document.getElementById("ach-auth");
+  var msg = document.getElementById("ach-msg");
+  function show(text, ok) {
+    msg.textContent = text;
+    msg.className = ok ? "msg ok" : "msg";
+    msg.style.display = "block";
+  }
+  auth.addEventListener("change", function () { btn.disabled = !auth.checked; });
+  btn.addEventListener("click", function () {
+    if (!auth.checked) { return; }
+    btn.disabled = true;
+    var bankData = {
+      accountNumber: document.getElementById("ach-account").value,
+      routingNumber: document.getElementById("ach-routing").value,
+      nameOnAccount: document.getElementById("ach-name").value,
+      accountType: document.getElementById("ach-type").value
+    };
+    var secureData = {
+      authData: { apiLoginID: __LOGIN__, clientKey: __CLIENT_KEY__ },
+      bankData: bankData
+    };
+    Accept.dispatchData(secureData, function (response) {
+      if (response.messages.resultCode === "Error") {
+        var parts = [];
+        for (var i = 0; i < response.messages.message.length; i++) {
+          parts.push(response.messages.message[i].text);
+        }
+        show("Your bank details were not accepted: " + parts.join(" "), false);
+        btn.disabled = false;
+        return;
+      }
+      document.getElementById("ach-account").value = "";
+      document.getElementById("ach-routing").value = "";
+      var payload = {
+        product: __PRODUCT__,
+        nonce: response.opaqueData.dataValue,
+        descriptor: response.opaqueData.dataDescriptor,
+        email: __EMAIL__,
+        authorization: true,
+        account_type: bankData.accountType,
+        idempotency_key: __IDEM__
+      };
+      fetch("/ledger/checkout/echeck", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }).then(function (r) {
+        return r.json().then(function (doc) { return { doc: doc }; });
+      }).then(function (res) {
+        var doc = res.doc || {};
+        if (doc.error) { show(doc.error, false); btn.disabled = false; return; }
+        var out = doc.echeck_checkout || {};
+        if (out.approved) {
+          show("Payment submitted — thank you. eCheck payments take " +
+               "several business days to settle; your access unlocks " +
+               "as soon as the payment is confirmed.", true);
+        } else if (out.deduplicated) {
+          show(out.message || "This payment was already submitted.", true);
+        } else {
+          show(out.message || "The payment was not approved.", false);
+          btn.disabled = false;
+        }
+      }).catch(function () {
+        show("Something went wrong sending the payment. Please try " +
+             "again, or use Cash App above.", false);
+        btn.disabled = false;
+      });
+    });
+  });
+})();
+</script>"""
+    script = (
+        script.replace("__LOGIN__", json.dumps(AUTHNET_API_LOGIN_ID))
+        .replace("__CLIENT_KEY__", json.dumps(AUTHNET_CLIENT_KEY))
+        .replace("__PRODUCT__", json.dumps(course["key"]))
+        .replace("__EMAIL__", json.dumps(member["email"]))
+        .replace("__IDEM__", json.dumps(uuid.uuid4().hex))
+    )
+    return f"""
+<div class="card"><h2>Or pay by bank account — ACH</h2>
+<p>Pay {amount} straight from your bank account (eCheck). Your
+routing and account numbers go only to Authorize.net, the payment
+processor — never to this site: your browser exchanges them for a
+one-time payment token, and that token is all this site ever sees.</p>
+<label for="ach-name">Name on account</label>
+<input id="ach-name" type="text" autocomplete="off" maxlength="22">
+<label for="ach-routing">Routing number</label>
+<input id="ach-routing" type="text" inputmode="numeric" autocomplete="off" maxlength="9">
+<label for="ach-account">Account number</label>
+<input id="ach-account" type="text" inputmode="numeric" autocomplete="off" maxlength="17">
+<label for="ach-type">Account type</label>
+<select id="ach-type"><option value="checking">Checking</option><option value="savings">Savings</option></select>
+<label style="font-weight:400"><input id="ach-auth" type="checkbox" style="width:auto;min-height:0;margin-right:8px">I authorize Taylor's Transgender Patient Awareness, LLC to debit my bank account for this purchase — a one-time eCheck debit of {amount}.</label>
+<p class="small">eCheck payments take several business days to
+settle. Access unlocks as soon as the payment is confirmed.</p>
+<button id="ach-pay" type="button" disabled>Pay {amount} by bank account</button>
+<p id="ach-msg" style="display:none"></p>
+</div>
+<script src="{esc(ACCEPT_JS_URL)}" charset="utf-8"></script>
+{script}"""
+
+
 def buy_page(course, member=None, message="", ok=False):
     """Stable public purchase page for one product: /members/buy/<key>.
 
@@ -555,6 +693,7 @@ download then appears on your Member Desk.</li>
 </ol>
 {btc_action}
 </div>"""
+    ach_section = _ach_section(course, member, amount)
     body = f"""
 <h1>Buy — {esc(course["name"])}</h1>
 <p class="small">Taylor's Transgender Patient Awareness, LLC · sold only on this site</p>
@@ -577,6 +716,7 @@ download then appears on your Member Desk.</li>
 {action}
 </div>
 {godaddy_section}
+{ach_section}
 {btc_section}
 <p><a class="btn secondary" href="{BASE}/preview">Preview the courses</a>
 <a class="btn secondary" href="{BASE}/desk">Member Desk</a></p>

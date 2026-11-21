@@ -56,6 +56,12 @@ HTTP surface (BASE_PATH, default /ledger):
                                 through the canonical captured event
   POST /ledger/processor/authnet/status  Authorize.net transaction
                                 status read-back
+  POST /ledger/checkout/echeck  public ACH (eCheck) checkout for the
+                                buy pages: fixed server-side catalog
+                                amounts, Accept.js bank nonce, buyer
+                                debit authorization required; refuses
+                                503 unless the processor is enabled AND
+                                AUTHNET_ECHECK_ENABLED=1 (fail closed)
   GET  /ledger/balances         ledger account balances
   GET  /ledger/exceptions       reconciliation exceptions
   GET  /ledger/recon/status     match / exception counts

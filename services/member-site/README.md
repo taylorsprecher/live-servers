@@ -46,7 +46,23 @@ host port 18109, loopback only; the gateway is the public entry point).
   payment note), and the owner-confirmation unlock; signed-in members
   get the order button on the page. The public training site's buy
   buttons point at these URLs (2026-11-12 sales decision).
-- **Keys**: this app holds no payment-processor keys at all.
+- **ACH (eCheck) — built 2026-11-21, not yet live**: an "Or pay by
+  bank account — ACH" section (the GoDaddy section's
+  exists-only-while-configured pattern) renders only when
+  `AUTHNET_ECHECK_ENABLED=1` and the Accept.js identifiers
+  (`AUTHNET_API_LOGIN_ID` + `AUTHNET_CLIENT_KEY`, the Public Client
+  Key) are in this service's environment. The buyer's browser
+  tokenizes the bank account with Accept.js and posts only the
+  nonce to the payment ledger's public checkout route
+  (`POST /ledger/checkout/echeck`), which charges the catalog
+  amount and records the payment as eCheck / pending settlement.
+  The pay button stays disabled until the buyer checks the WEB
+  debit authorization box. Cash App above remains the operative
+  rail until the ledger-side switch flips.
+- **Keys**: this app holds no payment-processor keys at all. (The
+  Accept.js Public Client Key above is a browser-public identifier
+  by design, not a secret; the Authorize.net Transaction Key is
+  never configured here.)
 - **Course contents**: served only to signed-in members with access, from
   `/data/content/` on the `members-data` volume — never a public URL.
 - **Course-file upload** (`/members/admin/upload`, owner session only,
