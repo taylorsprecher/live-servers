@@ -16,6 +16,12 @@ name: Deploy payment ledger
 # The deliberate on-switch is this workflow's enable_authnet dispatch
 # input: set it true and the deploy also upserts AUTHNET_ENABLED=1
 # into the host .env (ops/set-authnet-enabled.sh) before the build.
+# The same credential-delivery step also carries the optional
+# AUTHNET_CLIENT_KEY secret as a third stdin line when configured:
+# the Public Client Key is a public Accept.js identifier (not a
+# secret), delivered the same way for consistency; the members
+# service reads it from the host .env. When that secret is absent,
+# any AUTHNET_CLIENT_KEY already in the host .env is preserved.
 # eCheck (ACH) has a second, independent on-switch of the same kind:
 # the enable_echeck input upserts AUTHNET_ECHECK_ENABLED=1
 # (ops/set-authnet-echeck-enabled.sh). Both default false; a plain
@@ -75,11 +81,16 @@ jobs:
       # the processor must never block the ledger deploy, and it
       # stays disabled until AUTHNET_ENABLED=1 is set in the host
       # .env as a separate deliberate step.
+      # The AUTHNET_CLIENT_KEY secret (the public Accept.js client
+      # key) rides along as a third line only when configured; the
+      # host script upserts it when present and preserves any
+      # existing host .env entry when it is not.
       # See ops/set-authnet-creds.sh.
       - name: Deliver Authorize.net credentials to host .env (when configured)
         env:
           AUTHNET_API_LOGIN_ID: ${{ secrets.AUTHNET_API_LOGIN_ID }}
           AUTHNET_TRANSACTION_KEY: ${{ secrets.AUTHNET_TRANSACTION_KEY }}
+          AUTHNET_CLIENT_KEY: ${{ secrets.AUTHNET_CLIENT_KEY }}
         run: |
           if [ -z "${AUTHNET_API_LOGIN_ID}" ] || [ -z "${AUTHNET_TRANSACTION_KEY}" ]; then
             echo "AUTHNET_* secrets are not configured — deploying with the Authorize.net processor disabled."
@@ -87,6 +98,9 @@ jobs:
           fi
           { printf 'AUTHNET_API_LOGIN_ID=%s\n' "${AUTHNET_API_LOGIN_ID}"
             printf 'AUTHNET_TRANSACTION_KEY=%s\n' "${AUTHNET_TRANSACTION_KEY}"
+            if [ -n "${AUTHNET_CLIENT_KEY}" ]; then
+              printf 'AUTHNET_CLIENT_KEY=%s\n' "${AUTHNET_CLIENT_KEY}"
+            fi
           } | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
               'bash /home/deploy/live-servers/ops/set-authnet-creds.sh'
 
