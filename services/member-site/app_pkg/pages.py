@@ -370,6 +370,30 @@ def apps_page(member=None):
     )
 
 
+def connectivity_page():
+    """Connectivity — the phone app that keeps Cellular, Wi-Fi and
+    Bluetooth in one place: a live reachability watch against this
+    server's /health, guided radio tests, and a timestamped timeline
+    kept on the phone. Served from connectivity.html beside this
+    file, same pattern as apps_page; public like the buy pages so
+    the phone can install it to the Home Screen without a login."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "connectivity.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>Connectivity unavailable</h1>"
+            "<p>The connectivity page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def _ach_section(course, member, amount):
     """ACH (eCheck) section for the buy page — "" unless the
     checkout is configured (config.ACH_CHECKOUT_READY: the eCheck

@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#0f1f2e" />
+    <!-- FLEET-CSS -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Connectivity" />
+    <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAIAAACyr5FlAAABx0lEQVR42u3ZwQ2AIBAAQTqwBDugfCuwr+OPhAcqgWTIVnA34QHpOLPULBmB4BAcgkNwCA7BITgEh+AQHBIcgkNwCA7BITgEh+AQHIJDgkNwCA7BITgEh+AQHIJDcEhwCA7BITgEx/QiwhDgqE08j7HA0ZbBBxw9GXzA8ReOfF/DwQEHHDvLeOMDDjcHHHDAAQcccMx454DDCykc/lbg0IfBITgEh+CAAw444IADDjjggAMOOOCAAw447AwOOOCAAw444IADDjjggAMOOOCAAw444IADDjjggAMOOOCAAw444IADDjjggAMOOOCAAw47gwMOOOCAAw444IADDjjggAMOOOCAAw444IADDjjggAMOOOCAAw444IADDjjggAMOOOCAAw444IADDjjggAMOOOCAAw444NDKwSE4BIfgEByCQ3AIDsEhOASHBIfgEByCQ3AIDsEhOASH4JDgEByCQ3AIDsEhOASH4BAcEhyCQ3AIDsEhOASH4BAcgkNwSHAIDsEhOASH4BAc2r4CdBnvn8hjxoMAAAAASUVORK5CYII=" />
+    <link rel="icon" href="data:," />
+    <title>Connectivity — Cellular, Wi-Fi &amp; Bluetooth in one place</title>
+    <style>
+      :root {
+        --bg: #f6f8f9;
+        --bg-raise: #ffffff;
+        --line: #d8e0e4;
+        --ink: #16232c;
+        --ink-2: #5b6d77;
+        --accent: #0e7c7b;
+        --accent-ink: #095e5d;
+        --accent-chip: #e3f2f1;
+        --ok: #177245;
+        --warn: #9a6a00;
+        --down: #b3261e;
+        --radius: 12px;
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+        line-height: 1.45;
+      }
+      .wrap {
+        max-width: 560px;
+        margin: 0 auto;
+        padding: calc(20px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom));
+      }
+      header { padding: 10px 2px 4px; }
+      .owner {
+        margin: 0 0 6px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--accent-ink);
+      }
+      h1 { margin: 0; font-size: 2rem; line-height: 1.12; font-weight: 800; letter-spacing: -0.01em; }
+      .sub { margin: 8px 0 0; color: var(--ink-2); font-size: 1rem; }
+      .statusbar {
+        margin-top: 18px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--bg-raise);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 10px 14px;
+        font-size: 0.92rem;
+      }
+      .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--warn); flex: none; }
+      .dot.ok { background: var(--ok); }
+      .dot.down { background: var(--down); }
+      .statusbar .grow { flex: 1; }
+      .statusbar .lat { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+      section { margin-top: 22px; }
+      h2 { margin: 0 0 10px; font-size: 1.05rem; font-weight: 800; letter-spacing: 0.01em; }
+      .card {
+        background: var(--bg-raise);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+        margin-bottom: 12px;
+      }
+      .card .rowline { display: flex; align-items: center; gap: 10px; }
+      .card .glyph { width: 30px; height: 30px; flex: none; display: grid; place-items: center; }
+      .card .glyph svg { width: 26px; height: 26px; stroke: var(--accent); fill: none; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+      .card .name { font-size: 1.08rem; font-weight: 800; }
+      .card .state { margin-left: auto; font-weight: 700; font-size: 0.92rem; }
+      .card .state.ok { color: var(--ok); }
+      .card .state.warn { color: var(--warn); }
+      .card .state.down { color: var(--down); }
+      .card .desc { margin: 8px 0 0; color: var(--ink-2); font-size: 0.92rem; }
+      .card ol { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-size: 0.92rem; }
+      .card ol li { margin: 3px 0; }
+      button.test, button.wake, button.clear {
+        margin-top: 10px;
+        appearance: none;
+        border: 1px solid var(--accent);
+        background: var(--accent-chip);
+        color: var(--accent-ink);
+        font: inherit;
+        font-weight: 700;
+        font-size: 0.95rem;
+        border-radius: 999px;
+        padding: 9px 16px;
+        cursor: pointer;
+      }
+      button.test:active, button.wake:active, button.clear:active { transform: scale(0.98); }
+      button[disabled] { opacity: 0.55; }
+      .verdict { margin-top: 8px; font-size: 0.92rem; font-weight: 700; display: none; }
+      .verdict.ok { color: var(--ok); display: block; }
+      .verdict.down { color: var(--down); display: block; }
+      .verdict.warn { color: var(--warn); display: block; }
+      .log {
+        background: var(--bg-raise);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 6px 0;
+        max-height: 320px;
+        overflow-y: auto;
+      }
+      .log .entry {
+        display: flex;
+        gap: 10px;
+        padding: 7px 16px;
+        border-bottom: 1px solid var(--line);
+        font-size: 0.9rem;
+      }
+      .log .entry:last-child { border-bottom: none; }
+      .log .t { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent-ink); flex: none; }
+      .log .empty { padding: 12px 16px; color: var(--ink-2); font-size: 0.9rem; }
+      .note { color: var(--ink-2); font-size: 0.88rem; margin-top: 10px; }
+      .toplinks { margin-top: 14px; font-size: 0.92rem; }
+      .toplinks a { color: var(--accent-ink); font-weight: 700; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <p class="owner">911TransEdu &mdash; Phone</p>
+        <h1>Connectivity</h1>
+        <p class="sub">Cellular, Wi-Fi and Bluetooth in one place. This page watches your connection live while it is open, and keeps a timestamped timeline of every change.</p>
+        <div class="statusbar" role="status">
+          <span class="dot" id="big-dot"></span>
+          <span class="grow" id="big-state">Checking&hellip;</span>
+          <span class="lat" id="big-lat"></span>
+        </div>
+        <p class="toplinks"><a href="https://members.911transedu.net/members/apps">&larr; Apps Hub</a></p>
+      </header>
+
+      <section aria-labelledby="radios-h">
+        <h2 id="radios-h">The three radios</h2>
+
+        <div class="card" id="card-internet">
+          <div class="rowline">
+            <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.7 2.6 4 5.6 4 9s-1.3 6.4-4 9c-2.7-2.6-4-5.6-4-9s1.3-6.4 4-9z"/></svg></span>
+            <span class="name">Internet</span>
+            <span class="state warn" id="internet-state">Checking</span>
+          </div>
+          <p class="desc" id="internet-desc">Pinging your member server every 15 seconds. This is the live proof that one of the radios below is carrying you.</p>
+        </div>
+
+        <div class="card" id="card-cellular">
+          <div class="rowline">
+            <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20v-6M9 20V9M14 20V5M19 20V2.5"/></svg></span>
+            <span class="name">Cellular</span>
+            <span class="state warn" id="cellular-state">Not tested</span>
+          </div>
+          <p class="desc">A web page can&rsquo;t read the cellular radio directly &mdash; so test it for real:</p>
+          <ol>
+            <li>Tap <strong>Start cellular test</strong> below.</li>
+            <li>Swipe down for Control Center and turn <strong>Wi-Fi off</strong>.</li>
+            <li>Stay on this page for 30 seconds. If the pings keep landing, cellular data is carrying you.</li>
+            <li>Turn Wi-Fi back on when you&rsquo;re done.</li>
+          </ol>
+          <button class="test" id="cellular-test" type="button">Start cellular test</button>
+          <p class="verdict" id="cellular-verdict"></p>
+        </div>
+
+        <div class="card" id="card-wifi">
+          <div class="rowline">
+            <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M2.5 9a15 15 0 0 1 19 0M5.5 12.5a10 10 0 0 1 13 0M8.6 16a5 5 0 0 1 6.8 0"/><circle cx="12" cy="19.4" r="1.1"/></svg></span>
+            <span class="name">Wi-Fi</span>
+            <span class="state warn" id="wifi-state">Not tested</span>
+          </div>
+          <p class="desc">The mirror test, for when you&rsquo;re home:</p>
+          <ol>
+            <li>Tap <strong>Start Wi-Fi test</strong> below.</li>
+            <li>Open Settings &rarr; Cellular and turn <strong>Cellular Data off</strong>.</li>
+            <li>Stay on this page for 30 seconds. If the pings keep landing, your Wi-Fi is carrying you.</li>
+            <li>Turn Cellular Data back on when you&rsquo;re done.</li>
+          </ol>
+          <button class="test" id="wifi-test" type="button">Start Wi-Fi test</button>
+          <p class="verdict" id="wifi-verdict"></p>
+        </div>
+
+        <div class="card" id="card-bluetooth">
+          <div class="rowline">
+            <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 8.5 17 16l-4.5 4.5v-17L17 8 7 15.5"/></svg></span>
+            <span class="name">Bluetooth</span>
+            <span class="state warn" id="bluetooth-state">Check by eye</span>
+          </div>
+          <p class="desc" id="bluetooth-desc">iPhone web pages can&rsquo;t read the Bluetooth radio at all &mdash; Apple doesn&rsquo;t allow it. The 5-second check: swipe down for Control Center; the Bluetooth symbol is <strong>blue when on</strong>, grey when off. Bluetooth is what links your iPad (hotspot sharing), headsets, and the car.</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="keep-h">
+        <h2 id="keep-h">Keep it open</h2>
+        <div class="card">
+          <div class="rowline">
+            <span class="glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="7" y="2.8" width="10" height="18.4" rx="2"/><path d="M10.5 18.6h3"/></svg></span>
+            <span class="name">Stay-awake watch</span>
+            <span class="state warn" id="wake-state">Off</span>
+          </div>
+          <p class="desc">Keeps the screen on so the watch and the timeline keep running &mdash; handy on a Flex block or while tethering the iPad.</p>
+          <button class="wake" id="wake-btn" type="button">Keep screen on</button>
+          <p class="note">Honest limit: iOS pauses every web app when you switch away or lock the phone. The timeline resumes and re-checks the moment you come back, and nothing here can hold a radio on if iOS itself turns it off.</p>
+        </div>
+      </section>
+
+      <section aria-labelledby="log-h">
+        <h2 id="log-h">Timeline</h2>
+        <div class="log" id="log"><p class="empty">No events yet.</p></div>
+        <button class="clear" id="clear-log" type="button">Clear timeline</button>
+        <p class="note">Times are 24-hour. The timeline is kept on this phone only.</p>
+      </section>
+    </div>
+
+    <script>
+      (function () {
+        "use strict";
+        var HEALTH = "/members/health";
+        var PING_MS = 15000;
+        var logEl = document.getElementById("log");
+        var bigDot = document.getElementById("big-dot");
+        var bigState = document.getElementById("big-state");
+        var bigLat = document.getElementById("big-lat");
+        var internetState = document.getElementById("internet-state");
+        var entries = [];
+        try { entries = JSON.parse(localStorage.getItem("connectivity-log") || "[]"); } catch (e) { entries = []; }
+
+        function stamp() {
+          var d = new Date();
+          function p(n) { return (n < 10 ? "0" : "") + n; }
+          return p(d.getHours()) + p(d.getMinutes());
+        }
+        function renderLog() {
+          if (!entries.length) { logEl.innerHTML = '<p class="empty">No events yet.</p>'; return; }
+          logEl.innerHTML = entries.map(function (e) {
+            return '<div class="entry"><span class="t">' + e.t + '</span><span>' + e.m + '</span></div>';
+          }).join("");
+        }
+        function log(msg) {
+          entries.unshift({ t: stamp(), m: msg });
+          if (entries.length > 100) entries.length = 100;
+          try { localStorage.setItem("connectivity-log", JSON.stringify(entries)); } catch (e) {}
+          renderLog();
+        }
+
+        var lastOk = null; // null = unknown, true/false after first ping
+        var activeTest = null; // {kind, okCount, failCount, endsAt, timer}
+
+        function setInternet(ok, ms) {
+          if (ok) {
+            bigDot.className = "dot ok";
+            bigState.textContent = "Connected";
+            bigLat.textContent = ms != null ? ms + " ms" : "";
+            internetState.textContent = "Reachable";
+            internetState.className = "state ok";
+          } else {
+            bigDot.className = "dot down";
+            bigState.textContent = "No connection";
+            bigLat.textContent = "";
+            internetState.textContent = "Unreachable";
+            internetState.className = "state down";
+          }
+          if (lastOk !== null && ok !== lastOk) {
+            log(ok ? "Internet came back." : "Internet dropped.");
+          }
+          lastOk = ok;
+        }
+
+        function ping() {
+          var started = Date.now();
+          var ctl = ("AbortController" in window) ? new AbortController() : null;
+          var timer = ctl ? setTimeout(function () { ctl.abort(); }, 5000) : null;
+          fetch(HEALTH + "?t=" + Date.now(), { cache: "no-store", signal: ctl ? ctl.signal : undefined })
+            .then(function (r) {
+              if (timer) clearTimeout(timer);
+              var ok = r.ok;
+              if (activeTest) { ok ? activeTest.okCount++ : activeTest.failCount++; }
+              setInternet(ok, ok ? (Date.now() - started) : null);
+            })
+            .catch(function () {
+              if (timer) clearTimeout(timer);
+              if (activeTest) activeTest.failCount++;
+              setInternet(false, null);
+            });
+        }
+
+        function startTest(kind) {
+          var stateEl = document.getElementById(kind + "-state");
+          var verdictEl = document.getElementById(kind + "-verdict");
+          var btn = document.getElementById(kind + "-test");
+          if (activeTest) { log("A test is already running."); return; }
+          verdictEl.className = "verdict"; verdictEl.textContent = "";
+          stateEl.textContent = "Testing…"; stateEl.className = "state warn";
+          btn.disabled = true;
+          activeTest = { kind: kind, okCount: 0, failCount: 0 };
+          log((kind === "cellular" ? "Cellular" : "Wi-Fi") + " test started — toggle the other radio off now.");
+          ping();
+          var watcher = setInterval(ping, 5000);
+          setTimeout(function () {
+            clearInterval(watcher);
+            var t = activeTest; activeTest = null;
+            btn.disabled = false;
+            var label = kind === "cellular" ? "Cellular data" : "Wi-Fi";
+            if (t.okCount >= 3 && t.failCount === 0) {
+              stateEl.textContent = "Working"; stateEl.className = "state ok";
+              verdictEl.className = "verdict ok";
+              verdictEl.textContent = label + " carried every ping for 30 seconds. It works on its own.";
+              log(label + " test: passed (" + t.okCount + " pings, none missed).");
+            } else if (t.okCount >= 1) {
+              stateEl.textContent = "Shaky"; stateEl.className = "state warn";
+              verdictEl.className = "verdict warn";
+              verdictEl.textContent = label + " carried some pings but missed " + t.failCount + ". It is up, but not solid.";
+              log(label + " test: partial (" + t.okCount + " ok, " + t.failCount + " missed).");
+            } else {
+              stateEl.textContent = "Not carrying"; stateEl.className = "state down";
+              verdictEl.className = "verdict down";
+              verdictEl.textContent = "No ping got through on " + label.toLowerCase() + " alone. Either it is off, or the other radio was still on at the start — re-run with the other radio fully off.";
+              log(label + " test: no pings got through.");
+            }
+          }, 30000);
+        }
+
+        document.getElementById("cellular-test").addEventListener("click", function () { startTest("cellular"); });
+        document.getElementById("wifi-test").addEventListener("click", function () { startTest("wifi"); });
+        document.getElementById("clear-log").addEventListener("click", function () {
+          entries = [];
+          try { localStorage.removeItem("connectivity-log"); } catch (e) {}
+          renderLog();
+        });
+
+        window.addEventListener("online", function () { log("Phone reports: back online."); ping(); });
+        window.addEventListener("offline", function () { log("Phone reports: offline."); setInternet(false, null); });
+        if (navigator.connection && navigator.connection.addEventListener) {
+          navigator.connection.addEventListener("change", function () {
+            var et = navigator.connection.effectiveType || "unknown";
+            log("Connection type changed (" + et + ").");
+          });
+        }
+
+        // Bluetooth: report honestly what this browser can see.
+        var btState = document.getElementById("bluetooth-state");
+        if (navigator.bluetooth) {
+          btState.textContent = "Readable in this browser";
+          btState.className = "state ok";
+        }
+
+        // Wake lock
+        var wakeBtn = document.getElementById("wake-btn");
+        var wakeState = document.getElementById("wake-state");
+        var lock = null;
+        if (!("wakeLock" in navigator)) {
+          wakeBtn.disabled = true;
+          wakeState.textContent = "Not offered here";
+        } else {
+          wakeBtn.addEventListener("click", function () {
+            if (lock) { lock.release(); lock = null; wakeState.textContent = "Off"; wakeState.className = "state warn"; wakeBtn.textContent = "Keep screen on"; log("Stay-awake off."); return; }
+            navigator.wakeLock.request("screen").then(function (l) {
+              lock = l;
+              wakeState.textContent = "On"; wakeState.className = "state ok"; wakeBtn.textContent = "Let screen sleep";
+              log("Stay-awake on.");
+              l.addEventListener("release", function () { lock = null; wakeState.textContent = "Off"; wakeState.className = "state warn"; wakeBtn.textContent = "Keep screen on"; });
+            }).catch(function () { wakeState.textContent = "Blocked"; wakeState.className = "state down"; });
+          });
+        }
+
+        renderLog();
+        log("Connectivity opened.");
+        ping();
+        setInterval(ping, PING_MS);
+        document.addEventListener("visibilitychange", function () {
+          if (!document.hidden) { log("Back on screen — re-checking."); ping(); }
+        });
+      })();
+    </script>
+  </body>
+</html>

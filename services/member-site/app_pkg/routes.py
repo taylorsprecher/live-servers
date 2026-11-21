@@ -50,6 +50,7 @@ from .pages import (
     preview_page,
     upload_page,
     apps_page,
+    connectivity_page,
 )
 from .store import (
     _db,
@@ -164,6 +165,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_html(apps_page(member))
         if path == BASE + "/apps/data":
             return self.send_json(apps_data())
+        if path == BASE + "/connectivity":
+            return self.send_html(connectivity_page())
         if path.startswith(BASE + "/buy/"):
             course = COURSE_BY_KEY.get(path[len(BASE + "/buy/"):])
             if course is None:

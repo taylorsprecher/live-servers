@@ -3,7 +3,7 @@
 FROM python:3.12-slim
 
 WORKDIR /app
-COPY app.py README.md apps.html ./
+COPY app.py README.md apps.html connectivity.html ./
 COPY app_pkg/ ./app_pkg/
 COPY assets/ ./assets/
 
