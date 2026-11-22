@@ -21,9 +21,13 @@ cd "$(dirname "$0")/.."
 ENV_FILE=".env"
 
 vault_key=""
-while IFS='=' read -r k v; do
-  case "${k}" in
-    PAYLEDGER_SECURESTORE_KEY) vault_key="${v}" ;;
+# Parse by exact prefix, NOT by splitting on '=': a Fernet key is
+# base64 and always ends in '=' padding, and bash's
+# `IFS='=' read -r k v` silently eats a trailing delimiter — the
+# first delivery arrived 43 of 44 chars and Fernet rejected it.
+while IFS= read -r line; do
+  case "${line}" in
+    PAYLEDGER_SECURESTORE_KEY=*) vault_key="${line#PAYLEDGER_SECURESTORE_KEY=}" ;;
   esac
 done
 # Tolerate incidental trailing whitespace/newlines in the delivered

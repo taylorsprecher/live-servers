@@ -31,11 +31,16 @@ ENV_FILE=".env"
 login_id=""
 txn_key=""
 client_key=""
-while IFS='=' read -r k v; do
-  case "${k}" in
-    AUTHNET_API_LOGIN_ID) login_id="${v}" ;;
-    AUTHNET_TRANSACTION_KEY) txn_key="${v}" ;;
-    AUTHNET_CLIENT_KEY) client_key="${v}" ;;
+# Parse by exact prefix, NOT by splitting on '=': bash's
+# `IFS='=' read -r k v` silently eats a trailing '=' from the value
+# (base64 padding — a Fernet key lost its last character this way in
+# ops/set-securestore-key.sh; a future Client Key ending in '=' would
+# be clipped here the same way).
+while IFS= read -r line; do
+  case "${line}" in
+    AUTHNET_API_LOGIN_ID=*) login_id="${line#AUTHNET_API_LOGIN_ID=}" ;;
+    AUTHNET_TRANSACTION_KEY=*) txn_key="${line#AUTHNET_TRANSACTION_KEY=}" ;;
+    AUTHNET_CLIENT_KEY=*) client_key="${line#AUTHNET_CLIENT_KEY=}" ;;
   esac
 done
 # Tolerate incidental trailing whitespace/newlines in the delivered
