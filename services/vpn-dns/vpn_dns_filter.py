@@ -415,13 +415,37 @@ def selftest():
         check("filter sinkholes a tracker domain (direct)",
               query_a("doubleclick.net", "127.0.0.1", PORT),
               "0.0.0.0")
-        check("redirect sinkholes it too (via server :53)",
-              query_a("doubleclick.net", SERVER_IP, 53), "0.0.0.0")
+        # The redirect matches traffic ARRIVING via wg0 (the
+        # phones). A query generated inside this namespace
+        # never crosses that ingress path, so it cannot prove
+        # the redirect end-to-end — verify the rules and their
+        # packet counters instead; the counters are the live
+        # proof once a phone is connected.
+        present = rules_present()
+        print(f"SELFTEST redirect rules installed for wg0 "
+              f"port 53 (udp+tcp): {present} — "
+              f"{'PASS' if present else 'FAIL'}")
+        ok = ok and present
+        listing = subprocess.run(
+            ["iptables", "-t", "nat", "-L", "PREROUTING",
+             "-v", "-n"], capture_output=True,
+            text=True).stdout
+        for line in listing.splitlines():
+            if "REDIRECT" in line:
+                print(f"SELFTEST rule counters: {line.strip()}")
         real = query_a("example.com", SERVER_IP, 53)
         print(f"SELFTEST real domain resolves (via server :53): "
               f"got {real} — "
               f"{'PASS' if real and real != '0.0.0.0' else 'FAIL'}")
         ok = ok and bool(real) and real != "0.0.0.0"
+        try:
+            with open(REPORT_PATH) as fh:
+                tail = fh.read().splitlines()[-5:]
+            for line in tail:
+                print(f"SELFTEST report so far: {line}")
+        except OSError:
+            print("SELFTEST report so far: (no blocks recorded "
+                  "yet)")
     except OSError as exc:
         print(f"SELFTEST error: {exc} — FAIL")
         ok = False
