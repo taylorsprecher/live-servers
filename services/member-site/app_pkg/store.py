@@ -1,5 +1,6 @@
 """Data layer — SQLite store, settings, content staging, uploads,
 and the websites data feed. Schema statements and queries verbatim."""
+import datetime
 import json
 import os
 import re
@@ -524,14 +525,16 @@ def apps_data():
 # Nothing with status != 'approved' is ever rendered publicly.
 
 def add_block_submission(name, station, block_date, start_time,
-                         end_time, pay, notes):
+                         end_time, pay, notes, status="pending"):
+    if status not in ("pending", "approved", "rejected"):
+        status = "pending"
     with _lock, _db:
         cur = _db.execute(
             "INSERT INTO block_submissions (name, station, block_date, "
             "start_time, end_time, pay, notes, status, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (name, station, block_date, start_time, end_time, pay,
-             notes, int(time.time())),
+             notes, status, int(time.time())),
         )
         return cur.lastrowid
 
@@ -559,3 +562,128 @@ def set_block_submission_status(sub_id, status):
             (status, int(sub_id)),
         )
         return cur.rowcount > 0
+
+
+# -- Auto-approval criteria for community blocks (Taylor, 2026-11-22:
+# "Put up automatic criteria for approval. And post upon that
+# criteria" — the criteria below, approved by Taylor as proposed).
+# A submission that passes EVERY check posts immediately; one that
+# fails any check waits in the owner's queue, never auto-rejected.
+# This list is the single source: it drives the evaluator and is
+# rendered verbatim on the submit page and the approval queue page.
+
+BLOCK_AUTO_CRITERIA = [
+    "Complete — name, station, block date, and pay are all filled in.",
+    "Real date — the block date is a valid date and not in the future.",
+    "Sane pay — pay reads as a dollar amount between $1 and $500.",
+    "Station shape — the station is a short code of letters and "
+    "numbers, like DPD2 or VOR3.",
+    "No links — no web addresses anywhere in the entry.",
+    "No contact info — no email addresses or phone numbers.",
+    "Clean language — no profanity or abuse.",
+    "Not a duplicate — not the same name, station, date, and pay "
+    "as an entry already posted or waiting.",
+]
+
+_BLOCK_LINK_RE = re.compile(
+    r"https?://|www\.|\.(com|net|org|io|co|me|tv|info|biz|xyz|"
+    r"online|site|app)\b",
+    re.IGNORECASE,
+)
+_BLOCK_EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.]+")
+_BLOCK_PHONE_RE = re.compile(
+    r"(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]\d{3}[\s.\-]\d{4}|\b\d{10}\b"
+)
+_BLOCK_STATION_RE = re.compile(r"^[A-Za-z0-9]{2,10}$")
+_BLOCK_BAD_WORDS = (
+    "fuck", "shit", "bitch", "bastard", "asshole", "whore", "slut",
+    "nigger", "nigga", "faggot", "retard", "cunt", "dickhead",
+    "motherfucker",
+)
+_BLOCK_BAD_RE = re.compile(
+    r"\b(" + "|".join(re.escape(w) for w in _BLOCK_BAD_WORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _block_pay_value(pay):
+    """Dollar value of a pay string, or None if it doesn't parse."""
+    cleaned = re.sub(r"[$,\s]", "", pay or "")
+    if not cleaned:
+        return None
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def evaluate_block_submission(name, station, block_date, start_time,
+                              end_time, pay, notes):
+    """Return the list of auto-approval checks this submission
+    fails (empty list = post it now). Mirrors BLOCK_AUTO_CRITERIA
+    in order."""
+    fails = []
+    name = (name or "").strip()
+    station = (station or "").strip()
+    block_date = (block_date or "").strip()
+    pay = (pay or "").strip()
+    notes = notes or ""
+    everything = " ".join(
+        [name, station, block_date, pay, notes,
+         start_time or "", end_time or ""]
+    )
+
+    # 1. Complete.
+    if not (name and station and block_date and pay):
+        fails.append("complete")
+
+    # 2. Real date, not in the future (one day of grace for
+    # timezone edges — the server runs UTC, drivers are behind it).
+    try:
+        day = datetime.date.fromisoformat(block_date)
+        if day > datetime.date.today() + datetime.timedelta(days=1):
+            fails.append("date")
+    except ValueError:
+        fails.append("date")
+
+    # 3. Sane pay.
+    value = _block_pay_value(pay)
+    if value is None or not (1 <= value <= 500):
+        fails.append("pay")
+
+    # 4. Station shape.
+    if not _BLOCK_STATION_RE.match(station):
+        fails.append("station")
+
+    # 5. No links.
+    if _BLOCK_LINK_RE.search(everything):
+        fails.append("links")
+
+    # 6. No contact info.
+    if _BLOCK_EMAIL_RE.search(everything) or \
+            _BLOCK_PHONE_RE.search(everything):
+        fails.append("contact")
+
+    # 7. Clean language.
+    if _BLOCK_BAD_RE.search(everything):
+        fails.append("language")
+
+    # 8. Not a duplicate of a posted or waiting entry.
+    if name and station and block_date and value is not None:
+        with _lock:
+            rows = _db.execute(
+                "SELECT name, station, block_date, pay FROM "
+                "block_submissions WHERE status IN ('pending', "
+                "'approved')"
+            ).fetchall()
+        for r in rows:
+            if (
+                r["name"].strip().lower() == name.lower()
+                and r["station"].strip().upper() == station.upper()
+                and r["block_date"].strip() == block_date
+                and _block_pay_value(r["pay"]) == value
+            ):
+                fails.append("duplicate")
+                break
+
+    return fails

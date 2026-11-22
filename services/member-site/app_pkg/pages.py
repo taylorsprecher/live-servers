@@ -27,6 +27,7 @@ from .store import (
     _lock,
     all_member_uploads,
     any_godaddy_link,
+    BLOCK_AUTO_CRITERIA,
     block_submissions,
     btc_quote,
     collection_files,
@@ -1320,12 +1321,14 @@ def _community_blocks_html():
             '<section class="card"><h2>From other drivers</h2>'
             "<p>No community blocks yet. "
             f'<a href="{BASE}/blocks/submit">Put your blocks out</a>'
-            " — anyone can submit a block; every post is approved "
-            "by Taylor before it appears here.</p></section>"
+            " — anyone can submit a block; it posts at once when "
+            "it meets the posted criteria, and Taylor approves "
+            "the rest by hand.</p></section>"
         )
     out = [
         '<section class="card"><h2>From other drivers</h2>'
-        "<p>Blocks other drivers put out, each approved by Taylor. "
+        "<p>Blocks other drivers put out — posted under the "
+        "auto-approval criteria, or approved by Taylor. "
         f'<a href="{BASE}/blocks/submit">Put your blocks out</a></p>'
     ]
     for r in rows:
@@ -1346,16 +1349,22 @@ def _community_blocks_html():
 
 def blocks_submit_page(message="", ok=False):
     """Public submission form for community Flex blocks
-    (2026-11-22). Anyone may submit; the entry lands as 'pending'
-    and appears on the Blocks page only after Taylor approves it
-    on the owner queue page."""
+    (2026-11-22). Anyone may submit; an entry that meets every
+    posted auto-approval criterion posts at once, and any other
+    lands as 'pending' in the owner's queue."""
     msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
+    criteria = "".join(
+        f"<li>{esc(c)}</li>" for c in BLOCK_AUTO_CRITERIA
+    )
     body = f"""
 <h1>Put your blocks out</h1>
 <p class="small">Driving Flex? Add your block — station, times,
-pay, and any timeline notes. Nothing appears on the Blocks page
-until Taylor approves it.</p>
+pay, and any timeline notes. A block that meets every criterion
+below posts to the Blocks page at once; anything else waits for
+Taylor's personal approval — it is never auto-rejected.</p>
 {msg}
+<div class="card"><h2>Auto-approval criteria</h2>
+<ul>{criteria}</ul></div>
 <div class="card"><h2>Your block</h2>
 <form method="post" action="{BASE}/blocks/submit">
 <label>Your name (shown with the block)</label>
@@ -1372,9 +1381,9 @@ until Taylor approves it.</p>
 <input type="text" name="pay" maxlength="20" required autocomplete="off" placeholder="$85.00">
 <label>Timeline / notes (optional)</label>
 <textarea name="notes" maxlength="1000" rows="4" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit"></textarea>
-<button type="submit">Send for approval</button></form>
-<p class="small">Submitting puts your block in Taylor's approval
-queue — it is not public until approved.</p></div>
+<button type="submit">Post my block</button></form>
+<p class="small">Meets every criterion above: your block posts
+at once. Misses one: it waits in Taylor's approval queue.</p></div>
 <p><a class="btn secondary" href="{BASE}/blocks">Back to Flex Blocks</a></p>
 """
     return PAGE.format(base=BASE, title="Put your blocks out — Flex Blocks", body=body)
@@ -1416,12 +1425,17 @@ def blocks_admin_page(member, message="", ok=False):
             out += _submission_row(r, actions)
         return out + "</table>"
 
+    criteria = "".join(
+        f"<li>{esc(c)}</li>" for c in BLOCK_AUTO_CRITERIA
+    )
     body = f"""
 <h1>Flex Blocks — Approval Queue</h1>
-<p class="small">Owner only. Community block submissions land
-here first; nothing appears on the public Blocks page until you
-approve it.</p>
+<p class="small">Owner only. Submissions that meet every
+auto-approval criterion post on their own; the ones that miss a
+criterion wait here for your decision.</p>
 {msg}
+<div class="card"><h2>Auto-approval criteria (posted publicly)</h2>
+<ul>{criteria}</ul></div>
 <div class="card"><h2>Waiting for approval</h2>
 {table("pending", [("approve", "Approve"), ("reject", "Reject")], "Nothing waiting.")}
 </div>

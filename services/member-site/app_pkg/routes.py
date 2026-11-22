@@ -69,6 +69,7 @@ from .store import (
     _set_setting,
     add_block_submission,
     apps_data,
+    evaluate_block_submission,
     btc_quote,
     collection_files,
     grant_access,
@@ -694,12 +695,27 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
                 return self.send_html(blocks_submit_page(
                     "Name, station, block date and pay are required — "
                     "nothing was sent."))
+            # Auto-approval (Taylor, 2026-11-22): a submission that
+            # meets every posted criterion posts immediately; any
+            # other waits in the owner's queue — never auto-rejected.
+            fails = evaluate_block_submission(
+                name, station, block_date, start_time, end_time,
+                pay, notes)
+            if not fails:
+                add_block_submission(name, station, block_date,
+                                     start_time, end_time, pay,
+                                     notes, status="approved")
+                return self.redirect(
+                    BASE + "/blocks/submit?msg=" + quote(
+                        "Posted — your block met the criteria and "
+                        "is live on the Blocks page now."))
             add_block_submission(name, station, block_date,
                                  start_time, end_time, pay, notes)
             return self.redirect(
                 BASE + "/blocks/submit?msg=" + quote(
-                    "Sent — your block is in Taylor's approval queue "
-                    "and appears on the Blocks page once approved."))
+                    "Sent — your block didn't meet the auto-post "
+                    "criteria, so it's in Taylor's approval queue "
+                    "for a personal look."))
         if path == BASE + "/blocks/admin":
             member, _ = self.current_member()
             # Fail closed: only the owner can approve or reject.
