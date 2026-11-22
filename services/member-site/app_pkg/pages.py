@@ -395,6 +395,31 @@ def connectivity_page():
     )
 
 
+def ssk_page():
+    """SSK Python — the phone app that finds the SSK portable cloud
+    drive: a local-network sweep for the drive's web UI / FTP / SMB
+    services plus the USB-C disk-alive steps, and the download for
+    its BeeWare Briefcase project (built 2026-11-22 at Taylor's
+    direction; the iOS packaging phases run on the Mac). Served
+    from ssk.html beside this file, same pattern as
+    connectivity_page; public like the buy pages."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ssk.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>SSK Python unavailable</h1>"
+            "<p>The SSK Python page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def _ach_section(course, member, amount):
     """ACH (eCheck) section for the buy page — "" unless the
     checkout is configured (config.ACH_CHECKOUT_READY: the eCheck

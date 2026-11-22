@@ -56,6 +56,7 @@ from .pages import (
     upload_page,
     apps_page,
     connectivity_page,
+    ssk_page,
 )
 from .store import (
     _db,
@@ -213,6 +214,16 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(apps_data())
         if path == BASE + "/connectivity":
             return self.send_html(connectivity_page())
+        if path == BASE + "/ssk":
+            return self.send_html(ssk_page())
+        if path == BASE + "/ssk/project.zip":
+            return self.stream_file(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "sskpython-briefcase.zip",
+                ),
+                "application/zip",
+            )
         if path.startswith(BASE + "/buy/"):
             course = COURSE_BY_KEY.get(path[len(BASE + "/buy/"):])
             if course is None:
