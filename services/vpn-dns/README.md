@@ -53,6 +53,12 @@ telemetry; add domains one per line in
 ## Verify
 
 The deploy runs the filter's `--selftest` inside the
-namespace: a tracker domain must sinkhole both directly and
-through the server address (proving the redirect), and a
-real domain must resolve to a real answer.
+namespace: a tracker domain must sinkhole when the filter is
+queried directly, both REDIRECT rules must be installed
+(their packet counters are the live proof once a phone is
+connected — a query generated inside the namespace never
+crosses the wg0 ingress path, so it cannot test the redirect
+end-to-end), and a real domain must resolve to a real
+answer. The selftest's own direct queries appear in the
+report as blocks from 127.0.0.1; phone blocks show the
+phone's 10.8.0.x address.
