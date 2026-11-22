@@ -27,6 +27,7 @@ from .store import (
     _lock,
     all_member_uploads,
     any_godaddy_link,
+    block_submissions,
     btc_quote,
     collection_files,
     content_available,
@@ -492,6 +493,9 @@ def blocks_page():
     return page.replace(
         "<!-- FLEET-CSS -->",
         f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    ).replace(
+        "<!-- COMMUNITY-BLOCKS -->",
+        _community_blocks_html(),
     )
 
 
@@ -1291,3 +1295,133 @@ with a live check from your device.</span><br>
 <button class="secondary" type="submit">Delete my account</button></form></div>
 """
     return PAGE.format(base=BASE, title="Member Desk", body=body)
+
+
+def _community_blocks_html():
+    """The 'From other drivers' section of the Blocks page — only
+    submissions Taylor has approved are rendered (2026-11-22:
+    anyone may submit, Taylor approves each one first). All
+    submitter text is escaped at render."""
+    try:
+        rows = block_submissions("approved")
+    except Exception:
+        rows = []
+    if not rows:
+        return (
+            '<section class="card"><h2>From other drivers</h2>'
+            "<p>No community blocks yet. "
+            f'<a href="{BASE}/blocks/submit">Put your blocks out</a>'
+            " — anyone can submit a block; every post is approved "
+            "by Taylor before it appears here.</p></section>"
+        )
+    out = [
+        '<section class="card"><h2>From other drivers</h2>'
+        "<p>Blocks other drivers put out, each approved by Taylor. "
+        f'<a href="{BASE}/blocks/submit">Put your blocks out</a></p>'
+    ]
+    for r in rows:
+        out.append(
+            '<div class="block"><h3>'
+            + esc(r["block_date"]) + " — " + esc(r["station"])
+            + '</h3><p class="meta">'
+            + esc(r["start_time"]) + "–" + esc(r["end_time"])
+            + " · <strong>" + esc(r["pay"]) + "</strong>"
+            + " · posted by " + esc(r["name"]) + "</p>"
+        )
+        if (r["notes"] or "").strip():
+            out.append('<p class="meta">' + esc(r["notes"]) + "</p>")
+        out.append("</div>")
+    out.append("</section>")
+    return "".join(out)
+
+
+def blocks_submit_page(message="", ok=False):
+    """Public submission form for community Flex blocks
+    (2026-11-22). Anyone may submit; the entry lands as 'pending'
+    and appears on the Blocks page only after Taylor approves it
+    on the owner queue page."""
+    msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
+    body = f"""
+<h1>Put your blocks out</h1>
+<p class="small">Driving Flex? Add your block — station, times,
+pay, and any timeline notes. Nothing appears on the Blocks page
+until Taylor approves it.</p>
+{msg}
+<div class="card"><h2>Your block</h2>
+<form method="post" action="{BASE}/blocks/submit">
+<label>Your name (shown with the block)</label>
+<input type="text" name="name" maxlength="60" required autocomplete="off">
+<label>Station (for example DPD2, VOR3, Salem)</label>
+<input type="text" name="station" maxlength="60" required autocomplete="off">
+<label>Block date</label>
+<input type="date" name="block_date" required>
+<label>Start time</label>
+<input type="time" name="start_time">
+<label>End time</label>
+<input type="time" name="end_time">
+<label>Pay (for example $85.00)</label>
+<input type="text" name="pay" maxlength="20" required autocomplete="off" placeholder="$85.00">
+<label>Timeline / notes (optional)</label>
+<textarea name="notes" maxlength="1000" rows="4" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--surface);color:var(--text);font:inherit"></textarea>
+<button type="submit">Send for approval</button></form>
+<p class="small">Submitting puts your block in Taylor's approval
+queue — it is not public until approved.</p></div>
+<p><a class="btn secondary" href="{BASE}/blocks">Back to Flex Blocks</a></p>
+"""
+    return PAGE.format(base=BASE, title="Put your blocks out — Flex Blocks", body=body)
+
+
+def _submission_row(r, actions):
+    when = time.strftime("%b %d, %Y %H%M", time.localtime(r["created_at"]))
+    notes = esc(r["notes"]) if (r["notes"] or "").strip() else "—"
+    btns = ""
+    for action, label in actions:
+        btns += (
+            f'<form class="inline" method="post" action="{BASE}/blocks/admin">'
+            f'<input type="hidden" name="id" value="{r["id"]}">'
+            f'<input type="hidden" name="action" value="{action}">'
+            f'<button type="submit">{label}</button></form> '
+        )
+    return (
+        f"<tr><td>{esc(r['block_date'])}<br><span class=\"small\">sent {when}</span></td>"
+        f"<td>{esc(r['station'])}<br><span class=\"small\">{esc(r['start_time'])}–{esc(r['end_time'])}</span></td>"
+        f"<td>{esc(r['pay'])}<br><span class=\"small\">by {esc(r['name'])}</span></td>"
+        f"<td>{notes}</td><td>{btns}</td></tr>"
+    )
+
+
+def blocks_admin_page(member, message="", ok=False):
+    """Owner-only approval queue for community Flex blocks
+    (2026-11-22). Pending entries can be approved or rejected;
+    approved ones can be taken back down (to rejected); rejected
+    ones can be restored (to approved)."""
+    msg = f'<p class="msg{" ok" if ok else ""}">{esc(message)}</p>' if message else ""
+
+    def table(status, actions, empty):
+        rows = block_submissions(status)
+        if not rows:
+            return f'<p class="small">{empty}</p>'
+        out = ('<table><tr><th>Date</th><th>Station</th><th>Pay</th>'
+               "<th>Notes</th><th></th></tr>")
+        for r in rows:
+            out += _submission_row(r, actions)
+        return out + "</table>"
+
+    body = f"""
+<h1>Flex Blocks — Approval Queue</h1>
+<p class="small">Owner only. Community block submissions land
+here first; nothing appears on the public Blocks page until you
+approve it.</p>
+{msg}
+<div class="card"><h2>Waiting for approval</h2>
+{table("pending", [("approve", "Approve"), ("reject", "Reject")], "Nothing waiting.")}
+</div>
+<div class="card"><h2>Live on the Blocks page</h2>
+{table("approved", [("reject", "Take down")], "Nothing live yet.")}
+</div>
+<div class="card"><h2>Rejected</h2>
+{table("rejected", [("approve", "Restore")], "Nothing rejected.")}
+</div>
+<p><a class="btn secondary" href="{BASE}/blocks">View the Blocks page</a></p>
+"""
+    return PAGE.format(base=BASE, title="Flex Blocks — Approval Queue", body=body)

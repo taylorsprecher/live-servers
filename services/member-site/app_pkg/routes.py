@@ -60,11 +60,14 @@ from .pages import (
     cport_page,
     words_page,
     blocks_page,
+    blocks_submit_page,
+    blocks_admin_page,
 )
 from .store import (
     _db,
     _lock,
     _set_setting,
+    add_block_submission,
     apps_data,
     btc_quote,
     collection_files,
@@ -77,6 +80,7 @@ from .store import (
     product_dir,
     resolve_content_path,
     sanitize_filename,
+    set_block_submission_status,
 )
 
 
@@ -249,6 +253,22 @@ class Handler(BaseHTTPRequestHandler):
             )
         if path == BASE + "/blocks":
             return self.send_html(blocks_page())
+        if path == BASE + "/blocks/submit":
+            qs = parse_qs(parsed.query)
+            message = qs.get("msg", [""])[0]
+            return self.send_html(
+                blocks_submit_page(message, ok=bool(message))
+            )
+        if path == BASE + "/blocks/admin":
+            member, _ = self.current_member()
+            # Fail closed: the approval queue exists only for the owner.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            qs = parse_qs(parsed.query)
+            message = qs.get("msg", [""])[0]
+            return self.send_html(
+                blocks_admin_page(member, message, ok=bool(message))
+            )
         if path.startswith(BASE + "/buy/"):
             course = COURSE_BY_KEY.get(path[len(BASE + "/buy/"):])
             if course is None:
@@ -659,6 +679,50 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
                     "card button for the links you set."
                 )
             )
+        if path == BASE + "/blocks/submit":
+            # Public submission (2026-11-22, Taylor: anyone submits,
+            # Taylor approves). Lands as 'pending'; never rendered
+            # until the owner approves it on /blocks/admin.
+            name = form.get("name", "").strip()[:60]
+            station = form.get("station", "").strip()[:60]
+            block_date = form.get("block_date", "").strip()[:10]
+            start_time = form.get("start_time", "").strip()[:5]
+            end_time = form.get("end_time", "").strip()[:5]
+            pay = form.get("pay", "").strip()[:20]
+            notes = form.get("notes", "").strip()[:1000]
+            if not (name and station and block_date and pay):
+                return self.send_html(blocks_submit_page(
+                    "Name, station, block date and pay are required — "
+                    "nothing was sent."))
+            add_block_submission(name, station, block_date,
+                                 start_time, end_time, pay, notes)
+            return self.redirect(
+                BASE + "/blocks/submit?msg=" + quote(
+                    "Sent — your block is in Taylor's approval queue "
+                    "and appears on the Blocks page once approved."))
+        if path == BASE + "/blocks/admin":
+            member, _ = self.current_member()
+            # Fail closed: only the owner can approve or reject.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            action = form.get("action", "")
+            new_status = {"approve": "approved",
+                          "reject": "rejected"}.get(action)
+            try:
+                sub_id = int(form.get("id", ""))
+            except ValueError:
+                sub_id = 0
+            if new_status and sub_id and set_block_submission_status(
+                    sub_id, new_status):
+                verdict = ("approved — it is live on the Blocks page"
+                           if new_status == "approved" else
+                           "rejected — it is not public")
+                return self.redirect(
+                    BASE + "/blocks/admin?msg=" + quote(
+                        f"Submission {verdict}."))
+            return self.redirect(
+                BASE + "/blocks/admin?msg=" + quote(
+                    "That action didn't apply — refresh and try again."))
         if path == BASE + "/signup":
             name = form.get("name", "").strip()
             email = form.get("email", "").strip()

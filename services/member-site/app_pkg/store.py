@@ -98,6 +98,18 @@ def init_db():
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS block_submissions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                station TEXT NOT NULL,
+                block_date TEXT NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                pay TEXT NOT NULL,
+                notes TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at INTEGER NOT NULL
+            );
             """
         )
 
@@ -505,3 +517,45 @@ def apps_data():
         APPS_DATA_CACHE["at"] = time.time()
         APPS_DATA_CACHE["data"] = data
     return data
+
+
+# -- Community Flex blocks (2026-11-22, Taylor: "Allow others to put
+# theirs out" — anyone may submit, Taylor approves each one first).
+# Nothing with status != 'approved' is ever rendered publicly.
+
+def add_block_submission(name, station, block_date, start_time,
+                         end_time, pay, notes):
+    with _lock, _db:
+        cur = _db.execute(
+            "INSERT INTO block_submissions (name, station, block_date, "
+            "start_time, end_time, pay, notes, status, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+            (name, station, block_date, start_time, end_time, pay,
+             notes, int(time.time())),
+        )
+        return cur.lastrowid
+
+
+def block_submissions(status=None):
+    with _lock:
+        if status:
+            return _db.execute(
+                "SELECT * FROM block_submissions WHERE status = ? "
+                "ORDER BY created_at DESC, id DESC",
+                (status,),
+            ).fetchall()
+        return _db.execute(
+            "SELECT * FROM block_submissions "
+            "ORDER BY created_at DESC, id DESC"
+        ).fetchall()
+
+
+def set_block_submission_status(sub_id, status):
+    if status not in ("pending", "approved", "rejected"):
+        return False
+    with _lock, _db:
+        cur = _db.execute(
+            "UPDATE block_submissions SET status = ? WHERE id = ?",
+            (status, int(sub_id)),
+        )
+        return cur.rowcount > 0
