@@ -470,6 +470,31 @@ def words_page():
     )
 
 
+def blocks_page():
+    """Flex Blocks — Taylor's Amazon Flex blocks with per-block
+    timestamped timelines and the email-confirmed pay record,
+    rendered from the Flex earnings log + pay record as of
+    2026-11-22 (added 2026-11-22 at Taylor's direction: 'A Blocks
+    page in members — my Flex blocks, timeline and pay').
+    Served from blocks.html beside this file, same pattern as
+    ssk_page; public like the buy pages. Tag: Flex."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "blocks.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>Flex Blocks unavailable</h1>"
+            "<p>The Flex Blocks page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def _ach_section(course, member, amount):
     """ACH (eCheck) section for the buy page — "" unless the
     checkout is configured (config.ACH_CHECKOUT_READY: the eCheck

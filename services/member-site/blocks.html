@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#0f1f2e" />
+    <!-- FLEET-CSS -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Flex Blocks" />
+    <link rel="icon" href="data:," />
+    <title>Flex Blocks — Blocks, timelines and pay</title>
+    <style>
+      :root {
+        --bg: #f6f8f9;
+        --bg-raise: #ffffff;
+        --line: #d8e0e4;
+        --ink: #16232c;
+        --ink-2: #5b6d77;
+        --accent: #0e7c7b;
+        --accent-ink: #095e5d;
+        --accent-chip: #e3f2f1;
+        --radius: 12px;
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+        line-height: 1.45;
+      }
+      .wrap {
+        max-width: 560px;
+        margin: 0 auto;
+        padding: calc(20px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom));
+      }
+      header { padding: 10px 2px 4px; }
+      .owner {
+        margin: 0 0 6px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--accent-ink);
+      }
+      h1 { margin: 0; font-size: 2rem; line-height: 1.12; font-weight: 800; letter-spacing: -0.01em; }
+      .sub { margin: 8px 0 0; color: var(--ink-2); font-size: 1rem; }
+      .card {
+        margin-top: 16px;
+        background: var(--bg-raise);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px;
+      }
+      .card h2 { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; }
+      .card p { margin: 8px 0 0; color: var(--ink-2); font-size: 0.95rem; }
+      .card strong { color: var(--ink); }
+      .chip {
+        display: inline-block;
+        background: var(--accent-chip);
+        color: var(--accent-ink);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        margin-right: 6px;
+      }
+      .block { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+      .block:first-of-type { border-top: none; padding-top: 2px; }
+      .block h3 { margin: 0; font-size: 1rem; font-weight: 800; }
+      .block .meta { margin: 2px 0 0; color: var(--ink-2); font-size: 0.92rem; }
+      .block ul { margin: 8px 0 0; padding-left: 1.1rem; color: var(--ink-2); font-size: 0.92rem; }
+      .block li { margin-top: 4px; }
+      .block li strong { color: var(--ink); }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.95rem; }
+      th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+      th { color: var(--ink-2); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+      td:last-child, th:last-child { text-align: right; }
+      tr.total td { font-weight: 800; border-bottom: none; }
+      footer { margin-top: 20px; color: var(--ink-2); font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <p class="owner">911TransEdu — Member Apps</p>
+        <h1>Flex Blocks</h1>
+        <p class="sub">Taylor&rsquo;s Amazon Flex blocks — each with its timeline and its pay, from the Flex earnings log and pay record.</p>
+        <p style="margin-top:10px"><span class="chip">Tag: Flex</span></p>
+      </header>
+
+      <section class="card">
+        <h2>Summary</h2>
+        <p><strong>$846.50 across 13 payments</strong>, every one confirmed by Amazon&rsquo;s payment email (Oct 28 – Nov 21, 2026). Blocks on record run Oct 23 – Nov 22, 2026. App &ldquo;Paid&rdquo; figures run $0.50 above the email figure on instant cash outs — the transfer fee — so the email figure is the one counted.</p>
+        <p>The wider record: 39 Amazon-named bank deposits total $2,457.63 across 2025–2026 (a floor — at least one payout landed under a generic label). The surgery-gap rebuild (Jun 23 – Aug 23, 2026) found exactly one Flex deposit: $0.91 on Jul 1.</p>
+      </section>
+
+      <section class="card">
+        <h2>Blocks &amp; timelines</h2>
+
+        <div class="block">
+          <h3>Sat, Nov 21 — DPD7 Fairview</h3>
+          <p class="meta">0415–0715 scheduled · <strong>$94.50, paid in full</strong></p>
+          <ul>
+            <li><strong>0418</strong> — package photo at the station.</li>
+            <li><strong>0633</strong> — block ended early due to ice; 13 packages returned to DPD7. A conditions-ended block pays the full rate.</li>
+            <li><strong>Nov 21</strong> — payment confirmation by email: $94.50.</li>
+          </ul>
+        </div>
+
+        <div class="block">
+          <h3>Sat, Nov 21 — UOR2 Portland</h3>
+          <p class="meta">0800–1000 · $49.00 + tips · <strong>Cancelled by Taylor (0838)</strong> — no work, no pay.</p>
+        </div>
+
+        <div class="block">
+          <h3>Sun, Nov 22 — DPD2 Portland</h3>
+          <p class="meta">0430–0730 · <strong>Cancelled by Taylor (Nov 21, 0838)</strong> — no work, no pay.</p>
+        </div>
+
+        <div class="block">
+          <h3>Fri, Nov 20 — DPD4 Tualatin</h3>
+          <p class="meta">Started 0430 · end time and pay not on record</p>
+          <ul>
+            <li><strong>0431</strong> — photos at block start; the station bag is bag 084 (Taylor&rsquo;s identification).</li>
+            <li><strong>0619</strong> — all package drops complete; turning in the pick.</li>
+          </ul>
+        </div>
+
+        <div class="block">
+          <h3>Thu, Nov 19 — ZPD3 Tigard (Amazon Now)</h3>
+          <p class="meta">0510–0540 · $12.50 + tips · <strong>paid $12.00</strong></p>
+          <ul>
+            <li><strong>0540</strong> — block completed; tips pending at 0700.</li>
+            <li><strong>Nov 21, 0351</strong> — payment email: $12.00 (app $12.50 minus the $0.50 fee). No tips came in — block closed.</li>
+          </ul>
+        </div>
+
+        <div class="block">
+          <h3>Thu, Nov 19 — DPD8 Hillsboro</h3>
+          <p class="meta">0615–0915 · $70.50 · <strong>Cancelled by Taylor (0443)</strong> — not run, no pay.</p>
+        </div>
+
+        <div class="block">
+          <h3>Tue, Nov 17 — VOR3 Portland</h3>
+          <p class="meta">0345–0715 (3.5 h) · app $98.00 · <strong>paid $97.50</strong> + $7.00 courtesy</p>
+          <ul>
+            <li><strong>0319</strong> — Taylor reported the block.</li>
+            <li><strong>0336–0509</strong> — pick photos filed.</li>
+            <li><strong>0727</strong> — pay confirmation email sent: $97.50.</li>
+            <li><strong>0805</strong> — dropped (Taylor&rsquo;s report, with video).</li>
+            <li><strong>Nov 18</strong> — courtesy payment for going farther, $7.00, paid.</li>
+          </ul>
+        </div>
+
+        <div class="block">
+          <h3>Sun, Nov 15 — DPD2 Portland</h3>
+          <p class="meta">0415–0715 · app $84.00 · <strong>paid $83.50</strong></p>
+          <ul>
+            <li><strong>0728</strong> — cash out confirmed: $83.50 sent to the account ending 2053; email confirmation matches exactly.</li>
+          </ul>
+        </div>
+
+        <div class="block">
+          <h3>Sat, Nov 14 — DPD4</h3>
+          <p class="meta">0415–0715 · app $87.00 · <strong>paid $86.50</strong></p>
+          <ul>
+            <li><strong>0422</strong> — Taylor reported the block.</li>
+            <li><strong>0656</strong> — block done (Taylor&rsquo;s word), headed to PacPride.</li>
+          </ul>
+        </div>
+
+        <div class="block">
+          <h3>Wed, Nov 11 — DPD2 Portland</h3>
+          <p class="meta">0415–0715 · app $82.50 · <strong>paid $82.00, bank-confirmed</strong></p>
+          <ul>
+            <li><strong>0345</strong> — Taylor reported the block.</li>
+            <li><strong>0534</strong> — picked up; drop set for PacPride, Oregon City.</li>
+            <li><strong>0706</strong> — drop at PacPride logged on Taylor&rsquo;s word. Stride estimate for the block: 43.82 mi.</li>
+            <li><strong>Nov 12</strong> — $82.00 landed in EveryDay Checking ending 2053. Reconciliation complete: app $82.50 → email $82.00 → bank $82.00.</li>
+          </ul>
+        </div>
+
+        <div class="block">
+          <h3>Tue, Nov 3 — UOR2</h3>
+          <p class="meta">0415–0615 · <strong>$56.00 + $56.00 manual adjustment = $112.00</strong></p>
+          <ul>
+            <li><strong>0446 / 0516</strong> — photos taken inside the block window.</li>
+            <li><strong>Nov 4</strong> — payment sent $56.00; bank deposit $56.00 the same day, exact.</li>
+          </ul>
+        </div>
+
+        <div class="block">
+          <h3>Sat, Oct 31</h3>
+          <p class="meta">0415–0715 · app $90.00 · <strong>paid $89.50</strong></p>
+        </div>
+
+        <div class="block">
+          <h3>Wed, Oct 28</h3>
+          <p class="meta">0330–0600 · app $85.00 · <strong>paid $84.50</strong> + $7.00 courtesy (paid Oct 29)</p>
+        </div>
+
+        <div class="block">
+          <h3>Tue, Oct 27</h3>
+          <p class="meta">0415–0715 · <strong>$91.50, paid exact</strong> (app = bank, same day)</p>
+        </div>
+
+        <div class="block">
+          <h3>Sun, Oct 25</h3>
+          <p class="meta">0430–0730 · <strong>$88.50</strong> · and 0820–0850 (30 min) · <strong>$17.00</strong></p>
+        </div>
+
+        <div class="block">
+          <h3>Fri, Oct 23</h3>
+          <p class="meta">0415–0715 · app $100.50 · bank deposit $100.00</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Pay record — email-confirmed</h2>
+        <table>
+          <tr><th>Payment date</th><th>Amount</th></tr>
+          <tr><td>Oct 28, 2026</td><td>$84.50</td></tr>
+          <tr><td>Oct 29, 2026</td><td>$7.00</td></tr>
+          <tr><td>Oct 31, 2026</td><td>$89.50</td></tr>
+          <tr><td>Nov 4, 2026</td><td>$56.00</td></tr>
+          <tr><td>Nov 4, 2026</td><td>$55.50</td></tr>
+          <tr><td>Nov 11, 2026</td><td>$82.00</td></tr>
+          <tr><td>Nov 14, 2026</td><td>$86.50</td></tr>
+          <tr><td>Nov 15, 2026</td><td>$83.50</td></tr>
+          <tr><td>Nov 17, 2026</td><td>$97.50</td></tr>
+          <tr><td>Nov 18, 2026</td><td>$7.00</td></tr>
+          <tr><td>Nov 20, 2026</td><td>$91.00</td></tr>
+          <tr><td>Nov 21, 2026</td><td>$12.00</td></tr>
+          <tr><td>Nov 21, 2026</td><td>$94.50</td></tr>
+          <tr class="total"><td>Running total — 13 payments</td><td>$846.50</td></tr>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Standing dispute — Oct 29 late mark</h2>
+        <p>The Flex app flags one issue: &ldquo;You were late for your scheduled block: Oct 29, 2026.&rdquo; Taylor&rsquo;s position, in Taylor&rsquo;s words: the mark is a <strong>&ldquo;fraudulent mark by someone at the warehouse.&rdquo;</strong></p>
+        <p>The record pulled Nov 22 shows <strong>no block dated Oct 29, 2026 in any source</strong> — app, email, pay record, or bank; the Oct 23 – Nov 4 bank window reconciles to the cent ($588.50) with no Oct 29 block in it. The dispute was sent to Amazon Flex support on Nov 22, 2026, asking for the mark&rsquo;s removal, the block ID and check-in record behind it, and written confirmation. Reply awaited.</p>
+      </section>
+
+      <footer>
+        <p>Source: Taylor&rsquo;s Flex earnings log and pay record, updated Nov 22, 2026. Tag: Flex. New blocks and payments are added to the log as they land.</p>
+      </footer>
+    </div>
+  </body>
+</html>

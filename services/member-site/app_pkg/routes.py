@@ -59,6 +59,7 @@ from .pages import (
     ssk_page,
     cport_page,
     words_page,
+    blocks_page,
 )
 from .store import (
     _db,
@@ -246,6 +247,8 @@ class Handler(BaseHTTPRequestHandler):
                 ),
                 "text/x-python; charset=utf-8",
             )
+        if path == BASE + "/blocks":
+            return self.send_html(blocks_page())
         if path.startswith(BASE + "/buy/"):
             course = COURSE_BY_KEY.get(path[len(BASE + "/buy/"):])
             if course is None:
