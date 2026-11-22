@@ -11,6 +11,7 @@ from http.server import ThreadingHTTPServer
 from . import authnet, store
 from .config import BASE, DATABASE_URL, PORT
 from .ledger import worker_loop
+from .renewal import renewal_loop
 from .routes import Handler
 from .store import apply_schema
 
@@ -32,6 +33,7 @@ def main():
     else:
         raise SystemExit("could not apply schema after 30 attempts")
     threading.Thread(target=worker_loop, daemon=True).start()
+    threading.Thread(target=renewal_loop, daemon=True).start()
     try:
         authnet.log_state()
     except Exception as exc:  # the state line must never block boot

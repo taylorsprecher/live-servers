@@ -8,7 +8,7 @@ import json
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-from . import authnet, vault
+from . import authnet, renewal, vault
 from .authnet import ProcessorDisabled, ProcessorError
 from .config import ADMIN_TOKEN, BASE, MERCHANT_ID, WEBHOOK_SECRET
 from .ledger import (
@@ -98,6 +98,15 @@ class Handler(BaseHTTPRequestHandler):
                     "authnet": authnet.status(),
                     "securestore_enabled": vault.vault_enabled(),
                 })
+            if path == BASE + "/admin/renewals":
+                if not self.admin_ok():
+                    return self.send_json(
+                        {"error": "admin token required"}, 401)
+                conn = db()
+                with conn.cursor() as cur:
+                    rows = renewal.list_profiles(cur)
+                conn.commit()
+                return self.send_json({"renewals": rows})
             if path == BASE + "/balances":
                 conn = db()
                 with conn.cursor() as cur:
@@ -232,8 +241,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self.webhook(path[len(BASE + "/webhooks/"):])
             if path == BASE + "/checkout/echeck":
                 return self.public_echeck_checkout()
+            if path == BASE + "/renewals/cancel":
+                return self.public_renewal_cancel()
             if not self.admin_ok():
                 return self.send_json({"error": "admin token required"}, 401)
+
+            if path == BASE + "/admin/renewals/cancel":
+                data = self.body_json()
+                conn = db()
+                with _lock, conn.cursor() as cur:
+                    cancelled = renewal.cancel_admin(
+                        cur, data.get("email") or "",
+                        data.get("product") or "")
+                conn.commit()
+                return self.send_json({"cancelled": cancelled})
 
             if path == BASE + "/intents":
                 data = self.body_json()
@@ -582,10 +603,68 @@ class Handler(BaseHTTPRequestHandler):
         # the buyer's result. The payment nonce is never passed to it.
         vault.record_receipt(
             result, data.get("email") or "", data.get("idempotency_key"))
+        # Auto-renewal enrollment — only when the buyer opted in
+        # (auto_renew=true, the buy page's recurring-authorization
+        # checkbox). Best-effort like the vault: it runs after the
+        # sale has committed and can never change its outcome.
+        if data.get("auto_renew") is True:
+            result["auto_renew"] = self._try_enroll(result, data)
         return self.send_json(
             {"echeck_checkout": result},
             200 if result.get("deduplicated") else 201,
         )
+
+    def _try_enroll(self, result, data):
+        """Best-effort auto-renewal enrollment from a completed
+        checkout charge. Buyer-safe outcome dict; never raises."""
+        if not (result.get("charged") and result.get("approved")
+                and result.get("trans_id")):
+            return {"enrolled": False,
+                    "reason": "no completed charge to enroll from"}
+        cfg = authnet.AuthNetConfig()
+        if not cfg.renewal_enabled():
+            return {"enrolled": False,
+                    "reason": "auto-renewal is not enabled"}
+        conn = db()
+        try:
+            with _lock, conn.cursor() as cur:
+                outcome = renewal.enroll(
+                    cur, data.get("email") or "", result.get("product"),
+                    result["trans_id"], cfg=cfg)
+            conn.commit()
+            return outcome
+        except Exception as exc:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            print(f"payment-ledger renewal enroll failed: {exc}",
+                  flush=True)
+            return {"enrolled": False,
+                    "reason": "enrollment failed; the purchase itself "
+                              "is complete"}
+
+    def public_renewal_cancel(self):
+        """POST /ledger/renewals/cancel — buyer self-cancel.
+
+        Public like the checkout: the credential is the enrollment's
+        one-time cancel token (only its SHA-256 hash is stored).
+        Body: email, product, cancel_token."""
+        try:
+            data = self.body_json()
+        except Exception:
+            return self.send_json({"error": "request body must be JSON"}, 400)
+        conn = db()
+        try:
+            with _lock, conn.cursor() as cur:
+                cancelled = renewal.cancel_by_token(
+                    cur, data.get("email") or "", data.get("product") or "",
+                    data.get("cancel_token") or "")
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            return self.send_json({"error": str(exc)}, 500)
+        return self.send_json({"cancelled": cancelled})
 
     # -- Webhooks (Stage 1: verify, land raw, acknowledge) --------------
     def webhook(self, source):

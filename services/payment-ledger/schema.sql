@@ -444,3 +444,35 @@ CREATE TABLE IF NOT EXISTS fbo_settlement_wires (
     reconciled BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Auto-renewal enrollments (app_pkg/renewal.py). One row per buyer
+-- + product enrollment. The Authorize.net Customer Profile ids are
+-- gateway references, NOT payment instruments: the bank account
+-- itself lives only at Authorize.net, tokenized there from the
+-- buyer's first checkout transaction. The cancel token is stored
+-- only as a SHA-256 hash; the raw token is shown to the buyer once,
+-- in their enrollment result. At most one ACTIVE row per
+-- (email, product) — the partial unique index enforces it.
+CREATE TABLE IF NOT EXISTS renewal_profiles (
+    id UUID PRIMARY KEY,
+    email TEXT NOT NULL,
+    product VARCHAR(32) NOT NULL,
+    customer_profile_id TEXT NOT NULL,
+    payment_profile_id TEXT NOT NULL,
+    status VARCHAR(24) NOT NULL DEFAULT 'ACTIVE',
+    consent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    authorization_version VARCHAR(32) NOT NULL,
+    cancel_token_hash TEXT NOT NULL,
+    next_renewal_at TIMESTAMPTZ NOT NULL,
+    attempts INT NOT NULL DEFAULT 0,
+    last_trans_id TEXT,
+    last_result TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_renewal_one_active
+    ON renewal_profiles (email, product) WHERE status = 'ACTIVE';
+
+CREATE INDEX IF NOT EXISTS idx_renewal_due
+    ON renewal_profiles (status, next_renewal_at);

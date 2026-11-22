@@ -45,6 +45,15 @@ Design rules, in order:
    hold ~5 business days and a debit can still return; settlement
    then arrives through the same canonical surfaces as cards.
 
+3c. AUTO-RENEWAL HAS A THIRD SWITCH. Renewal operations (enrolling
+   a buyer into a stored Authorize.net Customer Profile, and the
+   scheduler charging that profile when a renewal comes due)
+   additionally need AUTHNET_RENEWAL_ENABLED=1 — see
+   app_pkg/renewal.py. Enrollment happens only on the buyer's
+   explicit opt-in at checkout, from the completed first
+   transaction; the platform is the scheduler because Authorize.net
+   ARB cannot express CCCE's 24-month cycle.
+
 4. LEDGER WRITES GO THROUGH THE EXISTING WRITE PATH. A successful
    charge is recorded exactly the way the inbox worker records a
    processor event: an intent + attempt are created (the
@@ -120,6 +129,7 @@ class AuthNetConfig:
         self.endpoint = ENDPOINTS[self.env]
         self.enabled_flag = (env.get("AUTHNET_ENABLED") or "").strip() == "1"
         self.echeck_flag = (env.get("AUTHNET_ECHECK_ENABLED") or "").strip() == "1"
+        self.renewal_flag = (env.get("AUTHNET_RENEWAL_ENABLED") or "").strip() == "1"
 
     def missing(self):
         out = []
@@ -158,6 +168,20 @@ class AuthNetConfig:
     def echeck_enabled(self):
         return self.echeck_disabled_reason() is None
 
+    def renewal_disabled_reason(self):
+        """None when auto-renewal operations may run; otherwise why
+        not. The eCheck gates apply first (renewals enroll from, and
+        charge as, eCheck debits), then the renewal switch itself."""
+        reason = self.echeck_disabled_reason()
+        if reason is not None:
+            return reason
+        if not self.renewal_flag:
+            return "AUTHNET_RENEWAL_ENABLED is not set to 1"
+        return None
+
+    def renewal_enabled(self):
+        return self.renewal_disabled_reason() is None
+
     def auth_block(self):
         return {"name": self.login_id, "transactionKey": self.txn_key}
 
@@ -180,6 +204,15 @@ def require_echeck_enabled(cfg):
         )
 
 
+def require_renewal_enabled(cfg):
+    reason = cfg.renewal_disabled_reason()
+    if reason is not None:
+        raise ProcessorDisabled(
+            f"Authorize.net auto-renewal is disabled ({reason}); "
+            "renewal operations are refused, nothing was sent to the gateway"
+        )
+
+
 def status(cfg=None):
     """Health-report block. Contains no credential material — only
     whether each gate is satisfied."""
@@ -192,6 +225,8 @@ def status(cfg=None):
         "disabled_reason": cfg.disabled_reason(),
         "echeck_enabled": cfg.echeck_enabled(),
         "echeck_disabled_reason": cfg.echeck_disabled_reason(),
+        "renewal_enabled": cfg.renewal_enabled(),
+        "renewal_disabled_reason": cfg.renewal_disabled_reason(),
     }
 
 
@@ -202,10 +237,12 @@ def log_state(cfg=None):
     if st["enabled"]:
         echeck = "ENABLED" if st["echeck_enabled"] else (
             f"DISABLED ({st['echeck_disabled_reason']})")
+        renewal = "ENABLED" if st["renewal_enabled"] else (
+            f"DISABLED ({st['renewal_disabled_reason']})")
         print(
             f"payment-ledger authnet: ENABLED (env={st['env']}); "
             "credentials present (values never logged); "
-            f"eCheck {echeck}",
+            f"eCheck {echeck}; auto-renewal {renewal}",
             flush=True,
         )
     else:
@@ -621,11 +658,15 @@ ECHECK_PRODUCTS = {
         "amount_minor": 1500,
         "invoice_prefix": "CCCE",
         "description": "CCCE course — Cultural Competence Continuing Education",
+        # Taylor, 2026-11-15: "$15 every two years per provider."
+        "renewal_years": 2,
     },
     "emspr": {
         "amount_minor": 600000,
         "invoice_prefix": "EMSPR",
         "description": "EMSPR Protocols",
+        # Taylor, 2026-11-15: "EMS protocols every year."
+        "renewal_years": 1,
     },
 }
 

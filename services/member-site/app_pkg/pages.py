@@ -14,6 +14,7 @@ from .config import (
     ACH_CHECKOUT_READY,
     AUTHNET_API_LOGIN_ID,
     AUTHNET_CLIENT_KEY,
+    RENEWAL_OFFER_READY,
     BASE,
     CASHAPP_CASHTAG,
     CONTENT_DIR,
@@ -409,7 +410,14 @@ def _ach_section(course, member, amount):
     authorization assertion are posted — to the payment ledger's
     public checkout route, which charges the server-side catalog
     amount. The pay button stays disabled until the WEB debit
-    authorization box is checked."""
+    authorization box is checked.
+
+    When config.RENEWAL_OFFER_READY holds (the renewal switch is on
+    as well), the section also renders the optional auto-renew
+    checkbox — the recurring debit authorization — and the script
+    posts auto_renew=true with the checkout; the ledger enrolls the
+    buyer from the completed charge and the result message shows
+    the one-time cancel code."""
     if not ACH_CHECKOUT_READY:
         return ""
     if member is not None and course["key"] in member_access(member["id"]):
@@ -463,6 +471,7 @@ def _ach_section(course, member, amount):
         descriptor: response.opaqueData.dataDescriptor,
         email: __EMAIL__,
         authorization: true,
+        auto_renew: (document.getElementById("ach-renew") || {}).checked === true,
         account_type: bankData.accountType,
         idempotency_key: __IDEM__
       };
@@ -477,9 +486,23 @@ def _ach_section(course, member, amount):
         if (doc.error) { show(doc.error, false); btn.disabled = false; return; }
         var out = doc.echeck_checkout || {};
         if (out.approved) {
-          show("Payment submitted — thank you. eCheck payments take " +
+          var text = "Payment submitted — thank you. eCheck payments take " +
                "several business days to settle; your access unlocks " +
-               "as soon as the payment is confirmed.", true);
+               "as soon as the payment is confirmed.";
+          if (payload.auto_renew) {
+            var rn = out.auto_renew || {};
+            if (rn.enrolled && rn.cancel_token) {
+              text += " Auto-renewal is ON. Your cancel code is " +
+                rn.cancel_token + " — save it: with your account email " +
+                "and this code you can cancel renewal anytime.";
+            } else if (rn.enrolled) {
+              text += " Auto-renewal is ON for this purchase.";
+            } else {
+              text += " Auto-renewal could not be set up — your purchase " +
+                "is complete; email us to enable it.";
+            }
+          }
+          show(text, true);
         } else if (out.deduplicated) {
           show(out.message || "This payment was already submitted.", true);
         } else {
@@ -502,6 +525,16 @@ def _ach_section(course, member, amount):
         .replace("__EMAIL__", json.dumps(member["email"]))
         .replace("__IDEM__", json.dumps(uuid.uuid4().hex))
     )
+    renew_block = ""
+    if RENEWAL_OFFER_READY:
+        # The recurring WEB debit authorization — the payment
+        # ledger's renewal.AUTHORIZATION_VERSION "recurring-web-v1";
+        # wording changes must land in both places together.
+        # Separate from, and optional beside, the one-time
+        # authorization below: the ledger enrolls the buyer only
+        # when the checkout posts auto_renew=true.
+        renew_block = f"""
+<label style="font-weight:400"><input id="ach-renew" type="checkbox" style="width:auto;min-height:0;margin-right:8px">Auto-renew: I also authorize Taylor's Transgender Patient Awareness, LLC to debit the same bank account {amount} {course['cadence']} to renew this purchase automatically, starting when the current term ends, until I cancel. I can cancel anytime before a renewal date — with the cancel code shown after checkout, or by emailing taylor_sprecher@911transedu.net.</label>"""
     return f"""
 <div class="card"><h2>Or pay by bank account — ACH</h2>
 <p>Pay {amount} straight from your bank account (eCheck). Your
@@ -516,7 +549,7 @@ one-time payment token, and that token is all this site ever sees.</p>
 <input id="ach-account" type="text" inputmode="numeric" autocomplete="off" maxlength="17">
 <label for="ach-type">Account type</label>
 <select id="ach-type"><option value="checking">Checking</option><option value="savings">Savings</option></select>
-<label style="font-weight:400"><input id="ach-auth" type="checkbox" style="width:auto;min-height:0;margin-right:8px">I authorize Taylor's Transgender Patient Awareness, LLC to debit my bank account for this purchase — a one-time eCheck debit of {amount}.</label>
+<label style="font-weight:400"><input id="ach-auth" type="checkbox" style="width:auto;min-height:0;margin-right:8px">I authorize Taylor's Transgender Patient Awareness, LLC to debit my bank account for this purchase — a one-time eCheck debit of {amount}.</label>{renew_block}
 <p class="small">eCheck payments take several business days to
 settle. Access unlocks as soon as the payment is confirmed.</p>
 <button id="ach-pay" type="button" disabled>Pay {amount} by bank account</button>

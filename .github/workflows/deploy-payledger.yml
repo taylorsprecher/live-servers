@@ -26,6 +26,11 @@ name: Deploy payment ledger
 # the enable_echeck input upserts AUTHNET_ECHECK_ENABLED=1
 # (ops/set-authnet-echeck-enabled.sh). Both default false; a plain
 # deploy changes neither switch.
+# Auto-renewal has a third on-switch of the same kind: the
+# enable_renewal input upserts AUTHNET_RENEWAL_ENABLED=1
+# (ops/set-authnet-renewal-enabled.sh). It arms BOTH the ledger's
+# renewal gate and (after a members redeploy) the buy-page
+# auto-renew checkbox, which read the same host .env entry.
 # The SecureStore receipt vault follows the identical discipline: its
 # Fernet key is delivered from the PAYLEDGER_SECURESTORE_KEY repo
 # secret over SSH stdin (ops/set-securestore-key.sh) whenever that
@@ -49,6 +54,10 @@ on:
         default: false
       enable_securestore:
         description: "Also set PAYLEDGER_SECURESTORE_ENABLED=1 in the host .env (turns the SecureStore encrypted checkout-receipt vault ON at this deploy; needs the PAYLEDGER_SECURESTORE_KEY secret delivered and valid, or the vault stays dark)"
+        type: boolean
+        default: false
+      enable_renewal:
+        description: "Also set AUTHNET_RENEWAL_ENABLED=1 in the host .env (turns auto-renewal enrollment + the renewal scheduler ON at this deploy; needs enable_authnet + enable_echeck too, valid credentials, and a members redeploy before buyers see the auto-renew checkbox)"
         type: boolean
         default: false
 
@@ -137,6 +146,17 @@ jobs:
         run: |
           printf 'AUTHNET_ECHECK_ENABLED=1\n' | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
               'bash /home/deploy/live-servers/ops/set-authnet-echeck-enabled.sh'
+
+      # Auto-renewal on-switch: same deliberate pattern, one level
+      # up from eCheck. Runs ONLY when the dispatcher set the
+      # enable_renewal input true. Writes AUTHNET_RENEWAL_ENABLED=1
+      # into the host .env before the build. A plain deploy never
+      # touches the switch. See ops/set-authnet-renewal-enabled.sh.
+      - name: Enable Authorize.net auto-renewal (only when requested)
+        if: ${{ inputs.enable_renewal }}
+        run: |
+          printf 'AUTHNET_RENEWAL_ENABLED=1\n' | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/live-servers/ops/set-authnet-renewal-enabled.sh'
 
       # SecureStore vault key delivery: same SSH-stdin pattern as the
       # Authorize.net credentials. Runs whenever the

@@ -253,6 +253,36 @@ AND delivers a valid Fernet key in `PAYLEDGER_SECURESTORE_KEY`
 `test_vault.py` (17 offline checks: gates, ciphertext at rest,
 round-trip, never-raise).
 
+## Auto-renewal (added 2026-11-21, dark)
+
+`app_pkg/renewal.py` adds opt-in auto-renewal for the checkout
+catalog (CCCE $15 every two years, EMSPR $6,000 every year — the
+catalog's own cadences). Authorize.net's ARB cannot express a
+24-month cycle, so the platform is the scheduler: a buyer who
+checks the buy page's auto-renew box (the recurring WEB debit
+authorization, version `recurring-web-v1`) is enrolled FROM their
+completed first transaction into an Authorize.net Customer Profile
+— the bank account lives only at the gateway; this service stores
+profile ids, the consent timestamp, and the SHA-256 hash of a
+one-time cancel token the buyer is shown once. A daemon loop
+(server.py, beside the ingestion worker) charges due profiles
+through the same intent + canonical captured-event path as a first
+charge (ECHECK / PENDING_SETTLEMENT / is_recurring markers,
+deterministic per-period idempotency, one commit per profile), and
+files a SecureStore receipt per renewal. Declines retry twice more
+at 3-day intervals, then park at NEEDS_ATTENTION; gateway errors
+record nothing and retry the next day. Cancellation: the buyer via
+`POST /ledger/renewals/cancel` (email + product + token), the owner
+via the admin routes (`GET /ledger/admin/renewals`,
+`POST /ledger/admin/renewals/cancel`). **Fourth switch (fail
+closed):** everything refuses unless the host `.env` sets
+`AUTHNET_RENEWAL_ENABLED=1` on top of the processor and eCheck
+switches (deploy-payledger's `enable_renewal` input upserts it;
+the same entry arms the buy-page checkbox after a members
+redeploy). `/ledger/health` reports `renewal_enabled`. Checks:
+`test_renewal.py` (31 offline checks: gates, anniversary math, CIM
+payloads, enrollment/cancel, all four scheduler outcomes).
+
 ## Verified before deploy (local PostgreSQL 16, 2026-11-15)
 
 Schema applies cleanly; invalid state transition rejected;

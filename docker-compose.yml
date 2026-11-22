@@ -142,6 +142,10 @@ services:
       # design; the Transaction Key is a secret and is NEVER passed
       # to this service.
       AUTHNET_ECHECK_ENABLED: ${AUTHNET_ECHECK_ENABLED:-}
+      # Auto-renew offer on the buy pages: the checkbox renders only
+      # when the ACH section renders AND this switch is on (the same
+      # host .env entry arms the payment ledger's renewal gate).
+      AUTHNET_RENEWAL_ENABLED: ${AUTHNET_RENEWAL_ENABLED:-}
       AUTHNET_API_LOGIN_ID: ${AUTHNET_API_LOGIN_ID:-}
       AUTHNET_CLIENT_KEY: ${AUTHNET_CLIENT_KEY:-}
       AUTHNET_ENV: ${AUTHNET_ENV:-production}
@@ -291,6 +295,11 @@ services:
       # AUTHNET_ENABLED: eCheck charges refuse until the host .env
       # explicitly sets AUTHNET_ECHECK_ENABLED=1 as well.
       AUTHNET_ECHECK_ENABLED: ${AUTHNET_ECHECK_ENABLED:-}
+      # Auto-renewal (app_pkg/renewal.py) has a third switch on top
+      # of AUTHNET_ENABLED + AUTHNET_ECHECK_ENABLED: enrollment and
+      # scheduled renewal charges refuse until the host .env
+      # explicitly sets AUTHNET_RENEWAL_ENABLED=1 as well.
+      AUTHNET_RENEWAL_ENABLED: ${AUTHNET_RENEWAL_ENABLED:-}
       # SecureStore encrypted checkout-receipt vault (app_pkg/vault.py).
       # Same fail-closed pattern: dark until the host .env sets
       # PAYLEDGER_SECURESTORE_ENABLED=1 AND delivers a Fernet key in

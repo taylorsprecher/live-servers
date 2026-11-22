@@ -55,6 +55,14 @@ if AUTHNET_ENV not in ("production", "sandbox"):
 ACH_CHECKOUT_READY = bool(
     AUTHNET_ECHECK_ENABLED and AUTHNET_API_LOGIN_ID and AUTHNET_CLIENT_KEY
 )
+
+# Auto-renew offer inside the ACH section: the checkbox renders
+# only when the ACH checkout itself renders AND the renewal switch
+# is on. The same host .env entry (AUTHNET_RENEWAL_ENABLED) arms
+# the payment ledger's renewal gate — the ledger refuses
+# enrollment while its own switch is off.
+AUTHNET_RENEWAL_ENABLED = (os.environ.get("AUTHNET_RENEWAL_ENABLED") or "") == "1"
+RENEWAL_OFFER_READY = bool(ACH_CHECKOUT_READY and AUTHNET_RENEWAL_ENABLED)
 ACCEPT_JS_URL = (
     "https://jstest.authorize.net/v1/Accept.js"
     if AUTHNET_ENV == "sandbox"
