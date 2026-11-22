@@ -149,6 +149,12 @@ services:
       AUTHNET_API_LOGIN_ID: ${AUTHNET_API_LOGIN_ID:-}
       AUTHNET_CLIENT_KEY: ${AUTHNET_CLIENT_KEY:-}
       AUTHNET_ENV: ${AUTHNET_ENV:-production}
+      # Bug guard (app_pkg/bug_guard.py): blocks attack-probe
+      # traffic in the app and reports blocks to a file on the
+      # volume. Armed only when the host .env entry is 1 (set via
+      # ops/set-bug-guard-enabled.sh through the deploy-members
+      # workflow's enable_bug_guard input).
+      MEMBERS_BUG_GUARD_ENABLED: ${MEMBERS_BUG_GUARD_ENABLED:-}
     volumes:
       - members-data:/data
     ports:

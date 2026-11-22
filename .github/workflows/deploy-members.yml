@@ -5,9 +5,20 @@ name: Deploy members service only
 # full-build RAM gate is not met in steady state; see
 # ops/deploy-members.sh for the reasoning. Gateway/TLS config and all
 # other services are untouched.
+#
+# Bug guard on-switch (Taylor, 2026-11-22): the enable_bug_guard
+# input upserts MEMBERS_BUG_GUARD_ENABLED=1 into the host .env
+# (ops/set-bug-guard-enabled.sh), arming the member site's in-app
+# attack-probe blocker (app_pkg/bug_guard.py). Default false; a
+# plain deploy never touches the switch.
 
 on:
   workflow_dispatch:
+    inputs:
+      enable_bug_guard:
+        description: "Also set MEMBERS_BUG_GUARD_ENABLED=1 in the host .env (turns the member-site bug guard ON at this deploy)"
+        type: boolean
+        default: false
 
 jobs:
   deploy-members:
@@ -38,6 +49,17 @@ jobs:
             --exclude 'demo/' \
             -e "ssh -i ~/.ssh/id_deploy" \
             ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      # Bug guard on-switch: runs ONLY when the dispatcher set the
+      # enable_bug_guard input true. Writes
+      # MEMBERS_BUG_GUARD_ENABLED=1 into the host .env before the
+      # build. A plain deploy never touches the switch. See
+      # ops/set-bug-guard-enabled.sh.
+      - name: Enable member-site bug guard (only when requested)
+        if: ${{ inputs.enable_bug_guard }}
+        run: |
+          printf 'MEMBERS_BUG_GUARD_ENABLED=1\n' | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/live-servers/ops/set-bug-guard-enabled.sh'
 
       - name: Build + up members only on host
         run: |

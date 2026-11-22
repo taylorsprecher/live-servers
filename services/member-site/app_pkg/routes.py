@@ -31,6 +31,10 @@ from .config import (
     BASE,
     CASHAPP_CASHTAG,
     BTC_RATE_SOURCE,
+    BUG_GUARD_ALLOW,
+    BUG_GUARD_ENABLED,
+    BUG_GUARD_REPORT_PATH,
+    BUG_GUARD_STATE_PATH,
     CONTENT_DIR,
     MAX_UPLOAD_BYTES,
     MEMBER_UPLOAD_CONTENT_TYPES,
@@ -39,6 +43,7 @@ from .config import (
     OWNER_EMAIL,
     SESSION_DAYS,
 )
+from .bug_guard import BugGuard
 from .pages import (
     PAGE,
     buy_page,
@@ -71,6 +76,20 @@ from .store import (
 )
 
 
+_GUARD = None
+
+
+def _guard():
+    """The one BugGuard for this process (built lazily; its state
+    lives on the data volume)."""
+    global _GUARD
+    if _GUARD is None:
+        _GUARD = BugGuard(
+            BUG_GUARD_ENABLED, BUG_GUARD_STATE_PATH,
+            BUG_GUARD_REPORT_PATH, BUG_GUARD_ALLOW)
+    return _GUARD
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -78,6 +97,26 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     # -- helpers ---------------------------------------------------------
+    def _client_ip(self):
+        # The gateway overwrites X-Real-IP with the real remote
+        # address and the app port is loopback-only, so the header
+        # is the client address; the socket peer is the fallback
+        # for direct loopback calls (health checks).
+        return (self.headers.get("X-Real-IP")
+                or self.client_address[0] or "").strip()
+
+    def _bug_blocked(self):
+        """True when the bug guard refuses this request. The guard
+        fails open: any error inside it allows the request, so the
+        real site is never taken down by its own guard."""
+        if not BUG_GUARD_ENABLED:
+            return False
+        try:
+            return _guard().check(
+                self._client_ip(), urlparse(self.path).path)
+        except Exception:
+            return False
+
     def send_html(self, body_html, status=200, extra_headers=None):
         data = body_html.encode("utf-8")
         self.send_response(status)
@@ -132,12 +171,19 @@ class Handler(BaseHTTPRequestHandler):
 
     # -- routes ----------------------------------------------------------
     def do_GET(self):
+        if self._bug_blocked():
+            return self.send_html("<h1>403 Forbidden</h1>", status=403)
         parsed = urlparse(self.path)
         path = parsed.path
         if path == BASE:
             return self.redirect(BASE + "/")
         if path == BASE + "/health":
-            data = b'{"status":"ok"}'
+            payload = {"status": "ok",
+                       "bug_guard_enabled": bool(BUG_GUARD_ENABLED),
+                       "bug_guard_blocked":
+                           _guard().blocked_count()
+                           if BUG_GUARD_ENABLED else 0}
+            data = json.dumps(payload).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
@@ -546,6 +592,8 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
         )
 
     def do_POST(self):
+        if self._bug_blocked():
+            return self.send_html("<h1>403 Forbidden</h1>", status=403)
         path = urlparse(self.path).path
         if path == BASE + "/admin/upload":
             return self.admin_upload()

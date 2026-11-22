@@ -93,6 +93,26 @@ UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "/data/uploads")
 MEMBER_UPLOAD_MAX_BYTES = 25 * 1024 * 1024
 
 
+# Bug guard (app_pkg/bug_guard.py; Taylor, 2026-11-22): blocks
+# attack-probe traffic inside the app and reports every block to
+# a file on the volume. Fail-closed switch, same discipline as
+# the Authorize.net gates: MEMBERS_BUG_GUARD_ENABLED=1 in the
+# host .env (set via ops/set-bug-guard-enabled.sh through the
+# deploy-members workflow's enable_bug_guard input). State and
+# report live on the data volume, outside CONTENT_DIR, so they
+# can never be served as content.
+BUG_GUARD_ENABLED = (os.environ.get("MEMBERS_BUG_GUARD_ENABLED") or "") == "1"
+BUG_GUARD_STATE_PATH = os.environ.get(
+    "BUG_GUARD_STATE_PATH", "/data/bug_guard_state.json")
+BUG_GUARD_REPORT_PATH = os.environ.get(
+    "BUG_GUARD_REPORT_PATH", "/data/bug_guard_report.log")
+BUG_GUARD_ALLOW = [
+    s.strip() for s in
+    (os.environ.get("MEMBERS_BUG_GUARD_ALLOW") or "").split(",")
+    if s.strip()
+]
+
+
 MEMBER_UPLOAD_EXTS = (
     ".pdf", ".doc", ".docx", ".xls", ".xlsx",
     ".png", ".jpg", ".jpeg", ".zip",
