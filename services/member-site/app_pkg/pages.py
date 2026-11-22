@@ -420,6 +420,31 @@ def ssk_page():
     )
 
 
+def cport_page():
+    """C-Port Python — the installable CPython package for the
+    C-Port serial protocol (C extension cserialproto + pipeline),
+    extracted from Taylor's C-Port_Python.docx and built, tested
+    and installed 2026-11-22 at Taylor's direction. Served from
+    cport.html beside this file, same pattern as ssk_page; public
+    like the buy pages. The fleet cport service keeps running the
+    pure-Python pipeline — this page changes nothing live."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cport.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>C-Port Python unavailable</h1>"
+            "<p>The C-Port Python page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def _ach_section(course, member, amount):
     """ACH (eCheck) section for the buy page — "" unless the
     checkout is configured (config.ACH_CHECKOUT_READY: the eCheck

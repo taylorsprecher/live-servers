@@ -57,6 +57,7 @@ from .pages import (
     apps_page,
     connectivity_page,
     ssk_page,
+    cport_page,
 )
 from .store import (
     _db,
@@ -221,6 +222,16 @@ class Handler(BaseHTTPRequestHandler):
                 os.path.join(
                     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "sskpython-briefcase.zip",
+                ),
+                "application/zip",
+            )
+        if path == BASE + "/cport":
+            return self.send_html(cport_page())
+        if path == BASE + "/cport/project.zip":
+            return self.stream_file(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "cport-python.zip",
                 ),
                 "application/zip",
             )
