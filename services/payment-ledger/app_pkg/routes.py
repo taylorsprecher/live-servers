@@ -8,7 +8,7 @@ import json
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 
-from . import authnet
+from . import authnet, vault
 from .authnet import ProcessorDisabled, ProcessorError
 from .config import ADMIN_TOKEN, BASE, MERCHANT_ID, WEBHOOK_SECRET
 from .ledger import (
@@ -96,6 +96,7 @@ class Handler(BaseHTTPRequestHandler):
                     "status": "ok", "db": True, "psps_registered": n,
                     "processor_connected": False,
                     "authnet": authnet.status(),
+                    "securestore_enabled": vault.vault_enabled(),
                 })
             if path == BASE + "/balances":
                 conn = db()
@@ -575,6 +576,12 @@ class Handler(BaseHTTPRequestHandler):
         except ProcessorError as exc:
             conn.rollback()
             return self.send_json({"error": str(exc)}, 502)
+        # Encrypted receipt vault (dark unless PAYLEDGER_SECURESTORE_*
+        # is set on the host): best-effort, after the commit, and
+        # record_receipt never raises — a vault failure cannot affect
+        # the buyer's result. The payment nonce is never passed to it.
+        vault.record_receipt(
+            result, data.get("email") or "", data.get("idempotency_key"))
         return self.send_json(
             {"echeck_checkout": result},
             200 if result.get("deduplicated") else 201,

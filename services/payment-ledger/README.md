@@ -233,6 +233,26 @@ exactly like card numbers.
   Settings → Security Settings → Manage Public Client Key) into
   the host `.env`, redeploy members.
 
+## SecureStore checkout-receipt vault (added 2026-11-21, dark)
+
+`app_pkg/vault.py` applies the owner's SecureStore engine
+(`app_pkg/securestore.py` — the module filed 2026-11-10, with its
+appdirs dependency vendored as `app_pkg/appdirs.py`) to the public
+checkout: after a `POST /ledger/checkout/echeck` commits, a
+buyer-safe receipt (product, amount, buyer email, transaction id,
+approval and settlement state — never the payment nonce, never bank
+numbers) is written as a Fernet-encrypted file
+(`receipt-<trans_id>.enc`) on the `payledger-vault` volume, giving
+the owner an encrypted, tamper-evident copy of each sale independent
+of Postgres. Recording is best-effort and can never affect the
+buyer's result. **Third switch (fail closed):** the vault records
+only while the host `.env` sets `PAYLEDGER_SECURESTORE_ENABLED=1`
+AND delivers a valid Fernet key in `PAYLEDGER_SECURESTORE_KEY`
+(host `.env` only, never in git); a plain deploy changes neither.
+`/ledger/health` reports `securestore_enabled`. Checks:
+`test_vault.py` (17 offline checks: gates, ciphertext at rest,
+round-trip, never-raise).
+
 ## Verified before deploy (local PostgreSQL 16, 2026-11-15)
 
 Schema applies cleanly; invalid state transition rejected;

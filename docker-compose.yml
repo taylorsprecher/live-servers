@@ -291,6 +291,16 @@ services:
       # AUTHNET_ENABLED: eCheck charges refuse until the host .env
       # explicitly sets AUTHNET_ECHECK_ENABLED=1 as well.
       AUTHNET_ECHECK_ENABLED: ${AUTHNET_ECHECK_ENABLED:-}
+      # SecureStore encrypted checkout-receipt vault (app_pkg/vault.py).
+      # Same fail-closed pattern: dark until the host .env sets
+      # PAYLEDGER_SECURESTORE_ENABLED=1 AND delivers a Fernet key in
+      # PAYLEDGER_SECURESTORE_KEY (host .env only, never in git).
+      # XDG_DATA_HOME aims appdirs at the persistent vault volume.
+      PAYLEDGER_SECURESTORE_ENABLED: ${PAYLEDGER_SECURESTORE_ENABLED:-}
+      PAYLEDGER_SECURESTORE_KEY: ${PAYLEDGER_SECURESTORE_KEY:-}
+      XDG_DATA_HOME: /data
+    volumes:
+      - payledger-vault:/data
     depends_on:
       - paydb
     ports:
@@ -457,5 +467,6 @@ volumes:
   fileslib-data:
   vpn-data:
   payledger-data:
+  payledger-vault:
   zillion-data:
   minio-data:
