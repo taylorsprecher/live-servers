@@ -153,6 +153,7 @@ jobs:
             echo "PAYLEDGER_SECURESTORE_KEY secret is not configured — deploying with the SecureStore vault dark."
             exit 0
           fi
+          echo "vault key length as stored in GitHub: ${#PAYLEDGER_SECURESTORE_KEY} (expect 44; value never shown)"
           printf 'PAYLEDGER_SECURESTORE_KEY=%s\n' "${PAYLEDGER_SECURESTORE_KEY}" | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
               'bash /home/deploy/live-servers/ops/set-securestore-key.sh'
 

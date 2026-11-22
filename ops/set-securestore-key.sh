@@ -35,6 +35,8 @@ if [ -z "${vault_key}" ]; then
   exit 1
 fi
 
+echo "received vault key length: ${#vault_key} (expect 44; value not shown)"
+
 touch "${ENV_FILE}"
 tmp="$(mktemp)"
 trap 'rm -f "${tmp}"' EXIT
