@@ -26,6 +26,13 @@ name: Deploy payment ledger
 # the enable_echeck input upserts AUTHNET_ECHECK_ENABLED=1
 # (ops/set-authnet-echeck-enabled.sh). Both default false; a plain
 # deploy changes neither switch.
+# The SecureStore receipt vault follows the identical discipline: its
+# Fernet key is delivered from the PAYLEDGER_SECURESTORE_KEY repo
+# secret over SSH stdin (ops/set-securestore-key.sh) whenever that
+# secret is configured, and the enable_securestore dispatch input
+# upserts PAYLEDGER_SECURESTORE_ENABLED=1
+# (ops/set-securestore-enabled.sh). Default false; a plain deploy
+# changes neither the key nor the switch.
 # No other service is rebuilt; the audited production stack is
 # untouched.
 
@@ -38,6 +45,10 @@ on:
         default: false
       enable_echeck:
         description: "Also set AUTHNET_ECHECK_ENABLED=1 in the host .env (turns Authorize.net eCheck/ACH charges ON at this deploy; needs enable_authnet too, valid credentials, and the members redeploy with AUTHNET_CLIENT_KEY before buyers see the ACH option)"
+        type: boolean
+        default: false
+      enable_securestore:
+        description: "Also set PAYLEDGER_SECURESTORE_ENABLED=1 in the host .env (turns the SecureStore encrypted checkout-receipt vault ON at this deploy; needs the PAYLEDGER_SECURESTORE_KEY secret delivered and valid, or the vault stays dark)"
         type: boolean
         default: false
 
@@ -126,6 +137,35 @@ jobs:
         run: |
           printf 'AUTHNET_ECHECK_ENABLED=1\n' | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
               'bash /home/deploy/live-servers/ops/set-authnet-echeck-enabled.sh'
+
+      # SecureStore vault key delivery: same SSH-stdin pattern as the
+      # Authorize.net credentials. Runs whenever the
+      # PAYLEDGER_SECURESTORE_KEY secret is configured; when it is
+      # absent the step is skipped with a notice and the deploy
+      # proceeds (the vault simply stays dark). Delivering the key
+      # does NOT enable the vault — see the enable step below and
+      # ops/set-securestore-key.sh.
+      - name: Deliver SecureStore vault key to host .env (when configured)
+        env:
+          PAYLEDGER_SECURESTORE_KEY: ${{ secrets.PAYLEDGER_SECURESTORE_KEY }}
+        run: |
+          if [ -z "${PAYLEDGER_SECURESTORE_KEY}" ]; then
+            echo "PAYLEDGER_SECURESTORE_KEY secret is not configured — deploying with the SecureStore vault dark."
+            exit 0
+          fi
+          printf 'PAYLEDGER_SECURESTORE_KEY=%s\n' "${PAYLEDGER_SECURESTORE_KEY}" | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/live-servers/ops/set-securestore-key.sh'
+
+      # SecureStore vault on-switch: same deliberate pattern. Runs
+      # ONLY when the dispatcher set the enable_securestore input
+      # true. Writes PAYLEDGER_SECURESTORE_ENABLED=1 into the host
+      # .env before the build. A plain deploy never touches the
+      # switch. See ops/set-securestore-enabled.sh.
+      - name: Enable SecureStore vault (only when requested)
+        if: ${{ inputs.enable_securestore }}
+        run: |
+          printf 'PAYLEDGER_SECURESTORE_ENABLED=1\n' | ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+              'bash /home/deploy/live-servers/ops/set-securestore-enabled.sh'
 
       - name: Build + up payledger on host
         run: |
