@@ -1168,6 +1168,10 @@ def desk_page(member, message="", ok=False):
                 "JOIN members m ON m.id = o.member_id "
                 "WHERE o.status = 'pending' ORDER BY o.created_at"
             ).fetchall()
+            blocks_pending = _db.execute(
+                "SELECT COUNT(*) AS n FROM block_submissions "
+                "WHERE status = 'pending'"
+            ).fetchone()["n"]
         trs = ""
         for m in all_members:
             m_access = member_access(m["id"])
@@ -1232,6 +1236,11 @@ def desk_page(member, message="", ok=False):
 the link for each product. Buy pages show the Pay by card button for
 each link that is set.</p>
 <a class="btn secondary" href="{BASE}/owner/paylinks">Open the Pay Links page</a></div>
+<div class="card"><h2>Flex Blocks approval queue</h2>
+<p class="small">Community blocks other drivers submitted:
+{blocks_pending} waiting. Nothing appears on the Blocks page
+until you approve it.</p>
+<a class="btn secondary" href="{BASE}/blocks/admin">Open the approval queue</a></div>
 <div class="card"><h2>Member uploads received</h2>
 <p class="small">Documents members sent from the upload page, grouped by
 member. Only you can see other members' uploads.</p>
