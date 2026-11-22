@@ -20,8 +20,9 @@ cd /home/deploy/live-servers
 echo "=== MEMORY BEFORE ==="
 free -m
 
-echo "=== UP vpn only (prebuilt image) ==="
+echo "=== UP vpn (prebuilt image) + vpn-dns sidecar (built) ==="
 docker compose up -d vpn
+docker compose up -d --build vpn-dns
 
 echo "=== WAIT FOR wireguard interface (wg show inside the container) ==="
 ok=0
@@ -46,6 +47,10 @@ docker exec live-vpn wg show
 echo "=== HOST LISTENER (udp 51820) ==="
 ss -ulnp 2>/dev/null | grep 51820 || echo "WARN: no udp 51820 listener in ss output"
 
+echo "=== VPN DNS FILTER (selftest inside the sidecar) ==="
+docker exec live-vpn-dns python3 /app/vpn_dns_filter.py --selftest || echo "WARN: vpn-dns selftest failed or sidecar absent"
+docker compose ps vpn-dns || true
+
 echo "=== GATEWAY REGRESSION CHECKS (through nginx on :443) ==="
 for pair in \
   "members http://127.0.0.1:443/members/health" \
@@ -64,6 +69,6 @@ echo "CHECK audited-app ${APPCODE}"
 
 echo "=== MEMORY AFTER + VPN FOOTPRINT ==="
 free -m
-docker compose ps vpn
-docker stats --no-stream --format 'MEM {{.MemUsage}} CPU {{.CPUPerc}} NAME {{.Name}}' live-vpn || true
+docker compose ps vpn vpn-dns
+docker stats --no-stream --format 'MEM {{.MemUsage}} CPU {{.CPUPerc}} NAME {{.Name}}' live-vpn live-vpn-dns || true
 echo "=== DEPLOY-VPN DONE ==="

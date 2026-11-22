@@ -9,8 +9,22 @@ name: Deploy VPN service
 # change is involved. TLS, DNS, all other services and the audited
 # production stack are untouched.
 
+# The enable_dns_filter input arms the VPN DNS bug filter
+# (services/vpn-dns): when true, a step writes
+# VPN_DNS_FILTER_ENABLED=1 into the host .env (value via stdin,
+# never in YAML or logs) before the deploy step, so the
+# vpn-dns sidecar starts filtering on this same deploy. When
+# false/absent the sidecar deploys dark and nothing about the
+# phones' DNS changes.
+
 on:
   workflow_dispatch:
+    inputs:
+      enable_dns_filter:
+        description: "Arm the VPN DNS bug filter (writes VPN_DNS_FILTER_ENABLED=1 to the host .env)"
+        type: boolean
+        default: false
+        required: false
 
 jobs:
   deploy-vpn:
@@ -41,6 +55,13 @@ jobs:
             --exclude 'demo/' \
             -e "ssh -i ~/.ssh/id_deploy" \
             ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Arm the VPN DNS filter (only when requested)
+        if: ${{ inputs.enable_dns_filter }}
+        run: |
+          printf 'VPN_DNS_FILTER_ENABLED=1\n' | \
+          ssh -i ~/.ssh/id_deploy "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'bash /home/deploy/live-servers/ops/set-vpn-dns-filter-enabled.sh'
 
       - name: Start vpn only on host
         run: |

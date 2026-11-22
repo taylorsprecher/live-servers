@@ -261,6 +261,32 @@ services:
     ports:
       - "51820:51820/udp"
 
+  vpn-dns:
+    build:
+      context: ./services/vpn-dns
+    container_name: live-vpn-dns
+    restart: unless-stopped
+    mem_limit: 64m
+    # DNS bug filter for the VPN (Taylor, 2026-11-22): shares
+    # the vpn container's network namespace, where the peers'
+    # DNS already terminates (PEERDNS=auto -> 10.8.0.1), and
+    # REDIRECTs port 53 to its filter. Fails open: if the
+    # filter is unhealthy its supervisor removes the redirect
+    # and peers fall back to the vpn container's own DNS.
+    # Armed only when VPN_DNS_FILTER_ENABLED=1 in the host
+    # .env (ops/set-vpn-dns-filter-enabled.sh); otherwise the
+    # container idles dark. Blocked-query report + extra
+    # blocklist live on the vpn-dns-data volume.
+    network_mode: "service:vpn"
+    cap_add:
+      - NET_ADMIN
+    environment:
+      VPN_DNS_FILTER_ENABLED: ${VPN_DNS_FILTER_ENABLED:-}
+    volumes:
+      - vpn-dns-data:/data
+    depends_on:
+      - vpn
+
   paydb:
     image: postgres:16-alpine
     container_name: live-paydb
@@ -481,6 +507,7 @@ volumes:
   syncflow-data:
   fileslib-data:
   vpn-data:
+  vpn-dns-data:
   payledger-data:
   payledger-vault:
   zillion-data:
