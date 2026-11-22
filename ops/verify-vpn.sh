@@ -22,6 +22,9 @@ echo "=== WG SHOW (IP addresses masked) ==="
 WG_OUT="$(docker exec live-vpn wg show)" || WG_OUT="wg show failed — container not running?"
 printf '%s\n' "$WG_OUT" | sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip masked>/g'
 
+echo "=== VPN DNS FILTER (selftest: rules, counters, report) ==="
+docker exec live-vpn-dns python3 /app/vpn_dns_filter.py --selftest || echo "vpn-dns sidecar not running"
+
 echo "=== HOST LISTENER (udp 51820) ==="
 ss -ulnp 2>/dev/null | grep 51820 || echo "no udp 51820 listener in ss output"
 
