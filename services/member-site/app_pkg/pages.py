@@ -445,6 +445,31 @@ def cport_page():
     )
 
 
+def words_page():
+    """Words Generator — the Python tool that drafts words from
+    Taylor's own notes (order-2 Markov chain over the notes'
+    vocabulary), built 2026-11-22 at Taylor's direction toward
+    the 95,000-word Ulysses writing goal. Served from words.html
+    beside this file, same pattern as ssk_page; public like the
+    buy pages. The tool itself downloads at
+    /members/words/words_generator.py."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "words.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>Words Generator unavailable</h1>"
+            "<p>The Words Generator page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def _ach_section(course, member, amount):
     """ACH (eCheck) section for the buy page — "" unless the
     checkout is configured (config.ACH_CHECKOUT_READY: the eCheck

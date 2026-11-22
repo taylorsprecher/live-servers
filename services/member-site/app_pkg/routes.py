@@ -58,6 +58,7 @@ from .pages import (
     connectivity_page,
     ssk_page,
     cport_page,
+    words_page,
 )
 from .store import (
     _db,
@@ -234,6 +235,16 @@ class Handler(BaseHTTPRequestHandler):
                     "cport-python.zip",
                 ),
                 "application/zip",
+            )
+        if path == BASE + "/words":
+            return self.send_html(words_page())
+        if path == BASE + "/words/words_generator.py":
+            return self.stream_file(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "words_generator.py",
+                ),
+                "text/x-python; charset=utf-8",
             )
         if path.startswith(BASE + "/buy/"):
             course = COURSE_BY_KEY.get(path[len(BASE + "/buy/"):])

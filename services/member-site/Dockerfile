@@ -3,7 +3,7 @@
 FROM python:3.12-slim
 
 WORKDIR /app
-COPY app.py README.md apps.html connectivity.html ssk.html sskpython-briefcase.zip cport.html cport-python.zip ./
+COPY app.py README.md apps.html connectivity.html ssk.html sskpython-briefcase.zip cport.html cport-python.zip words.html words_generator.py ./
 COPY app_pkg/ ./app_pkg/
 COPY assets/ ./assets/
 
