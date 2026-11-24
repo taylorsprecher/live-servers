@@ -88,6 +88,7 @@ OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 # deliberately OUTSIDE CONTENT_DIR so member files can never be served
 # as course content or reached by a public URL.
 UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "/data/uploads")
+STREAM_DIR = os.environ.get("STREAM_DIR", "/data/stream")
 
 
 MEMBER_UPLOAD_MAX_BYTES = 25 * 1024 * 1024

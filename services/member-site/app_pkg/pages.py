@@ -472,6 +472,32 @@ def words_page():
     )
 
 
+def stream_page():
+    """Stream Mic — streams the owner's phone microphone to this
+    server in 10-second chunks (built 2026-11-24 at Taylor's
+    direction: "Create a python to allow streaming"). Served from
+    stream.html beside this file, same pattern as words_page, but
+    OWNER-ONLY: the route gates on the owner's member email before
+    this page is ever sent, and the upload route gates the same
+    way. The standalone receiver downloads at
+    /members/stream/stream_receiver.py."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "stream.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>Stream Mic unavailable</h1>"
+            "<p>The Stream Mic page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def blocks_page():
     """Flex Blocks — Taylor's Amazon Flex blocks with per-block
     timestamped timelines and the email-confirmed pay record,

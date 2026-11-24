@@ -44,6 +44,7 @@ from .config import (
     SESSION_DAYS,
 )
 from .bug_guard import BugGuard
+from .stream_store import save_stream_chunk, MAX_CHUNK_BYTES
 from .pages import (
     PAGE,
     buy_page,
@@ -59,6 +60,7 @@ from .pages import (
     ssk_page,
     cport_page,
     words_page,
+    stream_page,
     blocks_page,
     blocks_submit_page,
     blocks_admin_page,
@@ -249,6 +251,23 @@ class Handler(BaseHTTPRequestHandler):
                 os.path.join(
                     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "words_generator.py",
+                ),
+                "text/x-python; charset=utf-8",
+            )
+        if path == BASE + "/stream":
+            member, _ = self.current_member()
+            # Fail closed: the microphone page exists only for the owner.
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            return self.send_html(stream_page())
+        if path == BASE + "/stream/stream_receiver.py":
+            member, _ = self.current_member()
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("<h1>Forbidden</h1>", status=403)
+            return self.stream_file(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "stream_receiver.py",
                 ),
                 "text/x-python; charset=utf-8",
             )
@@ -656,6 +675,31 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
             return self.admin_upload()
         if path == BASE + "/upload":
             return self.member_upload()
+        if path == BASE + "/stream/upload":
+            # Stream Mic chunk intake (2026-11-24). Owner-only, raw
+            # body (not a form): the phone page POSTs one audio chunk
+            # per 10 seconds with session/seq/ext in the query.
+            member, _ = self.current_member()
+            if not member or member["email"].lower() != OWNER_EMAIL:
+                return self.send_html("forbidden", status=403)
+            qs = parse_qs(urlparse(self.path).query)
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = 0
+            if length <= 0 or length > MAX_CHUNK_BYTES:
+                return self.send_html("bad size", status=400)
+            data = self.rfile.read(length)
+            ok, msg = save_stream_chunk(
+                qs.get("session", [""])[0],
+                qs.get("seq", [""])[0],
+                qs.get("ext", [""])[0],
+                data,
+            )
+            return self.send_html(
+                ("ok " + msg) if ok else ("error " + msg),
+                status=200 if ok else 400,
+            )
         form = self.form()
         if path == BASE + "/owner/paylinks":
             member, _ = self.current_member()

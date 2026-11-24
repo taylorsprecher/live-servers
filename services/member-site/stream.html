@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stream Mic — Taylor's Member Apps</title>
+<!-- FLEET-CSS -->
+<style>
+  .stream-wrap { max-width: 640px; margin: 0 auto; padding: 16px; }
+  .stream-btn { font-size: 20px; padding: 14px 28px; border-radius: 10px;
+    border: 1px solid #888; cursor: pointer; width: 100%; }
+  .stream-btn.live { background: #b00020; color: #fff; }
+  .stream-status { margin: 14px 0; font-size: 16px; }
+  .stream-note { font-size: 13px; opacity: 0.8; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="stream-wrap">
+  <h1>Stream Mic</h1>
+  <p>Streams this device's microphone to your own member server in
+  10-second chunks. Only you, signed in as the owner, can open this page
+  or receive a stream. Nothing is sent anywhere else.</p>
+
+  <button id="toggle" class="stream-btn">Start streaming</button>
+  <div id="status" class="stream-status">Stopped.</div>
+  <div id="count" class="stream-status"></div>
+
+  <p class="stream-note">Keep this page open and the screen on while
+  streaming — iPhone pauses web pages in the background. Each chunk is
+  saved on the server with a timestamp; ask Jasmine for the audio or a
+  transcript of any session.</p>
+  <p class="stream-note">The same receiver also runs standalone:
+  <a href="/members/stream/stream_receiver.py">stream_receiver.py</a>
+  (Python, no dependencies).</p>
+</div>
+<script>
+(function () {
+  var btn = document.getElementById('toggle');
+  var status = document.getElementById('status');
+  var count = document.getElementById('count');
+  var recorder = null, stream = null, seq = 0, sent = 0, failed = 0;
+  var session = Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+
+  function pickType() {
+    var candidates = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', ''];
+    for (var i = 0; i < candidates.length; i++) {
+      if (!candidates[i] || (window.MediaRecorder && MediaRecorder.isTypeSupported(candidates[i]))) {
+        return candidates[i];
+      }
+    }
+    return '';
+  }
+  function extFor(type) {
+    if (type.indexOf('mp4') >= 0) return 'mp4';
+    if (type.indexOf('webm') >= 0) return 'webm';
+    if (type.indexOf('ogg') >= 0) return 'ogg';
+    return 'bin';
+  }
+  function showCount() {
+    count.textContent = sent + ' chunk(s) saved on the server' +
+      (failed ? ', ' + failed + ' failed' : '') + ' — session ' + session;
+  }
+  function upload(blob) {
+    var mySeq = seq++;
+    var ext = extFor(blob.type || '');
+    fetch('/members/stream/upload?session=' + encodeURIComponent(session) +
+          '&seq=' + mySeq + '&ext=' + ext,
+          { method: 'POST', body: blob, credentials: 'same-origin' })
+      .then(function (r) {
+        if (r.ok) { sent++; } else { failed++; }
+        showCount();
+      })
+      .catch(function () { failed++; showCount(); });
+  }
+  function start() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      status.textContent = 'This browser cannot capture microphone audio.';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
+      stream = s;
+      var type = pickType();
+      recorder = type ? new MediaRecorder(stream, { mimeType: type })
+                      : new MediaRecorder(stream);
+      recorder.ondataavailable = function (e) {
+        if (e.data && e.data.size > 0) upload(e.data);
+      };
+      recorder.onstop = stopTracks;
+      seq = 0; sent = 0; failed = 0; showCount();
+      recorder.start(10000);
+      btn.textContent = 'Stop streaming';
+      btn.classList.add('live');
+      status.textContent = 'Streaming — a chunk is saved every 10 seconds.';
+    }).catch(function () {
+      status.textContent = 'Microphone permission was not given, so nothing is streaming.';
+    });
+  }
+  function stopTracks() {
+    if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
+  }
+  function stop() {
+    if (recorder && recorder.state !== 'inactive') { recorder.stop(); }
+    recorder = null;
+    btn.textContent = 'Start streaming';
+    btn.classList.remove('live');
+    status.textContent = 'Stopped.';
+  }
+  btn.addEventListener('click', function () {
+    if (recorder) { stop(); } else { start(); }
+  });
+})();
+</script>
+</body>
+</html>
