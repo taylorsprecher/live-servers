@@ -1,373 +1,182 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Stream Mic — Open Access</title>
-  <style>
-    :root {
-      --bg: #000000;
-      --card: #1c1c1e;
-      --text: #ffffff;
-      --muted: #98989f;
-      --primary: #2563eb;
-      --danger: #991b1b;
-      --danger-hover: #7f1d1d;
-      --border: #38383a;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.5;
-      padding: 24px 16px;
-    }
-    .container {
-      max-width: 480px;
-      margin: 0 auto;
-    }
-    h1 {
-      font-size: 1.75rem;
-      font-weight: 700;
-      margin: 0 0 12px;
-      letter-spacing: -0.02em;
-    }
-    p {
-      margin: 0 0 16px;
-      font-size: 1rem;
-    }
-    .badge {
-      display: inline-block;
-      background: #0f2e1a;
-      color: #34c759;
-      font-size: 0.78rem;
-      font-weight: 600;
-      padding: 3px 10px;
-      border-radius: 999px;
-      margin-bottom: 14px;
-    }
-    .radio-group {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      margin: 20px 0 24px;
-    }
-    .radio-option {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 1.05rem;
-      cursor: pointer;
-    }
-    .radio-option input[type="radio"] {
-      width: 18px;
-      height: 18px;
-      accent-color: var(--primary);
-      cursor: pointer;
-    }
-    button.action-btn {
-      width: 100%;
-      padding: 15px 20px;
-      font-size: 1.05rem;
-      font-weight: 600;
-      color: #fff;
-      background: var(--primary);
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-      transition: background 0.15s ease;
-      margin-bottom: 20px;
-    }
-    button.action-btn.streaming {
-      background: var(--danger);
-    }
-    button.action-btn.streaming:hover {
-      background: var(--danger-hover);
-    }
-    .status-line {
-      font-size: 1rem;
-      margin-bottom: 14px;
-    }
-    .muted-note {
-      color: var(--muted);
-      font-size: 0.92rem;
-    }
-    code {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      background: #2c2c2e;
-      padding: 2px 5px;
-      border-radius: 4px;
-    }
-    .sessions-panel {
-      margin-top: 32px;
-      padding-top: 20px;
-      border-top: 1px solid var(--border);
-    }
-    .sessions-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-    .sessions-header h2 {
-      font-size: 1.1rem;
-      margin: 0;
-    }
-    .refresh-btn {
-      background: #1c1c1e;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 5px 10px;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-    .session-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px;
-      margin-bottom: 10px;
-      font-size: 0.9rem;
-    }
-    .chunk-links {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 8px;
-    }
-    .chunk-links a {
-      font-size: 0.8rem;
-      color: var(--primary);
-      text-decoration: none;
-      background: #123f3c;
-      padding: 3px 8px;
-      border-radius: 4px;
-    }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stream Mic — Taylor's Member Apps</title>
+<!-- FLEET-CSS -->
+<style>
+  .stream-wrap { max-width: 640px; margin: 0 auto; padding: 16px; }
+  .stream-btn { font-size: 20px; padding: 14px 28px; border-radius: 10px;
+    border: 1px solid #888; cursor: pointer; width: 100%; }
+  .stream-btn.live { background: #b00020; color: #fff; }
+  .stream-status { margin: 14px 0; font-size: 16px; }
+  .stream-note { font-size: 13px; opacity: 0.8; line-height: 1.5; }
+  .stream-mode { margin: 14px 0; font-size: 16px; line-height: 2; }
+  .stream-mode label { display: block; }
+</style>
 </head>
 <body>
-  <div class="container">
-    <span class="badge">Open Access Enabled — All Users</span>
-    <h1>Stream Mic</h1>
-    <p>
-      Streams this device's microphone — or its screen plus microphone — to the
-      shared server in 10-second chunks. Anyone with access to this server can
-      open this page, stream, or retrieve sessions.
-    </p>
+<div class="stream-wrap">
+  <h1>Stream Mic</h1>
+  <p>Streams this device's microphone — or its screen plus microphone —
+  to the member server in 10-second chunks. Open access: anyone with
+  this page can stream. Nothing is sent anywhere else.</p>
 
-    <div class="radio-group">
-      <label class="radio-option">
-        <input type="radio" name="mode" value="mic_only" />
-        <span>Microphone only</span>
-      </label>
-      <label class="radio-option">
-        <input type="radio" name="mode" value="screen_mic" checked />
-        <span>Screen + microphone</span>
-      </label>
-    </div>
-
-    <button id="toggleBtn" class="action-btn">Start streaming</button>
-
-    <div id="statusBlock" style="display: none;">
-      <p class="status-line" id="streamingLabel">Streaming — a chunk is saved every 10 seconds.</p>
-      <p class="status-line" id="chunkCounter">0 chunk(s) saved on the server — session —</p>
-    </div>
-
-    <p class="muted-note">
-      Keep this page open and do not close it while streaming. Each chunk is
-      saved on the server with a timestamp and is accessible to all users.
-    </p>
-    <p class="muted-note">
-      The receiver runs standalone: <code>stream_receiver.py</code> (Python, no dependencies).
-    </p>
-
-    <div class="sessions-panel">
-      <div class="sessions-header">
-        <h2>All Shared Sessions</h2>
-        <button class="refresh-btn" id="refreshBtn">Refresh</button>
-      </div>
-      <div id="sessionsList" class="muted-note">Loading sessions...</div>
-    </div>
+  <div class="stream-mode">
+    <label><input type="radio" name="mode" value="mic" checked>
+      Microphone only</label>
+    <label><input type="radio" name="mode" value="screen" id="modeScreen">
+      Screen + microphone</label>
   </div>
+  <div id="screenNote" class="stream-note"></div>
 
-  <script>
-    const CHUNK_INTERVAL_MS = 10000;
-    const toggleBtn = document.getElementById("toggleBtn");
-    const statusBlock = document.getElementById("statusBlock");
-    const chunkCounter = document.getElementById("chunkCounter");
-    const sessionsList = document.getElementById("sessionsList");
-    const refreshBtn = document.getElementById("refreshBtn");
+  <button id="toggle" class="stream-btn">Start streaming</button>
+  <div id="status" class="stream-status">Stopped.</div>
+  <div id="count" class="stream-status"></div>
 
-    let isStreaming = false;
-    let mediaRecorder = null;
-    let activeStreams = [];
-    let sessionId = "";
-    let chunkIndex = 0;
-    let savedChunks = 0;
+  <p class="stream-note">Keep this page open and do not close it while
+  streaming. Each chunk is saved on the server with a timestamp; ask
+  Jasmine for the audio, video or a transcript of any session.</p>
+  <p class="stream-note">The same receiver also runs standalone:
+  <a href="/members/stream/stream_receiver.py">stream_receiver.py</a>
+  (Python, no dependencies).</p>
+</div>
+<script>
+(function () {
+  var btn = document.getElementById('toggle');
+  var status = document.getElementById('status');
+  var count = document.getElementById('count');
+  var screenNote = document.getElementById('screenNote');
+  var screenRadio = document.getElementById('modeScreen');
+  var recorder = null, streams = [], seq = 0, sent = 0, failed = 0;
+  var session = '';
 
-    function generateSessionId() {
-      return "mic-" + Math.random().toString(36).substring(2, 14);
-    }
+  var screenSupported = !!(navigator.mediaDevices &&
+    navigator.mediaDevices.getDisplayMedia);
+  if (!screenSupported) {
+    screenRadio.disabled = true;
+    screenNote.textContent = 'Screen capture is not offered by this ' +
+      'browser on this device, so the Screen + microphone option is ' +
+      'off — the microphone stream still works. For screen video, use ' +
+      'the iPhone\u2019s built-in Screen Recording (Control Center) and ' +
+      'send Jasmine the video.';
+  }
 
-    function getSelectedMode() {
-      return document.querySelector('input[name="mode"]:checked').value;
-    }
-
-    function updateCounterDisplay() {
-      chunkCounter.textContent = `${savedChunks} chunk(s) saved on the server — session ${sessionId}`;
-    }
-
-    async function uploadChunk(blob, idx, mode) {
-      if (!blob || blob.size === 0) return;
-      try {
-        const res = await fetch("/members/stream/upload", {
-          method: "POST",
-          headers: {
-            "Content-Type": blob.type || "video/webm",
-            "X-Session-Id": sessionId,
-            "X-Stream-Mode": mode,
-            "X-Chunk-Index": String(idx),
-          },
-          body: blob,
-        });
-        const data = await res.json();
-        if (data.ok) {
-          savedChunks = data.chunk_count;
-          updateCounterDisplay();
-          loadSessions();
-        }
-      } catch (err) {
-        console.error("Chunk upload failed:", err);
+  function mode() {
+    var el = document.querySelector('input[name="mode"]:checked');
+    return el ? el.value : 'mic';
+  }
+  function newSession(m) {
+    return (m === 'screen' ? 'screen-' : 'mic-') +
+      Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+  }
+  function pickType(m) {
+    var candidates = m === 'screen'
+      ? ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm', '']
+      : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', ''];
+    for (var i = 0; i < candidates.length; i++) {
+      if (!candidates[i] || (window.MediaRecorder && MediaRecorder.isTypeSupported(candidates[i]))) {
+        return candidates[i];
       }
     }
-
-    async function startStreaming() {
-      const mode = getSelectedMode();
-      sessionId = generateSessionId();
-      chunkIndex = 0;
-      savedChunks = 0;
-      activeStreams = [];
-
-      try {
-        // Screen capture FIRST: getDisplayMedia must be called from
-        // the user-gesture handler. The mic request used to go first,
-        // and its await spent the gesture, so iOS refused the screen
-        // capture with "getDisplayMedia must be called from a user
-        // gesture handler" (Taylor's screenshot, 2026-11-25). Keep
-        // this call ahead of every other await in this function.
-        let screenStream = null;
-        if (mode === "screen_mic") {
-          screenStream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            audio: true,
-          });
-          activeStreams.push(screenStream);
-        }
-
-        const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        activeStreams.push(micStream);
-
-        let combinedStream;
-        if (mode === "screen_mic") {
-          // Stop cleanly if user clicks browser's native "Stop sharing" button
-          screenStream.getVideoTracks()[0].addEventListener("ended", () => {
-            if (isStreaming) stopStreaming();
-          });
-
-          const tracks = [
-            ...screenStream.getVideoTracks(),
-            ...micStream.getAudioTracks(),
-            ...screenStream.getAudioTracks(),
-          ];
-          combinedStream = new MediaStream(tracks);
-        } else {
-          combinedStream = micStream;
-        }
-
-        const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8,opus")
-          ? "video/webm;codecs=vp8,opus"
-          : "video/webm";
-
-        mediaRecorder = new MediaRecorder(combinedStream, { mimeType });
-
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data && event.data.size > 0) {
-            chunkIndex += 1;
-            uploadChunk(event.data, chunkIndex, mode);
-          }
-        };
-
-        mediaRecorder.start(CHUNK_INTERVAL_MS);
-        isStreaming = true;
-
-        toggleBtn.textContent = "Stop streaming";
-        toggleBtn.classList.add("streaming");
-        document.querySelectorAll('input[name="mode"]').forEach((el) => (el.disabled = true));
-        statusBlock.style.display = "block";
-        updateCounterDisplay();
-      } catch (err) {
-        alert("Could not start capture: " + err.message);
-        cleanupStreams();
-      }
+    return '';
+  }
+  function extFor(type) {
+    if (type.indexOf('mp4') >= 0) return 'mp4';
+    if (type.indexOf('webm') >= 0) return 'webm';
+    if (type.indexOf('ogg') >= 0) return 'ogg';
+    return 'bin';
+  }
+  function showCount() {
+    count.textContent = sent + ' chunk(s) saved on the server' +
+      (failed ? ', ' + failed + ' failed' : '') + ' — session ' + session;
+  }
+  function upload(blob) {
+    var mySeq = seq++;
+    var ext = extFor(blob.type || '');
+    fetch('/members/stream/upload?session=' + encodeURIComponent(session) +
+          '&seq=' + mySeq + '&ext=' + ext,
+          { method: 'POST', body: blob, credentials: 'same-origin' })
+      .then(function (r) {
+        if (r.ok) { sent++; } else { failed++; }
+        showCount();
+      })
+      .catch(function () { failed++; showCount(); });
+  }
+  function start() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+      status.textContent = 'This browser cannot capture microphone audio.';
+      return;
     }
-
-    function cleanupStreams() {
-      activeStreams.forEach((s) => s.getTracks().forEach((t) => t.stop()));
-      activeStreams = [];
-    }
-
-    function stopStreaming() {
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
+    var m = mode();
+    var micPromise = navigator.mediaDevices.getUserMedia({ audio: true });
+    var capturePromise;
+    if (m === 'screen') {
+      if (!screenSupported) {
+        status.textContent = 'Screen capture is not available in this browser.';
+        return;
       }
-      cleanupStreams();
-      isStreaming = false;
-      toggleBtn.textContent = "Start streaming";
-      toggleBtn.classList.remove("streaming");
-      document.querySelectorAll('input[name="mode"]').forEach((el) => (el.disabled = false));
+      capturePromise = Promise.all([
+        navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }),
+        micPromise
+      ]);
+    } else {
+      capturePromise = micPromise.then(function (s) { return [s]; });
     }
-
-    toggleBtn.addEventListener("click", () => {
-      if (isStreaming) {
-        stopStreaming();
-      } else {
-        startStreaming();
+    capturePromise.then(function (parts) {
+      streams = parts;
+      var tracks = [];
+      parts.forEach(function (s) {
+        s.getTracks().forEach(function (t) { tracks.push(t); });
+      });
+      var combined = new MediaStream(tracks);
+      var type = pickType(m);
+      var opts = {};
+      if (type) opts.mimeType = type;
+      if (m === 'screen') {
+        opts.videoBitsPerSecond = 1000000;
+        opts.audioBitsPerSecond = 64000;
       }
+      recorder = new MediaRecorder(combined, opts);
+      recorder.ondataavailable = function (e) {
+        if (e.data && e.data.size > 0) upload(e.data);
+      };
+      recorder.onstop = stopTracks;
+      var videoTrack = combined.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.addEventListener('ended', function () { stop(); });
+      }
+      session = newSession(m);
+      seq = 0; sent = 0; failed = 0; showCount();
+      recorder.start(10000);
+      btn.textContent = 'Stop streaming';
+      btn.classList.add('live');
+      status.textContent = m === 'screen'
+        ? 'Streaming screen + microphone — a chunk is saved every 10 seconds.'
+        : 'Streaming — a chunk is saved every 10 seconds.';
+    }).catch(function () {
+      status.textContent = 'Permission was not given, so nothing is streaming.';
+      stopTracks();
     });
-
-    async function loadSessions() {
-      try {
-        const res = await fetch("/members/stream/sessions");
-        const data = await res.json();
-        if (!data.sessions || data.sessions.length === 0) {
-          sessionsList.textContent = "No sessions recorded yet.";
-          return;
-        }
-        sessionsList.innerHTML = data.sessions
-          .map((s) => {
-            const links = s.chunks
-              .map(
-                (c, i) =>
-                  `<a href="/members/stream/sessions/${encodeURIComponent(s.session_id)}/${encodeURIComponent(c)}" target="_blank">Chunk ${i + 1}</a>`
-              )
-              .join("");
-            return `
-              <div class="session-card">
-                <strong>${s.session_id}</strong> (${s.mode}) — ${s.chunk_count} chunk(s)
-                <div class="chunk-links">${links || "No chunks yet"}</div>
-              </div>
-            `;
-          })
-          .join("");
-      } catch (err) {
-        sessionsList.textContent = "Failed to load sessions.";
-      }
-    }
-
-    refreshBtn.addEventListener("click", loadSessions);
-    loadSessions();
-  </script>
+  }
+  function stopTracks() {
+    streams.forEach(function (s) {
+      s.getTracks().forEach(function (t) { t.stop(); });
+    });
+    streams = [];
+  }
+  function stop() {
+    if (recorder && recorder.state !== 'inactive') { recorder.stop(); }
+    recorder = null;
+    btn.textContent = 'Start streaming';
+    btn.classList.remove('live');
+    status.textContent = 'Stopped.';
+  }
+  btn.addEventListener('click', function () {
+    if (recorder) { stop(); } else { start(); }
+  });
+})();
+</script>
 </body>
 </html>

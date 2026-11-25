@@ -506,11 +506,13 @@ def stream_page():
     microphone) to this server in 10-second chunks (built 2026-11-24
     at Taylor's direction: "Create a python to allow streaming").
     Served from stream.html beside this file, same pattern as
-    words_page. OPEN ACCESS since 2026-11-25 at Taylor's explicit
-    direction ("Deploy it live, open access"): the page, the upload
-    route, the public session listing and chunk downloads carry no
-    sign-in gate. The standalone receiver downloads at
-    /members/stream/stream_receiver.py."""
+    words_page. OPEN ACCESS kept 2026-11-25 at Taylor's direction:
+    the page and the upload route carry no sign-in gate. (A pasted
+    open-access rebuild served for part of 2026-11-25; Taylor
+    directed the code back to this original build the same day,
+    keeping open access — the public session listing and chunk
+    downloads from the pasted build are gone.) The standalone
+    receiver downloads at /members/stream/stream_receiver.py."""
     try:
         with open(
             os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "stream.html"),
