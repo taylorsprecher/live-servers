@@ -251,17 +251,26 @@
       activeStreams = [];
 
       try {
+        // Screen capture FIRST: getDisplayMedia must be called from
+        // the user-gesture handler. The mic request used to go first,
+        // and its await spent the gesture, so iOS refused the screen
+        // capture with "getDisplayMedia must be called from a user
+        // gesture handler" (Taylor's screenshot, 2026-11-25). Keep
+        // this call ahead of every other await in this function.
+        let screenStream = null;
+        if (mode === "screen_mic") {
+          screenStream = await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+            audio: true,
+          });
+          activeStreams.push(screenStream);
+        }
+
         const micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
         activeStreams.push(micStream);
 
         let combinedStream;
         if (mode === "screen_mic") {
-          const screenStream = await navigator.mediaDevices.getDisplayMedia({
-            video: true,
-            audio: true,
-          });
-          activeStreams.push(screenStream);
-
           // Stop cleanly if user clicks browser's native "Stop sharing" button
           screenStream.getVideoTracks()[0].addEventListener("ended", () => {
             if (isStreaming) stopStreaming();
