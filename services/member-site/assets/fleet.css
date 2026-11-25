@@ -4,25 +4,25 @@
    Mobile-first, no webfonts, no JavaScript required. */
 
 :root {
-  --ink: #0f1f2e;
-  --ink-soft: #1b3448;
-  --accent: #0e7c7b;
-  --accent-strong: #095e5d;
-  --accent-soft: #e3f2f1;
-  --bg: #f6f8f9;
-  --surface: #ffffff;
-  --line: #d8e0e4;
-  --text: #16232c;
-  --muted: #5b6d77;
-  --ok: #177245;
-  --ok-soft: #e5f3ec;
-  --warn: #9a6a00;
-  --warn-soft: #faf1da;
-  --bad: #b3261e;
-  --bad-soft: #fbeae9;
+  --ink: #ffffff;
+  --ink-soft: #2c2c2e;
+  --accent: #17a398;
+  --accent-strong: #4fd8cf;
+  --accent-soft: #123f3c;
+  --bg: #000000;
+  --surface: #1c1c1e;
+  --line: #38383a;
+  --text: #ffffff;
+  --muted: #98989f;
+  --ok: #34c759;
+  --ok-soft: #0f2e1a;
+  --warn: #ff9f0a;
+  --warn-soft: #33240a;
+  --bad: #ff453a;
+  --bad-soft: #3a1210;
   --radius: 12px;
   --radius-sm: 10px;
-  --shadow: 0 1px 3px rgba(15, 31, 46, 0.10), 0 4px 14px rgba(15, 31, 46, 0.06);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.50), 0 4px 14px rgba(0, 0, 0, 0.40);
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
     "Helvetica Neue", Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -54,7 +54,7 @@ small, .fl-muted { color: var(--muted); }
 /* ---------- header / nav / footer ---------- */
 
 .fl-header {
-  background: var(--ink);
+  background: #0b0b0d;
   color: #eaf1f4;
   position: sticky;
   top: 0;
@@ -80,7 +80,7 @@ small, .fl-muted { color: var(--muted); }
 }
 .fl-wordmark:hover { color: #cfe8e7; }
 .fl-service {
-  color: #a9c6c5;
+  color: #98989f;
   font-size: 0.92rem;
   border-left: 1px solid var(--ink-soft);
   padding-left: 14px;
@@ -107,8 +107,8 @@ small, .fl-muted { color: var(--muted); }
 
 .fl-footer {
   margin-top: 40px;
-  background: var(--ink);
-  color: #a9c6c5;
+  background: #0b0b0d;
+  color: #98989f;
   font-size: 0.88rem;
 }
 .fl-footer-inner {
@@ -187,7 +187,7 @@ a.fl-card:hover { border-color: var(--accent); }
   border-color: var(--accent);
   color: #ffffff;
 }
-.fl-btn-primary:hover { background: var(--accent-strong); color: #ffffff; }
+.fl-btn-primary:hover { background: var(--accent-strong); color: #06231f; }
 .fl-btn-danger {
   background: var(--bad);
   border-color: var(--bad);
@@ -245,7 +245,7 @@ table.fl-table {
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.fl-table tbody tr:nth-child(even) { background: #fbfdfe; }
+.fl-table tbody tr:nth-child(even) { background: #232325; }
 .fl-num { font-variant-numeric: tabular-nums; text-align: right; }
 
 /* ---------- badges / alerts / misc ---------- */
