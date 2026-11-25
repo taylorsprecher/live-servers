@@ -44,7 +44,13 @@ from .config import (
     SESSION_DAYS,
 )
 from .bug_guard import BugGuard
-from .stream_store import save_stream_chunk, MAX_CHUNK_BYTES
+from .stream_store import (
+    MAX_CHUNK_BYTES,
+    count_stream_chunks,
+    list_stream_sessions,
+    save_stream_chunk,
+    stream_chunk_path,
+)
 from .pages import (
     PAGE,
     buy_page,
@@ -138,11 +144,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def send_json(self, obj, status=200):
+    def send_json(self, obj, status=200, extra_headers=None):
         data = json.dumps(obj, indent=2, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
+        for k, v in (extra_headers or []):
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(data)
 
@@ -255,15 +263,10 @@ class Handler(BaseHTTPRequestHandler):
                 "text/x-python; charset=utf-8",
             )
         if path == BASE + "/stream":
-            member, _ = self.current_member()
-            # Fail closed: the microphone page exists only for the owner.
-            if not member or member["email"].lower() != OWNER_EMAIL:
-                return self.send_html("<h1>Forbidden</h1>", status=403)
+            # Open access (2026-11-25, Taylor: "Deploy it live, open
+            # access"): the Stream Mic page is public — no sign-in.
             return self.send_html(stream_page())
         if path == BASE + "/stream/stream_receiver.py":
-            member, _ = self.current_member()
-            if not member or member["email"].lower() != OWNER_EMAIL:
-                return self.send_html("<h1>Forbidden</h1>", status=403)
             return self.stream_file(
                 os.path.join(
                     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -271,6 +274,28 @@ class Handler(BaseHTTPRequestHandler):
                 ),
                 "text/x-python; charset=utf-8",
             )
+        if path == BASE + "/stream/sessions":
+            # Public session listing (open access, 2026-11-25).
+            return self.send_json(
+                {"access": "public", "sessions": list_stream_sessions()},
+                extra_headers=[("Access-Control-Allow-Origin", "*")],
+            )
+        if path.startswith(BASE + "/stream/sessions/"):
+            # Public chunk playback/download (open access, 2026-11-25).
+            rest = path[len(BASE + "/stream/sessions/"):]
+            sess, _, fname = rest.partition("/")
+            fpath = stream_chunk_path(sess, fname)
+            if not fpath:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            ext = os.path.splitext(fname)[1].lower()
+            ctype = {
+                ".webm": "video/webm",
+                ".mp4": "video/mp4",
+                ".ogg": "audio/ogg",
+                ".wav": "audio/wav",
+                ".m4a": "audio/mp4",
+            }.get(ext, "application/octet-stream")
+            return self.stream_file(fpath, ctype)
         if path == BASE + "/blocks":
             return self.send_html(blocks_page())
         if path == BASE + "/blocks/submit":
@@ -676,29 +701,53 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
         if path == BASE + "/upload":
             return self.member_upload()
         if path == BASE + "/stream/upload":
-            # Stream Mic chunk intake (2026-11-24). Owner-only, raw
-            # body (not a form): the phone page POSTs one audio chunk
-            # per 10 seconds with session/seq/ext in the query.
-            member, _ = self.current_member()
-            if not member or member["email"].lower() != OWNER_EMAIL:
-                return self.send_html("forbidden", status=403)
+            # Stream Mic chunk intake (2026-11-24; open access
+            # 2026-11-25 at Taylor's direction). Public, raw body (not
+            # a form): the page POSTs one chunk per 10 seconds with
+            # session/seq in the X-Session-Id / X-Chunk-Index headers
+            # (the original query-param form is still accepted).
             qs = parse_qs(urlparse(self.path).query)
+            session = self.headers.get("X-Session-Id") or qs.get("session", [""])[0]
+            mode = self.headers.get("X-Stream-Mode") or qs.get("mode", [""])[0]
+            seq = self.headers.get("X-Chunk-Index") or qs.get("seq", [""])[0]
+            ext = qs.get("ext", [""])[0]
+            if not ext:
+                ctype = (self.headers.get("Content-Type") or "").lower()
+                if "mp4" in ctype:
+                    ext = "mp4"
+                elif "ogg" in ctype:
+                    ext = "ogg"
+                elif "wav" in ctype:
+                    ext = "wav"
+                else:
+                    ext = "webm"
+            cors = [("Access-Control-Allow-Origin", "*")]
             try:
                 length = int(self.headers.get("Content-Length") or 0)
             except ValueError:
                 length = 0
             if length <= 0 or length > MAX_CHUNK_BYTES:
-                return self.send_html("bad size", status=400)
+                return self.send_json(
+                    {"ok": False, "error": "bad size"},
+                    status=400,
+                    extra_headers=cors,
+                )
             data = self.rfile.read(length)
-            ok, msg = save_stream_chunk(
-                qs.get("session", [""])[0],
-                qs.get("seq", [""])[0],
-                qs.get("ext", [""])[0],
-                data,
-            )
-            return self.send_html(
-                ("ok " + msg) if ok else ("error " + msg),
-                status=200 if ok else 400,
+            ok, msg = save_stream_chunk(session, seq, ext, data, mode=mode)
+            if not ok:
+                return self.send_json(
+                    {"ok": False, "error": msg},
+                    status=400,
+                    extra_headers=cors,
+                )
+            return self.send_json(
+                {
+                    "ok": True,
+                    "session_id": session,
+                    "saved_file": msg,
+                    "chunk_count": count_stream_chunks(session),
+                },
+                extra_headers=cors,
             )
         form = self.form()
         if path == BASE + "/owner/paylinks":

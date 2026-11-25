@@ -473,13 +473,14 @@ def words_page():
 
 
 def stream_page():
-    """Stream Mic — streams the owner's phone microphone to this
-    server in 10-second chunks (built 2026-11-24 at Taylor's
-    direction: "Create a python to allow streaming"). Served from
-    stream.html beside this file, same pattern as words_page, but
-    OWNER-ONLY: the route gates on the owner's member email before
-    this page is ever sent, and the upload route gates the same
-    way. The standalone receiver downloads at
+    """Stream Mic — streams a phone microphone (or screen +
+    microphone) to this server in 10-second chunks (built 2026-11-24
+    at Taylor's direction: "Create a python to allow streaming").
+    Served from stream.html beside this file, same pattern as
+    words_page. OPEN ACCESS since 2026-11-25 at Taylor's explicit
+    direction ("Deploy it live, open access"): the page, the upload
+    route, the public session listing and chunk downloads carry no
+    sign-in gate. The standalone receiver downloads at
     /members/stream/stream_receiver.py."""
     try:
         with open(
