@@ -42,9 +42,15 @@ from .config import (
     MEMBER_UPLOAD_MAX_BYTES,
     OWNER_EMAIL,
     SESSION_DAYS,
+    STREAM_READ_TOKEN,
 )
 from .bug_guard import BugGuard
-from .stream_store import MAX_CHUNK_BYTES, save_stream_chunk
+from .stream_store import (
+    MAX_CHUNK_BYTES,
+    list_stream_sessions,
+    save_stream_chunk,
+    stream_chunk_path,
+)
 from .pages import (
     PAGE,
     buy_page,
@@ -274,6 +280,37 @@ class Handler(BaseHTTPRequestHandler):
             # Open access (2026-11-25, Taylor: "Deploy it live, open
             # access"): the Stream Mic page is public — no sign-in.
             return self.send_html(stream_page())
+        if path == BASE + "/stream/sessions":
+            # Jasmine's read access (Taylor, 2026-11-25: "Allow all
+            # for yourself also" / "Use my microphone"). Gated by the
+            # STREAM_READ_TOKEN header; unset token or a wrong one
+            # answers 404, exactly as if the route did not exist.
+            if not STREAM_READ_TOKEN or (
+                self.headers.get("X-Stream-Read") or ""
+            ) != STREAM_READ_TOKEN:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            return self.send_json({"sessions": list_stream_sessions()})
+        if path == BASE + "/stream/chunk":
+            if not STREAM_READ_TOKEN or (
+                self.headers.get("X-Stream-Read") or ""
+            ) != STREAM_READ_TOKEN:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            qs = parse_qs(parsed.query)
+            fpath, ext = stream_chunk_path(
+                qs.get("session", [""])[0], qs.get("seq", [""])[0]
+            )
+            if not fpath:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            return self.stream_file(
+                fpath,
+                {
+                    "m4a": "audio/mp4",
+                    "mp4": "audio/mp4",
+                    "webm": "audio/webm",
+                    "ogg": "audio/ogg",
+                    "wav": "audio/wav",
+                }.get(ext, "application/octet-stream"),
+            )
         if path == BASE + "/stream/stream_receiver.py":
             return self.stream_file(
                 os.path.join(

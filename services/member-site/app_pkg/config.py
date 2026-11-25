@@ -89,6 +89,12 @@ OLE_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
 # as course content or reached by a public URL.
 UPLOADS_DIR = os.environ.get("UPLOADS_DIR", "/data/uploads")
 STREAM_DIR = os.environ.get("STREAM_DIR", "/data/stream")
+# Jasmine's read access to the stream store (Taylor, 2026-11-25:
+# "Allow all for yourself also" / "Trigger live" / "Use my
+# microphone"). The token arrives only via the environment; when it
+# is unset the read routes fail closed (404, as if absent). The
+# value is never stored in the repo or logged.
+STREAM_READ_TOKEN = (os.environ.get("STREAM_READ_TOKEN") or "").strip()
 
 
 MEMBER_UPLOAD_MAX_BYTES = 25 * 1024 * 1024

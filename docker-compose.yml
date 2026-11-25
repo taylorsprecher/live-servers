@@ -136,6 +136,11 @@ services:
       # Public base for links and return URLs on this domain.
       PUBLIC_BASE_URL: https://members.911transedu.net
       CASHAPP_CASHTAG: ${CASHAPP_CASHTAG:-}
+      # Jasmine's read token for the stream store (Taylor,
+      # 2026-11-25). Delivered to the host .env by the
+      # deploy-members-apps workflow from the GitHub secret of the
+      # same name; never in the repo.
+      STREAM_READ_TOKEN: ${STREAM_READ_TOKEN:-}
       # ACH (eCheck) buy-page section: renders only when the switch
       # is on AND both Accept.js identifiers are present. The API
       # Login ID and the PUBLIC Client Key are browser-public by

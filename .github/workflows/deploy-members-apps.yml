@@ -6,8 +6,11 @@ name: Deploy member apps hub
 # route + links, and the Dockerfile change that copies apps.html into
 # the image. Used instead of the full deploy.sh so deploy.sh's RAM
 # gate is not in play for a one-service change; see
-# ops/deploy-members-apps.sh. No secrets are delivered or changed by
-# this workflow. Gateway config, TLS, DNS, all
+# ops/deploy-members-apps.sh. One secret exception (2026-11-25):
+# when the STREAM_READ_TOKEN GitHub secret is set, a step below
+# delivers it into the host .env (Jasmine's stream read access, at
+# Taylor's direction); the value travels over SSH stdin and is
+# never logged. Gateway config, TLS, DNS, all
 # other services and the audited production stack are untouched.
 
 on:
@@ -42,6 +45,18 @@ jobs:
             --exclude 'demo/' \
             -e "ssh -i ~/.ssh/id_deploy" \
             ./ "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/home/deploy/live-servers/"
+
+      - name: Deliver STREAM_READ_TOKEN to host .env (when the secret is set)
+        env:
+          STREAM_READ_TOKEN: ${{ secrets.STREAM_READ_TOKEN }}
+        run: |
+          if [ -z "$STREAM_READ_TOKEN" ]; then
+            echo "STREAM_READ_TOKEN secret not set; skipping delivery."
+            exit 0
+          fi
+          printf '%s' "$STREAM_READ_TOKEN" | ssh -i ~/.ssh/id_deploy \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'umask 077; T=$(cat); cd /home/deploy/live-servers; touch .env; grep -v "^STREAM_READ_TOKEN=" .env > .env.tmp || true; printf "STREAM_READ_TOKEN=%s\n" "$T" >> .env.tmp; mv .env.tmp .env; echo "STREAM_READ_TOKEN delivered to host .env"'
 
       - name: Build + up members only on host
         run: |
