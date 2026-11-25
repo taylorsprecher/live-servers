@@ -64,6 +64,7 @@ from .pages import (
     apps_page,
     connectivity_page,
     ssk_page,
+    root_page,
     streamapp_page,
     cport_page,
     words_page,
@@ -225,6 +226,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             return self.wfile.write(data)
+        if path == BASE + "/root":
+            return self.send_html(root_page())
         if path == BASE + "/preview":
             return self.send_html(preview_page())
         if path == BASE + "/apps":

@@ -60,7 +60,7 @@ for name in $NAMES; do
     --email taylorsprecher@gmail.com \
     --accept-tos \
     --tls --tls.address 127.0.0.1:18444 \
-    --domains "$fqdn"
+    $(tls_domain_args "$name")
   RC=$?
   if [ $RC -ne 0 ]; then
     echo "ISSUE FAILED for $fqdn rc=$RC (DNS not pointing here yet? — reported pending)"

@@ -501,6 +501,32 @@ def fsh_page():
     )
 
 
+def root_page():
+    """The one site's front door (2026-11-25 — Taylor: "Make all
+    the same site" / "One site at 911transedu.net" / "Make the
+    final move"). The gateway's apex server block proxies
+    https://911transedu.net/ to this page; it presents 911TransEdu
+    as one site with its two subdomain doors, Training
+    (ems.911transedu.net) and Members (members.911transedu.net).
+    Served from root.html beside this file, same pattern as
+    ssk_page; public like the buy pages."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "root.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>911TransEdu unavailable</h1>"
+            "<p>The front page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def streamapp_page():
     """Stream Mic — the phone app: the Stream Mic rebuilt as a
     Python app for the phone (BeeWare Briefcase/Toga), built

@@ -49,7 +49,7 @@ for name in $(tls_names); do
     --email taylorsprecher@gmail.com \
     --accept-tos \
     --tls --tls.address 127.0.0.1:18444 \
-    --domains "$fqdn" \
+    $(tls_domain_args "$name") \
     --renew-days 30
   RC=$?
   if [ $RC -ne 0 ]; then

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <!-- FLEET-CSS -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="911TransEdu" />
+    <link rel="icon" href="data:," />
+    <title>911TransEdu — One Site</title>
+    <style>
+      :root {
+        --bg: #000000;
+        --bg-raise: #1c1c1e;
+        --line: #38383a;
+        --ink: #ffffff;
+        --ink-2: #98989f;
+        --accent: #17a398;
+        --accent-ink: #4fd8cf;
+        --accent-chip: #123f3c;
+        --radius: 12px;
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+        line-height: 1.45;
+      }
+      .wrap {
+        max-width: 560px;
+        margin: 0 auto;
+        padding: calc(20px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom));
+      }
+      header { padding: 10px 2px 4px; }
+      .owner {
+        margin: 0 0 6px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--accent-ink);
+      }
+      h1 { margin: 0; font-size: 2rem; line-height: 1.12; font-weight: 800; letter-spacing: -0.01em; }
+      .sub { margin: 8px 0 0; color: var(--ink-2); font-size: 1rem; }
+      .card {
+        margin-top: 16px;
+        background: var(--bg-raise);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px;
+      }
+      .card h2 { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; }
+      .card p { margin: 8px 0 0; color: var(--ink-2); font-size: 0.95rem; }
+      .card ol, .card ul { margin: 10px 0 0; padding-left: 1.25rem; color: var(--ink-2); font-size: 0.95rem; }
+      .card li { margin-top: 5px; }
+      .card strong { color: var(--ink); }
+      .btn {
+        display: inline-block;
+        margin-top: 12px;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 700;
+        text-decoration: none;
+        padding: 10px 16px;
+        border-radius: 999px;
+      }
+      .chip {
+        display: inline-block;
+        background: var(--accent-chip);
+        color: var(--accent-ink);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        margin-right: 6px;
+      }
+      footer { margin-top: 20px; color: var(--ink-2); font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <p class="owner">Taylor&rsquo;s Transgender Patient Awareness, LLC</p>
+        <h1>911TransEdu</h1>
+        <p class="sub">One site. Training and members live here, on their subdomains &mdash; transgender patient awareness education for emergency care, from Oregon City, Oregon.</p>
+      </header>
+
+      <section class="card">
+        <h2>Training</h2>
+        <p>Teach-backs for every location, the Oregon State webinar, the journal, and the FSH analysis &mdash; the public training library.</p>
+        <a class="btn" href="https://ems.911transedu.net">Open Training &mdash; ems.911transedu.net</a>
+      </section>
+
+      <section class="card">
+        <h2>Members</h2>
+        <p>Member accounts, the apps hub, agency portals, and the files library.</p>
+        <a class="btn" href="https://members.911transedu.net/members/">Open Members &mdash; members.911transedu.net</a>
+      </section>
+
+      <section class="card">
+        <h2>Courses</h2>
+        <p><strong>CCCE</strong> &mdash; $15 per provider, every two years. <strong>EMSPR</strong> protocols &mdash; $6,000 per year. Both are sold through the member site.</p>
+        <a class="btn" href="https://members.911transedu.net/members/buy/ccce">CCCE &mdash; $15</a>
+        <a class="btn" href="https://members.911transedu.net/members/buy/emspr">EMSPR &mdash; $6,000</a>
+      </section>
+
+      <footer>911TransEdu &mdash; one site since 2026-11-25, at Taylor&rsquo;s direction: the root domain, with training and members on their subdomains.</footer>
+    </div>
+  </body>
+</html>

@@ -8,18 +8,35 @@
 # tls-state/certs/<name>/fullchain.pem + privkey.pem. All of it is
 # host-only state under tls-state/ (gitignored, rsync-excluded).
 
-# All subdomain short names, members first.
+# All subdomain short names, members first. "root" (added 2026-11-25
+# for the one-site move) is the apex itself — see tls_fqdn.
 tls_names() {
-  echo "members maclan xbox wyze usb aircore fmp celltower specmatrix"
+  echo "members maclan xbox wyze usb aircore fmp celltower specmatrix root"
 }
 
-# The service subdomains added 2026-11-12 (everything except members).
+# The service subdomains added 2026-11-12 (everything except members),
+# plus "root" (2026-11-25): setup.sh installs placeholder certs and
+# battery-checks every name on this list.
 tls_new_names() {
-  echo "maclan xbox wyze usb aircore fmp celltower specmatrix"
+  echo "maclan xbox wyze usb aircore fmp celltower specmatrix root"
 }
 
 tls_fqdn() { # $1 = short name
-  echo "$1.911transedu.net"
+  if [ "$1" = "root" ]; then
+    echo "911transedu.net"
+  else
+    echo "$1.911transedu.net"
+  fi
+}
+
+# Lego --domains arguments for $1. The root cert covers the apex and
+# www on one certificate; every other name covers only itself.
+tls_domain_args() { # $1 = short name
+  if [ "$1" = "root" ]; then
+    echo "--domains 911transedu.net --domains www.911transedu.net"
+  else
+    echo "--domains $(tls_fqdn "$1")"
+  fi
 }
 
 tls_certdir() { # $1 = short name; echoes the cert install dir
@@ -34,6 +51,7 @@ tls_certdir() { # $1 = short name; echoes the cert install dir
 # deploy.sh check batteries exactly).
 tls_health_path() { # $1 = short name
   case "$1" in
+    root)      echo "/" ;;
     usb)       echo "/usb/api/status" ;;
     aircore)   echo "/aircore/api/state" ;;
     fmp)       echo "/fmp/api/health" ;;
