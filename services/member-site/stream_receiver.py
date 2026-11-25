@@ -8,7 +8,7 @@ any machine:
 
     python3 stream_receiver.py [--port 8765] [--out ./stream_data]
 
-It serves the streaming page at / and accepts microphone chunks at
+It serves the streaming page at / and accepts microphone or screen+microphone chunks at
 POST /upload?session=<id>&seq=<n>&ext=<mp4|webm|ogg|wav|m4a>, saving
 them under <out>/<session>/ with a session.log of timestamps.
 
@@ -31,10 +31,13 @@ MAX_CHUNK_BYTES = 5 * 1024 * 1024
 PAGE = """<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Stream Mic — standalone receiver</title></head>
+<title>Stream Mic \u2014 standalone receiver</title></head>
 <body style="font-family: sans-serif; max-width: 640px; margin: 0 auto; padding: 16px;">
 <h1>Stream Mic</h1>
-<p>Streams this device's microphone to this receiver in 10-second chunks.</p>
+<p>Streams this device's microphone \u2014 or its screen plus microphone \u2014 to this receiver in 10-second chunks.</p>
+<label style="display:block; margin:6px 0;"><input type="radio" name="mode" value="mic" checked> Microphone only</label>
+<label style="display:block; margin:6px 0;"><input type="radio" name="mode" value="screen" id="modeScreen"> Screen + microphone</label>
+<div id="screenNote" style="font-size: 13px; opacity: 0.8;"></div>
 <button id="toggle" style="font-size: 20px; padding: 14px 28px; width: 100%;">Start streaming</button>
 <div id="status" style="margin: 14px 0;">Stopped.</div>
 <div id="count"></div>
@@ -43,10 +46,19 @@ PAGE = """<!DOCTYPE html>
   var btn = document.getElementById('toggle');
   var status = document.getElementById('status');
   var count = document.getElementById('count');
-  var recorder = null, stream = null, seq = 0, sent = 0, failed = 0;
-  var session = Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
-  function pickType() {
-    var c = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', ''];
+  var screenNote = document.getElementById('screenNote');
+  var screenRadio = document.getElementById('modeScreen');
+  var recorder = null, streams = [], seq = 0, sent = 0, failed = 0;
+  var session = '';
+  var screenSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia);
+  if (!screenSupported) {
+    screenRadio.disabled = true;
+    screenNote.textContent = 'Screen capture is not offered by this browser on this device; the microphone stream still works.';
+  }
+  function mode() { var el = document.querySelector('input[name="mode"]:checked'); return el ? el.value : 'mic'; }
+  function pickType(m) {
+    var c = m === 'screen' ? ['video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm', '']
+                           : ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg', ''];
     for (var i = 0; i < c.length; i++) {
       if (!c[i] || (window.MediaRecorder && MediaRecorder.isTypeSupported(c[i]))) return c[i];
     }
@@ -58,30 +70,46 @@ PAGE = """<!DOCTYPE html>
     if (t.indexOf('ogg') >= 0) return 'ogg';
     return 'bin';
   }
-  function show() { count.textContent = sent + ' chunk(s) saved' + (failed ? ', ' + failed + ' failed' : '') + ' — session ' + session; }
+  function show() { count.textContent = sent + ' chunk(s) saved' + (failed ? ', ' + failed + ' failed' : '') + ' \u2014 session ' + session; }
   function upload(blob) {
     var mySeq = seq++;
     fetch('/upload?session=' + encodeURIComponent(session) + '&seq=' + mySeq + '&ext=' + extFor(blob.type || ''),
       { method: 'POST', body: blob }).then(function (r) { if (r.ok) { sent++; } else { failed++; } show(); })
       .catch(function () { failed++; show(); });
   }
+  function stopTracks() { streams.forEach(function (s) { s.getTracks().forEach(function (t) { t.stop(); }); }); streams = []; }
+  function stop() {
+    if (recorder && recorder.state !== 'inactive') { recorder.stop(); }
+    recorder = null;
+    btn.textContent = 'Start streaming'; status.textContent = 'Stopped.';
+  }
   btn.addEventListener('click', function () {
-    if (recorder) {
-      recorder.stop(); recorder = null;
-      if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
-      btn.textContent = 'Start streaming'; status.textContent = 'Stopped.';
-      return;
-    }
-    navigator.mediaDevices.getUserMedia({ audio: true }).then(function (s) {
-      stream = s;
-      var type = pickType();
-      recorder = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream);
+    if (recorder) { stop(); return; }
+    var m = mode();
+    var micP = navigator.mediaDevices.getUserMedia({ audio: true });
+    var capP = m === 'screen'
+      ? Promise.all([navigator.mediaDevices.getDisplayMedia({ video: true, audio: false }), micP])
+      : micP.then(function (s) { return [s]; });
+    capP.then(function (parts) {
+      streams = parts;
+      var tracks = [];
+      parts.forEach(function (s) { s.getTracks().forEach(function (t) { tracks.push(t); }); });
+      var combined = new MediaStream(tracks);
+      var type = pickType(m);
+      var opts = {};
+      if (type) opts.mimeType = type;
+      if (m === 'screen') { opts.videoBitsPerSecond = 1000000; opts.audioBitsPerSecond = 64000; }
+      recorder = new MediaRecorder(combined, opts);
       recorder.ondataavailable = function (e) { if (e.data && e.data.size > 0) upload(e.data); };
+      recorder.onstop = stopTracks;
+      var vt = combined.getVideoTracks()[0];
+      if (vt) { vt.addEventListener('ended', function () { stop(); }); }
+      session = (m === 'screen' ? 'screen-' : 'mic-') + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
       seq = 0; sent = 0; failed = 0; show();
       recorder.start(10000);
       btn.textContent = 'Stop streaming';
-      status.textContent = 'Streaming — a chunk is saved every 10 seconds.';
-    }).catch(function () { status.textContent = 'Microphone permission was not given.'; });
+      status.textContent = 'Streaming \u2014 a chunk is saved every 10 seconds.';
+    }).catch(function () { status.textContent = 'Permission was not given.'; stopTracks(); });
   });
 })();
 </script>
