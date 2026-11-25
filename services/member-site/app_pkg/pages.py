@@ -501,6 +501,34 @@ def fsh_page():
     )
 
 
+def streamapp_page():
+    """Stream Mic — the phone app: the Stream Mic rebuilt as a
+    Python app for the phone (BeeWare Briefcase/Toga), built
+    2026-11-25 at Taylor's direction ("Create python" — a Python
+    app for the phone, like SSK Python), so Enable starts the
+    stream with no Safari pop-out in the flow. The receiver stays
+    on this server (the original /members/stream/upload protocol,
+    open access). Served from streamapp.html beside this file,
+    same pattern as ssk_page; public like the buy pages. The
+    project downloads at /members/streamapp/streammic-briefcase.zip;
+    the signed iOS build runs on the Mac."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "streamapp.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>Stream Mic app unavailable</h1>"
+            "<p>The Stream Mic app page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def stream_page():
     """Stream Mic — streams a phone microphone (or screen +
     microphone) to this server in 10-second chunks (built 2026-11-24

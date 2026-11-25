@@ -58,6 +58,7 @@ from .pages import (
     apps_page,
     connectivity_page,
     ssk_page,
+    streamapp_page,
     cport_page,
     words_page,
     fsh_page,
@@ -234,6 +235,16 @@ class Handler(BaseHTTPRequestHandler):
                 os.path.join(
                     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "sskpython-briefcase.zip",
+                ),
+                "application/zip",
+            )
+        if path == BASE + "/streamapp":
+            return self.send_html(streamapp_page())
+        if path == BASE + "/streamapp/streammic-briefcase.zip":
+            return self.stream_file(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "streammic-briefcase.zip",
                 ),
                 "application/zip",
             )
