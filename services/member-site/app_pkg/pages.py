@@ -66,7 +66,7 @@ PAGE = """<!DOCTYPE html>
 <header class="fl-header"><div class="fl-header-inner">
 <a class="fl-wordmark" href="{base}/">911TransEdu</a>
 <span class="fl-service">Members</span>
-<nav class="fl-nav"><a href="{base}/">Home</a><a href="{base}/preview">Preview</a><a href="{base}/apps">Apps Hub</a><a href="{base}/desk">Member Desk</a></nav>
+<nav class="fl-nav"><a href="{base}/">Home</a><a href="{base}/preview">Preview</a><a href="{base}/apps">Apps Hub</a><a href="{base}/desk">Member Desk</a><a href="https://911transedu.net">911TransEdu — One Site</a><a href="https://ems.911transedu.net">Training</a></nav>
 </div></header>
 <main class="fl-main">
 {body}
