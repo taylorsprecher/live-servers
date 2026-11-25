@@ -66,6 +66,7 @@ from .pages import (
     ssk_page,
     cport_page,
     words_page,
+    fsh_page,
     stream_page,
     blocks_page,
     blocks_submit_page,
@@ -254,6 +255,8 @@ class Handler(BaseHTTPRequestHandler):
             )
         if path == BASE + "/words":
             return self.send_html(words_page())
+        if path == BASE + "/fsh":
+            return self.send_html(fsh_page())
         if path == BASE + "/words/words_generator.py":
             return self.stream_file(
                 os.path.join(

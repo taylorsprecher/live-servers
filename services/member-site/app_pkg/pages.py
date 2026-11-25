@@ -472,6 +472,35 @@ def words_page():
     )
 
 
+def fsh_page():
+    """FSH — Follicle Stinukating Hornone: the full pulled-in
+    analysis of Taylor's word-matrix document (interlocking letter
+    clusters — beams, hubs, anchors, latches — and the graph-theory
+    reading: semantic networks, centrality, PageRank), installed
+    2026-11-25 at Taylor's direction ("Install and deploy" / "New
+    FSH page on the member site" / "With all pull ins"). Served
+    from fsh.html beside this file, same pattern as words_page;
+    public like the buy pages. Source document is Taylor's
+    "Follicle Stinukating Hornone.docx" (OneDrive, linked on the
+    page); the analysis text is an outside AI's read, pulled in in
+    full at Taylor's direction."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fsh.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>FSH unavailable</h1>"
+            "<p>The FSH page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def stream_page():
     """Stream Mic — streams a phone microphone (or screen +
     microphone) to this server in 10-second chunks (built 2026-11-24
