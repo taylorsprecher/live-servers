@@ -76,6 +76,7 @@ from .pages import (
     cportlightning_page,
     emsapp_page,
     bluetooth_page,
+    bodypalace_shell,
     words_page,
     fsh_page,
     stream_page,
@@ -300,6 +301,35 @@ class Handler(BaseHTTPRequestHandler):
                 ),
                 "application/zip",
             )
+        if path == BASE + "/bodypalace" or path == BASE + "/bodypalace/":
+            return self.send_html(bodypalace_shell())
+        if path.startswith(BASE + "/bodypalace/"):
+            # Body Palace Tracker static assets (built Vite output in
+            # bodypalace/ beside app.py). Basename only — no path
+            # traversal — and only the file kinds the build emits.
+            rel = path[len(BASE + "/bodypalace/"):]
+            parts = [p for p in rel.split("/") if p and p not in (".", "..")]
+            if len(parts) == 1 and parts[0] in ("favicon.svg", "icons.svg"):
+                sub, name = "", parts[0]
+            elif len(parts) == 2 and parts[0] == "assets":
+                sub, name = "assets", parts[1]
+            else:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            ext = os.path.splitext(name)[1].lower()
+            ctypes = {
+                ".js": "text/javascript",
+                ".css": "text/css",
+                ".svg": "image/svg+xml",
+            }
+            if ext not in ctypes:
+                return self.send_html("<h1>Not found</h1>", status=404)
+            fpath = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "bodypalace", sub, name,
+            )
+            if not os.path.isfile(fpath):
+                return self.send_html("<h1>Not found</h1>", status=404)
+            return self.stream_asset(fpath, ctypes[ext])
         if path == BASE + "/words":
             return self.send_html(words_page())
         if path == BASE + "/fsh":
@@ -439,6 +469,22 @@ class Handler(BaseHTTPRequestHandler):
             key, _, sub = rest.partition("/")
             return self.serve_content(key, sub)
         return self.send_html("<h1>Not found</h1>", status=404)
+
+    def stream_asset(self, fpath, content_type):
+        """Like stream_file but without the attachment disposition —
+        for app assets (JS/CSS/SVG) the browser must load inline."""
+        size = os.path.getsize(fpath)
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Length", str(size))
+        self.end_headers()
+        with open(fpath, "rb") as fh:
+            while True:
+                chunk = fh.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
 
     def stream_file(self, fpath, content_type):
         size = os.path.getsize(fpath)

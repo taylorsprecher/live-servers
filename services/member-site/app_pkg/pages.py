@@ -504,6 +504,28 @@ def bluetooth_page():
     )
 
 
+def bodypalace_shell():
+    """Body Palace Tracker — the app shell for Taylor's recovered
+    Replit project (pulled and deleted from Replit 2026-11-26 at
+    Taylor's direction, then installed, built with Vite base
+    /members/bodypalace/, and deployed here). The built files live
+    in bodypalace/ beside this file; the asset route in routes.py
+    streams them. The app is a client-side tracker (React); its
+    data lives in the visitor's browser, nothing is stored
+    server-side."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bodypalace", "index.html"),
+            encoding="utf-8",
+        ) as fh:
+            return fh.read()
+    except OSError:
+        return (
+            "<h1>Body Palace Tracker unavailable</h1>"
+            "<p>The Body Palace Tracker build is missing on the server.</p>"
+        )
+
+
 def cport_page():
     """C-Port Python — the installable CPython package for the
     C-Port serial protocol (C extension cserialproto + pipeline),
