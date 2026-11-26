@@ -751,7 +751,7 @@ def _ach_section(course, member, amount):
         # authorization below: the ledger enrolls the buyer only
         # when the checkout posts auto_renew=true.
         renew_block = f"""
-<label style="font-weight:400"><input id="ach-renew" type="checkbox" style="width:auto;min-height:0;margin-right:8px">Auto-renew: I also authorize Taylor's Transgender Patient Awareness, LLC to debit the same bank account {amount} {course['cadence']} to renew this purchase automatically, starting when the current term ends, until I cancel. I can cancel anytime before a renewal date — with the cancel code shown after checkout, or by emailing taylor_sprecher@911transedu.net.</label>"""
+<label style="font-weight:400"><input id="ach-renew" type="checkbox" style="width:auto;min-height:0;margin-right:8px">Auto-renew: I also authorize Taylor's Transgender Patient Awareness, LLC to debit the same bank account {amount} {course['cadence']} to renew this purchase automatically, starting when the current term ends, until I cancel. I can cancel anytime before a renewal date — with the cancel code shown after checkout, or by emailing taylorsprecher@gmail.com.</label>"""
     return f"""
 <div class="card"><h2>Or pay by bank account — ACH</h2>
 <p>Pay {amount} straight from your bank account (eCheck). Your
