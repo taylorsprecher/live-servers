@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <!-- FLEET-CSS -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Cport-Lightening" />
+    <link rel="icon" href="data:," />
+    <title>Cport-Lightening — the Python build set</title>
+    <style>
+      :root {
+        --bg: #000000;
+        --bg-raise: #1c1c1e;
+        --line: #38383a;
+        --ink: #ffffff;
+        --ink-2: #98989f;
+        --accent: #17a398;
+        --accent-ink: #4fd8cf;
+        --accent-chip: #123f3c;
+        --radius: 12px;
+      }
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-rounded, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+        line-height: 1.45;
+      }
+      .wrap {
+        max-width: 560px;
+        margin: 0 auto;
+        padding: calc(20px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom));
+      }
+      header { padding: 10px 2px 4px; }
+      .owner {
+        margin: 0 0 6px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--accent-ink);
+      }
+      h1 { margin: 0; font-size: 2rem; line-height: 1.12; font-weight: 800; letter-spacing: -0.01em; }
+      .sub { margin: 8px 0 0; color: var(--ink-2); font-size: 1rem; }
+      .card {
+        margin-top: 16px;
+        background: var(--bg-raise);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 16px;
+      }
+      .card h2 { margin: 0 0 6px; font-size: 1.1rem; font-weight: 800; }
+      .card p { margin: 8px 0 0; color: var(--ink-2); font-size: 0.95rem; }
+      .card ol, .card ul { margin: 10px 0 0; padding-left: 1.25rem; color: var(--ink-2); font-size: 0.95rem; }
+      .card li { margin-top: 5px; }
+      .card strong { color: var(--ink); }
+      .card code { color: var(--ink); font-size: 0.88em; }
+      .btn {
+        display: inline-block;
+        margin-top: 12px;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 700;
+        text-decoration: none;
+        padding: 10px 16px;
+        border-radius: 999px;
+      }
+      .chip {
+        display: inline-block;
+        background: var(--accent-chip);
+        color: var(--accent-ink);
+        border-radius: 999px;
+        padding: 2px 10px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        margin-right: 6px;
+      }
+      footer { margin-top: 20px; color: var(--ink-2); font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <p class="owner">911TransEdu — Member Apps</p>
+        <h1>Cport-Lightening</h1>
+        <p class="sub">The Python build set for all three readings of Cport-Lightening — serial-port firmware, PyTorch Lightning, and Core Lightning node upgrades — installed and verified Nov 26, 2026.</p>
+      </header>
+
+      <section class="card">
+        <h2>What&rsquo;s in the set</h2>
+        <ul>
+          <li><strong>cport_lightning_serial_upgrade.py</strong> — firmware over a serial/COM port (pyserial): size + chunk count + SHA-256 in the handshake, an ACK per chunk, COMMIT to finish.</li>
+          <li><strong>cport_lightning_pytorch_upgrade.py</strong> — the PyTorch Lightning pattern for porting a model onto the Trainer, as a clean LightningModule.</li>
+          <li><strong>cport_lightning_cln_upgrade.py</strong> — the small Core Lightning snapshot helper (pre/post around a restart).</li>
+          <li><strong>cln_upgrade_workflow.py</strong> — the complete CLN upgrade workflow: capture, clean stop, cold backup, upgrade, verify.</li>
+          <li><strong>cln_docker_upgrade.py</strong> — the Dockerized variant with custom plugins and strict pre-flight checks.</li>
+        </ul>
+        <p><span class="chip">Serial transfer verified byte-identical</span><span class="chip">CLN checks 4/4</span><span class="chip">PyTorch trained 5 epochs on CPU</span></p>
+      </section>
+
+      <section class="card">
+        <h2>Download</h2>
+        <p>All five scripts, the verification battery, and a README with install and run instructions (including the temp-dir fix for large pip installs).</p>
+        <a class="btn" href="https://members.911transedu.net/members/cportlightning/cport-lightening.zip">Download the build set (.zip)</a>
+        <p>Runs on <code>pyserial</code> and <code>pyln-client</code>; the PyTorch script adds CPU <code>torch</code> + <code>lightning</code>. Verified versions: torch 2.15.0+cpu, lightning 2.6.6.</p>
+      </section>
+
+      <section class="card">
+        <h2>Before any CLN upgrade — the safety rules</h2>
+        <ul>
+          <li><strong>Never restore a stale channel database.</strong> An older lightningd.sqlite3 put back online after channel activity can force-close channels and lose funds. After an upgraded node has started and connected to peers, do not roll the database back at all.</li>
+          <li><strong>Preserve hsm_secret and emergency.recover</strong> offline, plus any HSM passphrase.</li>
+          <li><strong>Upgrades are often one-way</strong> — archive the pre-upgrade snapshot and old binaries.</li>
+          <li><strong>Regtest dry run first</strong>, on the node&rsquo;s own host.</li>
+        </ul>
+        <p>Honest status: there is no lightningd node in the fleet yet, so the workflows&rsquo; main upgrade paths have not been run — everything testable without a node was tested, and the rest waits for a node to exist.</p>
+      </section>
+
+      <footer>
+        <p>Built and deployed Nov 26, 2026. The scripts also live in the owner&rsquo;s file library; this page is the download copy.</p>
+      </footer>
+    </div>
+  </body>
+</html>

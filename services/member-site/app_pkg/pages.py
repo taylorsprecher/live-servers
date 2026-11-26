@@ -422,6 +422,35 @@ def ssk_page():
     )
 
 
+def cportlightning_page():
+    """Cport-Lightening — Taylor's Python build set for all three
+    readings of Cport-Lightening (serial-port firmware upgrade,
+    PyTorch Lightning model pattern, Core Lightning node upgrades),
+    pasted by Taylor 2026-11-26, reviewed, installed and verified the
+    same day (serial transfer byte-identical over a PTY fake device,
+    CLN helper checks 4/4 against stubs, PyTorch trained 5 epochs on
+    CPU). Served from cportlightning.html beside this file, same
+    pattern as ssk_page; public like the buy pages. The download is
+    the five scripts + verification battery + README; neither CLN
+    workflow's main() runs on this host — there is no lightningd node
+    in the fleet, and this page changes nothing live."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cportlightning.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>Cport-Lightening unavailable</h1>"
+            "<p>The Cport-Lightening page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def cport_page():
     """C-Port Python — the installable CPython package for the
     C-Port serial protocol (C extension cserialproto + pipeline),

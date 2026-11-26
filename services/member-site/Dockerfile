@@ -3,7 +3,7 @@
 FROM python:3.12-slim
 
 WORKDIR /app
-COPY app.py README.md apps.html connectivity.html ssk.html sskpython-briefcase.zip cport.html cport-python.zip words.html words_generator.py blocks.html stream.html stream_receiver.py fsh.html streamapp.html streammic-briefcase.zip root.html ./
+COPY app.py README.md apps.html connectivity.html ssk.html sskpython-briefcase.zip cport.html cport-python.zip cportlightning.html cport-lightening.zip words.html words_generator.py blocks.html stream.html stream_receiver.py fsh.html streamapp.html streammic-briefcase.zip root.html ./
 COPY app_pkg/ ./app_pkg/
 COPY assets/ ./assets/
 

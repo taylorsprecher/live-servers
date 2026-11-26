@@ -67,6 +67,7 @@ from .pages import (
     root_page,
     streamapp_page,
     cport_page,
+    cportlightning_page,
     words_page,
     fsh_page,
     stream_page,
@@ -264,6 +265,16 @@ class Handler(BaseHTTPRequestHandler):
                 os.path.join(
                     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "cport-python.zip",
+                ),
+                "application/zip",
+            )
+        if path == BASE + "/cportlightning":
+            return self.send_html(cportlightning_page())
+        if path == BASE + "/cportlightning/cport-lightening.zip":
+            return self.stream_file(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "cport-lightening.zip",
                 ),
                 "application/zip",
             )
