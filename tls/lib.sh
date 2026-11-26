@@ -11,14 +11,14 @@
 # All subdomain short names, members first. "root" (added 2026-11-25
 # for the one-site move) is the apex itself — see tls_fqdn.
 tls_names() {
-  echo "members maclan xbox wyze usb aircore fmp celltower specmatrix root"
+  echo "members maclan xbox wyze usb aircore fmp celltower specmatrix root ems"
 }
 
 # The service subdomains added 2026-11-12 (everything except members),
 # plus "root" (2026-11-25): setup.sh installs placeholder certs and
 # battery-checks every name on this list.
 tls_new_names() {
-  echo "maclan xbox wyze usb aircore fmp celltower specmatrix root"
+  echo "maclan xbox wyze usb aircore fmp celltower specmatrix root ems"
 }
 
 tls_fqdn() { # $1 = short name
