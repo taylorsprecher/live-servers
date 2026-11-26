@@ -1,0 +1,138 @@
+name: route53-ems
+
+# One-off DNS fix at Taylor's direction (2026-11-26): point
+# ems.911transedu.net at the fleet gateway (52.41.84.116) so the gateway's
+# ems redirect vhost can serve it, replacing the Google Sites CNAME.
+# Uses the ZILLION_AWS_* repo secrets (management account 392349106458,
+# the account that owns the 911transedu.net hosted zone).
+# Stages: check = read-only identity + current ems record + zone count.
+#         apply = DELETE the exact current ems CNAME (built from a live
+#         read, never guessed) and CREATE the A record in one batch,
+#         then wait for INSYNC and re-read the zone.
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Stage to run"
+        type: choice
+        options:
+          - check
+          - apply
+        default: check
+
+permissions:
+  contents: read
+
+env:
+  ZONE_ID: Z05105401W9RUENM6AM1F
+  EMS_NAME: ems.911transedu.net
+  EMS_TARGET_IP: 52.41.84.116
+  EMS_TTL: "300"
+
+jobs:
+  route53-ems:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.ZILLION_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.ZILLION_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Caller identity
+        run: aws sts get-caller-identity
+
+      - name: Read current ems record and zone count
+        run: |
+          aws route53 list-resource-record-sets \
+            --hosted-zone-id "$ZONE_ID" --output json > rr.json
+          python3 - <<'EOF'
+          import json, os
+          d = json.load(open('rr.json'))
+          rrs = d['ResourceRecordSets']
+          print(f"total records in zone: {len(rrs)}")
+          ems = [r for r in rrs if r['Name'].rstrip('.') == os.environ['EMS_NAME']]
+          for r in ems:
+              print('EMS RECORD:', json.dumps(r))
+          if not ems:
+              print('EMS RECORD: none found')
+          EOF
+
+      - name: Apply the ems change
+        if: inputs.action == 'apply'
+        run: |
+          python3 - <<'EOF'
+          import json, os, subprocess, sys, time
+
+          zone = os.environ['ZONE_ID']
+          name = os.environ['EMS_NAME']
+          ip = os.environ['EMS_TARGET_IP']
+          ttl = int(os.environ['EMS_TTL'])
+
+          def aws(*args):
+              out = subprocess.run(['aws', 'route53'] + list(args),
+                                   capture_output=True, text=True)
+              if out.returncode != 0:
+                  print(out.stdout)
+                  print(out.stderr, file=sys.stderr)
+                  sys.exit(out.returncode)
+              return json.loads(out.stdout) if out.stdout.strip() else {}
+
+          d = aws('list-resource-record-sets', '--hosted-zone-id', zone,
+                  '--output', 'json')
+          rrs = d['ResourceRecordSets']
+          print(f"zone count before: {len(rrs)}")
+          ems = [r for r in rrs if r['Name'].rstrip('.') == name]
+          cnames = [r for r in ems if r['Type'] == 'CNAME']
+          arecs = [r for r in ems if r['Type'] == 'A'
+                   and any(v['Value'] == ip for v in r.get('ResourceRecords', []))]
+          if arecs and not cnames:
+              print('ems already an A record to the target IP; nothing to do.')
+              sys.exit(0)
+          if len(cnames) != 1:
+              print(f'Expected exactly one ems CNAME, found {len(cnames)}: {ems}')
+              sys.exit(1)
+          cur = cnames[0]
+          delete = {
+              'Action': 'DELETE',
+              'ResourceRecordSet': {
+                  'Name': cur['Name'],
+                  'Type': 'CNAME',
+                  'TTL': cur['TTL'],
+                  'ResourceRecords': cur['ResourceRecords'],
+              },
+          }
+          create = {
+              'Action': 'CREATE',
+              'ResourceRecordSet': {
+                  'Name': name + '.',
+                  'Type': 'A',
+                  'TTL': ttl,
+                  'ResourceRecords': [{'Value': ip}],
+              },
+          }
+          batch = {'Comment': 'ems changeover to fleet gateway (Taylor, 2026-11-26)',
+                   'Changes': [delete, create]}
+          json.dump(batch, open('batch.json', 'w'))
+          print('change batch:', json.dumps(batch))
+          res = aws('change-resource-record-sets', '--hosted-zone-id', zone,
+                    '--change-batch', 'file://batch.json', '--output', 'json')
+          change_id = res['ChangeInfo']['Id']
+          print('change submitted:', change_id, res['ChangeInfo']['Status'])
+          for _ in range(30):
+              info = aws('get-change', '--id', change_id, '--output', 'json')
+              status = info['ChangeInfo']['Status']
+              print('change status:', status)
+              if status == 'INSYNC':
+                  break
+              time.sleep(10)
+          d = aws('list-resource-record-sets', '--hosted-zone-id', zone,
+                  '--output', 'json')
+          rrs = d['ResourceRecordSets']
+          print(f"zone count after: {len(rrs)}")
+          for r in rrs:
+              if r['Name'].rstrip('.') == name:
+                  print('EMS RECORD AFTER:', json.dumps(r))
+          EOF
