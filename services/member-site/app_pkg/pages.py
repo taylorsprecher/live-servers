@@ -451,6 +451,33 @@ def cportlightning_page():
     )
 
 
+def emsapp_page():
+    """EMS Protocol APP — decision support for ACS and Hyperkalemia
+    built 2026-11-26 from Taylor's Drive spec "EMS Protocol APP.docx":
+    both protocols as step lists with teach-backs, the safety-gate
+    engine (app_pkg/ems.py — restricted actions stay locked until the
+    patient state clears every prerequisite, blocking reasons named),
+    and the .acs / .hyperkalemia ePCR smart-phrase generators. Served
+    from emsapp.html beside this file, same pattern as ssk_page;
+    public like the buy pages. The gate battery passes 12/12 against
+    the standalone build of the same code."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "emsapp.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>EMS Protocol APP unavailable</h1>"
+            "<p>The EMS Protocol APP page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def cport_page():
     """C-Port Python — the installable CPython package for the
     C-Port serial protocol (C extension cserialproto + pipeline),

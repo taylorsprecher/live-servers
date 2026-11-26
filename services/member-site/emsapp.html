@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <!-- FLEET-CSS -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="EMS Protocol APP" />
+    <link rel="icon" href="data:," />
+    <title>EMS Protocol APP — ACS &amp; Hyperkalemia decision support</title>
+    <style>
+      :root{--bg:#000;--raise:#1c1c1e;--line:#38383a;--ink:#fff;--ink2:#98989f;--acc:#17a398;--accink:#4fd8cf;--bad:#ff6b5e;--ok:#3ddc84}
+      *{box-sizing:border-box}
+      body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded,-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;line-height:1.45}
+      .wrap{max-width:620px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top)) 18px calc(32px + env(safe-area-inset-bottom))}
+      .owner{margin:0 0 6px;font-size:.82rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accink)}
+      h1{margin:0;font-size:1.9rem;line-height:1.12;font-weight:800}
+      h2{font-size:1.15rem;margin:0 0 6px}
+      .sub{color:var(--ink2);margin:8px 0 0}
+      .card{margin-top:16px;background:var(--raise);border:1px solid var(--line);border-radius:12px;padding:16px}
+      .step{border-top:1px solid var(--line);padding:10px 0}
+      .step:first-of-type{border-top:none}
+      .lvl{color:var(--accink);font-size:.78rem;font-weight:700}
+      .tb{color:var(--ink2);font-size:.92rem;border-left:3px solid var(--acc);padding-left:10px;margin-top:6px}
+      label{display:block;margin-top:10px;color:var(--ink2);font-size:.95rem}
+      input[type=number]{width:120px;padding:8px;border-radius:8px;border:1px solid var(--line);background:#000;color:var(--ink)}
+      .chk{display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--ink2)}
+      .gate{margin-top:10px;padding:10px;border-radius:8px;border:1px solid var(--line)}
+      .gate.open{border-color:var(--ok)}.gate.shut{border-color:var(--bad)}
+      .gate .st{font-weight:800}.open .st{color:var(--ok)}.shut .st{color:var(--bad)}
+      .gate ul{margin:6px 0 0;padding-left:1.2rem;color:var(--ink2)}
+      button{margin-top:14px;background:var(--acc);color:#fff;font-weight:700;border:none;padding:10px 16px;border-radius:999px;cursor:pointer}
+      pre{white-space:pre-wrap;background:#000;border:1px solid var(--line);border-radius:8px;padding:12px;color:var(--ink);font-size:.9rem}
+      footer{margin-top:20px;color:var(--ink2);font-size:.85rem}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <p class="owner">911TransEdu — Member Apps</p>
+      <h1>EMS Protocol APP</h1>
+      <p class="sub">Decision support for ACS and Hyperkalemia, with the safety gates and the .acs / .hyperkalemia charting phrases. Built from the EMS Protocol APP spec.</p>
+
+      <div class="card"><h2>Patient state — safety gates</h2>
+        <label>Systolic BP (mmHg) <input type="number" id="sbp" placeholder="e.g. 128"/></label>
+        <label class="chk"><input type="checkbox" id="pde5"/> PDE-5 inhibitor use within 24–48 hours</label>
+        <label class="chk"><input type="checkbox" id="rv"/> Right ventricular infarction (V4R elevation)</label>
+        <label class="chk"><input type="checkbox" id="gibleed"/> Active GI bleeding</label>
+        <label class="chk"><input type="checkbox" id="asaallergy"/> Severe aspirin allergy</label>
+        <label class="chk"><input type="checkbox" id="severe"/> Hyperkalemia ECG: wide QRS / sine wave (severe)</label>
+        <label class="chk"><input type="checkbox" id="acidosis"/> Severe metabolic acidosis</label>
+        <label class="chk"><input type="checkbox" id="crush"/> Crush injury</label>
+        <label class="chk"><input type="checkbox" id="hypotensive"/> Hypotensive or hypovolemic</label>
+        <label class="chk"><input type="checkbox" id="edema"/> Pulmonary edema / fluid overload</label>
+        <button onclick="run()">Evaluate gates</button>
+        <div id="gates"></div>
+      </div>
+
+      <div class="card"><h2>Acute Coronary Syndrome (ACS)</h2><div id="acs"></div></div>
+      <div class="card"><h2>Hyperkalemia</h2><div id="hk"></div></div>
+
+      <div class="card"><h2>ePCR smart phrases</h2>
+        <button onclick="phrase('acs')">Generate .acs</button>
+        <button onclick="phrase('hyperkalemia')">Generate .hyperkalemia</button>
+        <pre id="out">The narrative appears here, ready to copy into the chart.</pre>
+      </div>
+
+      <footer>Decision support only — follow local protocol and medical control. Built Nov 26, 2026 from Taylor&rsquo;s EMS Protocol APP spec (Drive).</footer>
+    </div>
+    <script>
+      function steps(el, list){document.getElementById(el).innerHTML = list.map(s =>
+        `<div class="step"><span class="lvl">${s.level}</span><br/><b>${s.title}</b><br/><span style="color:var(--ink2)">${s.detail}</span>` +
+        (s.teachback ? `<div class="tb">Teach-back: ${s.teachback}</div>` : '') + `</div>`).join('');}
+      fetch('/members/emsapp/api/protocols').then(r=>r.json()).then(d=>{steps('acs', d.acs.steps); steps('hk', d.hyperkalemia.steps);});
+      function state(){return {sbp: (v=>v===''?null:parseInt(v))(document.getElementById('sbp').value),
+        pde5: document.getElementById('pde5').checked, rv_infarct: document.getElementById('rv').checked,
+        gi_bleed: document.getElementById('gibleed').checked, asa_allergy: document.getElementById('asaallergy').checked,
+        ecg_severe: document.getElementById('severe').checked, acidosis: document.getElementById('acidosis').checked,
+        crush: document.getElementById('crush').checked, hypotensive: document.getElementById('hypotensive').checked,
+        hypovolemic: document.getElementById('hypotensive').checked, pulmonary_edema: document.getElementById('edema').checked};}
+      function run(){fetch('/members/emsapp/api/evaluate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(state())})
+        .then(r=>r.json()).then(g=>{document.getElementById('gates').innerHTML = Object.entries(g).map(([k,v]) =>
+        `<div class="gate ${v.unlocked?'open':'shut'}"><span class="st">${v.unlocked?'UNLOCKED':'LOCKED'}</span> — ${k}` +
+        (v.reasons && v.reasons.length ? `<ul>${v.reasons.map(x=>`<li>${x}</li>`).join('')}</ul>` : '') +
+        (v.bicarb_note ? `<div style="color:var(--ink2)">Sodium bicarbonate: ${v.bicarb_note}</div>` : '') + `</div>`).join('');});}
+      function phrase(k){fetch('/members/emsapp/api/epcr',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:k,fields:{}})})
+        .then(r=>r.json()).then(d=>{document.getElementById('out').textContent = d.text;});}
+    </script>
+  </body>
+</html>

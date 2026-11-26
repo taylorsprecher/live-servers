@@ -45,6 +45,12 @@ from .config import (
     STREAM_READ_TOKEN,
 )
 from .bug_guard import BugGuard
+from .ems import (
+    PROTOCOLS as EMS_PROTOCOLS,
+    evaluate as ems_evaluate,
+    epcr_acs,
+    epcr_hyperkalemia,
+)
 from .stream_store import (
     MAX_CHUNK_BYTES,
     list_stream_sessions,
@@ -68,6 +74,7 @@ from .pages import (
     streamapp_page,
     cport_page,
     cportlightning_page,
+    emsapp_page,
     words_page,
     fsh_page,
     stream_page,
@@ -278,6 +285,10 @@ class Handler(BaseHTTPRequestHandler):
                 ),
                 "application/zip",
             )
+        if path == BASE + "/emsapp":
+            return self.send_html(emsapp_page())
+        if path == BASE + "/emsapp/api/protocols":
+            return self.send_json(EMS_PROTOCOLS)
         if path == BASE + "/words":
             return self.send_html(words_page())
         if path == BASE + "/fsh":
@@ -761,6 +772,23 @@ Transgender Patient Awareness, LLC — included with CCCE course access.</p>
                 ("ok " + msg) if ok else ("error " + msg),
                 status=200 if ok else 400,
             )
+        if path == BASE + "/emsapp/api/evaluate" or path == BASE + "/emsapp/api/epcr":
+            # EMS Protocol APP JSON APIs (2026-11-26): the safety-gate
+            # evaluator and the ePCR smart-phrase generators. Public,
+            # stateless, nothing stored.
+            try:
+                payload = json.loads(self.raw_body() or b"{}")
+            except (ValueError, UnicodeDecodeError):
+                return self.send_json({"error": "bad json"}, status=400)
+            if path.endswith("/evaluate"):
+                return self.send_json(ems_evaluate(payload))
+            kind = payload.get("kind")
+            fields = payload.get("fields") or {}
+            if kind == "acs":
+                return self.send_json({"text": epcr_acs(fields)})
+            if kind == "hyperkalemia":
+                return self.send_json({"text": epcr_hyperkalemia(fields)})
+            return self.send_json({"error": "unknown kind"}, status=400)
         form = self.form()
         if path == BASE + "/owner/paylinks":
             member, _ = self.current_member()
