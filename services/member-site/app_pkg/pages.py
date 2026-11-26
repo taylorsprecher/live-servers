@@ -478,6 +478,32 @@ def emsapp_page():
     )
 
 
+def bluetooth_page():
+    """Bluetooth Check-in — download page for bluetooth_checkin.py,
+    the tool for Taylor's sealed Bluetooth check-in log (built
+    2026-11-26 with its dedicated Fernet key). ONLY the tool is
+    published: the key is never in the bundle and is recorded
+    nowhere, and the log + sealed copy stay in Taylor's files —
+    without the key nothing seals or decodes, by design. Served
+    from bluetooth.html beside this file, same pattern as
+    ssk_page; public like the buy pages."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bluetooth.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>Bluetooth Check-in unavailable</h1>"
+            "<p>The Bluetooth Check-in page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def cport_page():
     """C-Port Python — the installable CPython package for the
     C-Port serial protocol (C extension cserialproto + pipeline),

@@ -75,6 +75,7 @@ from .pages import (
     cport_page,
     cportlightning_page,
     emsapp_page,
+    bluetooth_page,
     words_page,
     fsh_page,
     stream_page,
@@ -289,6 +290,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_html(emsapp_page())
         if path == BASE + "/emsapp/api/protocols":
             return self.send_json(EMS_PROTOCOLS)
+        if path == BASE + "/bluetooth":
+            return self.send_html(bluetooth_page())
+        if path == BASE + "/bluetooth/bluetooth-checkin.zip":
+            return self.stream_file(
+                os.path.join(APP_DIR, "bluetooth-checkin.zip"),
+                "application/zip",
+            )
         if path == BASE + "/words":
             return self.send_html(words_page())
         if path == BASE + "/fsh":

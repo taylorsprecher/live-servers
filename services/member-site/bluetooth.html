@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#000000" />
+    <!-- FLEET-CSS -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Bluetooth Check-in" />
+    <link rel="icon" href="data:," />
+    <title>Bluetooth Check-in — the sealed log tool</title>
+    <style>
+      :root{--bg:#000;--raise:#1c1c1e;--line:#38383a;--ink:#fff;--ink2:#98989f;--acc:#17a398;--accink:#4fd8cf}
+      *{box-sizing:border-box}
+      body{margin:0;background:var(--bg);color:var(--ink);font-family:ui-rounded,-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;line-height:1.45}
+      .wrap{max-width:620px;margin:0 auto;padding:calc(20px + env(safe-area-inset-top)) 18px calc(32px + env(safe-area-inset-bottom))}
+      .owner{margin:0 0 6px;font-size:.82rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accink)}
+      h1{margin:0;font-size:1.9rem;line-height:1.12;font-weight:800}
+      h2{font-size:1.15rem;margin:0 0 6px}
+      .sub,.note{color:var(--ink2)}
+      .card{margin-top:16px;background:var(--raise);border:1px solid var(--line);border-radius:12px;padding:16px}
+      code{background:#000;border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+      pre{background:#000;border:1px solid var(--line);border-radius:8px;padding:12px;white-space:pre-wrap;color:var(--ink);font-size:.9rem}
+      .dl{display:inline-block;margin-top:12px;background:var(--acc);color:#fff;font-weight:700;text-decoration:none;padding:10px 16px;border-radius:999px}
+      footer{margin-top:20px;color:var(--ink2);font-size:.85rem}
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <p class="owner">911TransEdu — Member Apps</p>
+      <h1>Bluetooth Check-in</h1>
+      <p class="sub">The tool for the sealed Bluetooth check-in log: append an entry, re-seal it, and decode the sealed copy — all under the dedicated encryption key created for it on Nov 26, 2026.</p>
+
+      <div class="card">
+        <h2>Download</h2>
+        <p class="note">The bundle holds the tool and its README. The encryption key is <b>not</b> in the bundle and is recorded nowhere — it stays in Taylor&rsquo;s files, mode 600. Without the key, nothing seals or decodes, by design.</p>
+        <a class="dl" href="https://members.911transedu.net/members/bluetooth/bluetooth-checkin.zip">Download bluetooth-checkin.zip</a>
+      </div>
+
+      <div class="card">
+        <h2>What it does</h2>
+        <pre>bluetooth_checkin.py add "text of the entry"
+bluetooth_checkin.py show
+bluetooth_checkin.py verify</pre>
+        <p class="note"><b>add</b> appends a timestamped entry (Pacific), re-seals the encrypted copy, and verifies the round-trip. <b>show</b> decodes the sealed copy with the key and prints the log. <b>verify</b> checks the sealed copy decodes to exactly the plaintext on file.</p>
+      </div>
+
+      <div class="card">
+        <h2>Honest scope</h2>
+        <p class="note">The key seals and decodes our records about Bluetooth — the check-in statements, logged verbatim. It does not decode live Bluetooth radio traffic: the devices&rsquo; own pairing keys never leave the devices.</p>
+      </div>
+
+      <footer>Built Nov 26, 2026. The sealed log and its key live in Taylor&rsquo;s files; only the tool is published here.</footer>
+    </div>
+  </body>
+</html>
