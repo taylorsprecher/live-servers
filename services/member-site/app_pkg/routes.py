@@ -294,7 +294,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_html(bluetooth_page())
         if path == BASE + "/bluetooth/bluetooth-checkin.zip":
             return self.stream_file(
-                os.path.join(APP_DIR, "bluetooth-checkin.zip"),
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "bluetooth-checkin.zip",
+                ),
                 "application/zip",
             )
         if path == BASE + "/words":
