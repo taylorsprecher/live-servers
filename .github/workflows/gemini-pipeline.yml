@@ -42,20 +42,26 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
-          code=$(curl -sS -o gen.json -w "%{http_code}" \
-            -H "x-goog-api-key: $GEMINI_API_KEY" \
-            -H "Content-Type: application/json" \
-            -X POST \
-            -d '{"contents":[{"parts":[{"text":"Reply with exactly: GEMINI PIPELINE OK"}]}]}' \
-            https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent)
-          echo "generateContent HTTP $code"
-          if [ "$code" != "200" ]; then
-            cat gen.json
-            exit 1
-          fi
-          python3 - <<'PY'
+          # Try the current flash model first, then fall back: a 503
+          # (high demand) on one model is transient, not a key problem.
+          for model in gemini-3.8-flash gemini-2.5-pro; do
+            code=$(curl -sS -o gen.json -w "%{http_code}" \
+              -H "x-goog-api-key: $GEMINI_API_KEY" \
+              -H "Content-Type: application/json" \
+              -X POST \
+              -d '{"contents":[{"parts":[{"text":"Reply with exactly: GEMINI PIPELINE OK"}]}]}' \
+              "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent")
+            echo "$model generateContent HTTP $code"
+            if [ "$code" = "200" ]; then
+              python3 - <<'PY'
           import json
           d = json.load(open("gen.json"))
           parts = d["candidates"][0]["content"]["parts"]
           print("model replied:", "".join(p.get("text", "") for p in parts).strip())
           PY
+              exit 0
+            fi
+            cat gen.json
+          done
+          echo "no smoke model answered"
+          exit 1
