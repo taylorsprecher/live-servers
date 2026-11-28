@@ -504,6 +504,31 @@ def bluetooth_page():
     )
 
 
+def openscad_page():
+    """OpenSCAD Projects — download page for Taylor's parametric
+    OpenSCAD set (LAN housings, automotive switch inserts, chassis
+    modules) on the shared PETG tolerance library, installed
+    2026-11-28 from Taylor's Google Drive source documents with the
+    code extracted verbatim. Served from openscad.html beside this
+    file, same pattern as bluetooth_page; public like the buy
+    pages."""
+    try:
+        with open(
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "openscad.html"),
+            encoding="utf-8",
+        ) as fh:
+            page = fh.read()
+    except OSError:
+        return (
+            "<h1>OpenSCAD Projects unavailable</h1>"
+            "<p>The OpenSCAD Projects page is missing on the server.</p>"
+        )
+    return page.replace(
+        "<!-- FLEET-CSS -->",
+        f'<link rel="stylesheet" href="{BASE}/assets/fleet.css">',
+    )
+
+
 def bodypalace_shell():
     """Body Palace Tracker — the app shell for Taylor's recovered
     Replit project (pulled and deleted from Replit 2026-11-26 at

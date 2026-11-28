@@ -76,6 +76,7 @@ from .pages import (
     cportlightning_page,
     emsapp_page,
     bluetooth_page,
+    openscad_page,
     bodypalace_shell,
     words_page,
     fsh_page,
@@ -298,6 +299,16 @@ class Handler(BaseHTTPRequestHandler):
                 os.path.join(
                     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                     "bluetooth-checkin.zip",
+                ),
+                "application/zip",
+            )
+        if path == BASE + "/openscad":
+            return self.send_html(openscad_page())
+        if path == BASE + "/openscad/openscad-projects.zip":
+            return self.stream_file(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                    "openscad-projects.zip",
                 ),
                 "application/zip",
             )
