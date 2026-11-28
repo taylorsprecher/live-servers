@@ -1,0 +1,61 @@
+name: gemini-pipeline
+
+# Runs the Gemini pipeline with the API key held as the GEMINI_API_KEY
+# repository secret (portal -> GitHub pattern, Taylor's direction
+# 2026-11-27: "a script in muse that ran everything, with api keys").
+# The key value never appears in logs: it is passed only as an env var
+# from the secret and sent only in the x-goog-api-key header.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Gemini API key (models list)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY secret is not set"
+            exit 1
+          fi
+          code=$(curl -sS -o models.json -w "%{http_code}" \
+            -H "x-goog-api-key: $GEMINI_API_KEY" \
+            https://generativelanguage.googleapis.com/v1beta/models)
+          echo "models endpoint HTTP $code"
+          if [ "$code" != "200" ]; then
+            cat models.json
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          d = json.load(open("models.json"))
+          names = [m["name"] for m in d.get("models", [])]
+          print(f"{len(names)} models available")
+          for n in names[:10]:
+              print(" -", n)
+          PY
+
+      - name: Smoke generateContent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          code=$(curl -sS -o gen.json -w "%{http_code}" \
+            -H "x-goog-api-key: $GEMINI_API_KEY" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            -d '{"contents":[{"parts":[{"text":"Reply with exactly: GEMINI PIPELINE OK"}]}]}' \
+            https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent)
+          echo "generateContent HTTP $code"
+          if [ "$code" != "200" ]; then
+            cat gen.json
+            exit 1
+          fi
+          python3 - <<'PY'
+          import json
+          d = json.load(open("gen.json"))
+          parts = d["candidates"][0]["content"]["parts"]
+          print("model replied:", "".join(p.get("text", "") for p in parts).strip())
+          PY
